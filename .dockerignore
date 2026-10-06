@@ -4,5 +4,6 @@
 !data
 !src/berth_core
 !src/agentenv_portsim
+src/agentenv_portsim/data
 **/__pycache__
 **/*.pyc

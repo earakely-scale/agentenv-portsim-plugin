@@ -1,5 +1,7 @@
-"""The wheel carries berth_core, the plugin and its bundle, and the task packs where the installed plugin finds them."""
+"""The wheel carries berth_core, the plugin and its bundle, and the task packs as package data, where the server finds
+them without BERTH_TASKS_DIR, installed from the wheel or editable."""
 
+import os
 import subprocess
 import sys
 import zipfile
@@ -8,7 +10,9 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-PACKS = ["dock-v1-eval", "dock-v1-train"]
+PROBE = ("from pathlib import Path; import agentenv_portsim, berth_core; "
+         "from agentenv_portsim.server import PortSimEnv; pack = PortSimEnv().pack; "
+         "print(Path(agentenv_portsim.__file__).parent, Path(berth_core.__file__).parent, pack.root, len(pack.tasks))")
 
 
 @pytest.fixture(scope="module")
@@ -37,13 +41,22 @@ def test_the_wheel_carries_berth_core_the_plugin_and_the_data_unchanged(wheel):
     assert licenses == {"LICENSE", "NOTICE", "data/LICENSE"}
 
 
-def test_the_installed_wheel_loads_the_task_packs_from_its_package_data(wheel, tmp_path):
+def served(path: Path) -> list[str]:
+    """The server's package, berth_core, first pack and task count, with ``path`` first on sys.path."""
+    env = {k: v for k, v in os.environ.items() if k != "BERTH_TASKS_DIR"} | {"PYTHONPATH": str(path)}
+    return subprocess.run([sys.executable, "-c", PROBE], env=env, cwd=path, check=True, capture_output=True,
+                          text=True).stdout.split()
+
+
+def test_a_wheel_install_serves_the_packs_from_its_package_data(wheel, tmp_path):
     with zipfile.ZipFile(wheel) as whl:
         whl.extractall(tmp_path)
-    probe = ("from importlib.resources import files; import berth_core; "
-             f"data = files('agentenv_portsim') / 'data'; pack = berth_core.TaskPack([data / p for p in {PACKS!r}]); "
-             "print(berth_core.__file__, len(pack.tasks), *pack.splits())")
-    out = subprocess.run([sys.executable, "-c", probe], env={"PYTHONPATH": str(tmp_path)}, cwd=tmp_path, check=True,
-                         capture_output=True, text=True).stdout.split()
-    assert Path(out[0]).is_relative_to(tmp_path)
-    assert out[1:] == ["1100", "eval", "train"]
+    assert served(tmp_path) == [str(tmp_path / "agentenv_portsim"), str(tmp_path / "berth_core"),
+                                str(tmp_path / "agentenv_portsim/data/dock-v1-eval"), "1100"]
+
+
+def test_an_editable_install_serves_the_packs_through_the_data_link():
+    """An editable install puts src/ on sys.path; src/agentenv_portsim/data links to data/."""
+    src = ROOT / "src"
+    assert served(src) == [str(src / "agentenv_portsim"), str(src / "berth_core"),
+                           str(src / "agentenv_portsim/data/dock-v1-eval"), "1100"]

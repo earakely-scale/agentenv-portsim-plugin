@@ -1,9 +1,11 @@
 """PortSimEnv v1's three MCP tools, their text and their limits (FineEnvs b0f4c2f), one episode per server.
 
-urn:portsim:load-task/v1 starts an episode; data/get reports it and never the task's reference."""
+urn:portsim:load-task/v1 starts an episode; data/get reports it and never the task's reference plans. The task packs
+come from BERTH_TASKS_DIR, else from the package's data/."""
 
 import json
 import os
+from importlib.resources import files
 from typing import Annotated, Any
 
 from agentenv_protocol import AgentEnvEnvironment, DataPart, environment_card, extension, get_data, reset_data, tool
@@ -13,7 +15,9 @@ from pydantic import BaseModel, Field, TypeAdapter
 
 from berth_core import Task, evaluate, grade, load_pack, parse_plan, plan_to_list, situation
 from berth_core.model import PlanError
+from berth_core.pack import DEFAULT_PACKS
 
+PACKS = files("agentenv_portsim") / "data"
 MAX_CHECKS = 10
 MAX_TOOL_CALLS = 24
 TOOL_ORDER = ["get_situation", "check_plan", "submit_plan"]
@@ -58,7 +62,7 @@ def _plan_result(task: Task, plan) -> dict:
 @environment_card(name="portsim")
 class PortSimEnv(AgentEnvEnvironment):
     def __init__(self):
-        self.pack = load_pack()
+        self.pack = load_pack(None if os.environ.get("BERTH_TASKS_DIR") else [PACKS / p for p in DEFAULT_PACKS])
         self.reset()
 
     def create_app(self) -> FastMCP:

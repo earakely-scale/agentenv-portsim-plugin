@@ -190,7 +190,7 @@ uv venv && uv pip install -e '.[dev]'
 .venv/bin/pytest                         # sets BERTH_TASKS_DIR itself; calls no model
 .venv/bin/ruff check .
 docker build -t agentenv-portsim-env .   # the env image, for this machine's platform
-BERTH_TASKS_DIR=data/dock-v1-eval:data/dock-v1-train .venv/bin/python -m agentenv_portsim.server   # on :18765
+.venv/bin/python -m agentenv_portsim.server   # on :18765, with the packs in data/
 ```
 
 CI (`.github/workflows/ci.yml`) lints, runs the tests on Python 3.11 and 3.12 and `agent-env plugin check`, then

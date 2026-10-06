@@ -38,6 +38,8 @@ portsim = "agentenv_portsim.cli:portsim"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/agentenv_portsim", "src/berth_core"]
+# src/agentenv_portsim/data links to data/ for editable installs; an sdist drops the link, so wheels force-include data/.
+exclude = ["src/agentenv_portsim/data"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "data" = "agentenv_portsim/data"
