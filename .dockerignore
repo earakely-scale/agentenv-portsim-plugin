@@ -1,0 +1,8 @@
+*
+!LICENSE
+!NOTICE
+!data
+!src/berth_core
+!src/agentenv_portsim
+**/__pycache__
+**/*.pyc
