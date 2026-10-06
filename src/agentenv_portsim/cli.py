@@ -7,6 +7,8 @@ import click
 from agent_env.artifact import DockerImageArtifact
 from agent_env.env import MCPServerEnv
 
+from .tasks import tasks_group
+
 ENV_ID = "portsim"
 IMAGE = "agentenv-portsim-env"
 REPO = "https://github.com/earakely-scale/agentenv-portsim-plugin"
@@ -59,3 +61,6 @@ def setup(build_platform: str | None, source: Path | None):
                            env_provider_type="server")
     click.echo(f"Registered env {env.id!r} version {env.version} (image {artifact.image_name})")
     click.echo("Next: agent-env run portsim --task smoke")
+
+
+portsim.add_command(tasks_group)
