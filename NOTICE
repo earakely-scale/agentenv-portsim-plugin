@@ -12,6 +12,12 @@ licensed under the Apache License, Version 2.0. Derived from it:
 - src/agentenv_portsim/server.py: the MCP tools get_situation, check_plan and submit_plan (names,
   descriptions, input schemas, output and error text, limits) are ported from
   envs/berth_planning/openenv/berth_openenv/environment.py.
+- agents/portsim-llm/agent.py: the harness loop (turns, nudges, notes, limits, the episode record) and
+  its Anthropic Messages, OpenAI Responses and chat-completions adapters are ported from
+  envs/berth_planning/openenv/berth_openenv/agent.py.
+- src/agentenv_portsim/tasks.py: the opening message is copied from
+  envs/berth_planning/openenv/berth_openenv/agent.py; src/agentenv_portsim/sweep.py: ci() is copied
+  from eval/report.py.
 
 Data licensed under CC BY-SA 4.0 (data/LICENSE), not under the Apache License:
 
