@@ -52,7 +52,8 @@ agent-env run portsim --task smoke --task wiring-infeasible --task wiring-nosubm
   taken here.
 - **Vendored files stay unchanged.** `src/berth_core/` and `data/` match upstream byte for byte; the task packs'
   sha256 is checked when they load.
-- **The answer key stays in the image.** No tool, extension, route or `data/get` field returns a task's reference.
+- **The answer key stays in the image.** No tool, extension, route or `data/get` field returns a task's reference
+  plans; `data/get`'s grade, there only after a submit, includes the optimal and naive costs.
 - **Code:** match the code around it. `ruff check .` must pass. Name things so the code reads without comments;
   write a short docstring only for why something is the way it is.
 - **Tests:** a fix comes with a test that fails without it. Tests set `BERTH_TASKS_DIR` themselves; they call no
