@@ -46,10 +46,10 @@ def test_setup_builds_the_image_and_registers_portsim_on_the_server_provider(loc
     result = CliRunner().invoke(portsim, ["setup", "--source", str(ROOT), *args])
     assert result.exit_code == 0, result.output
     assert log.read_text().splitlines()[-1] == f"build --platform {platform} -t agentenv-portsim-env {ROOT}"
-    assert stored == [{"id": "mcp-server-portsim", "image_name": "agentenv-portsim-env"}]
+    assert stored == [{"id": "agentenv-portsim-env", "image_name": "agentenv-portsim-env"}]
     env = Env.get("portsim")
     assert (env.type, env.environment_name, env.env_provider_type) == ("mcp_server", "portsim", "server")
-    assert env.docker_image_artifact.image_name == "localhost:5000/mcp-server-portsim:v1"
+    assert env.docker_image_artifact.image_name == "localhost:5000/agentenv-portsim-env:v1"
     assert "Registered env 'portsim' version 1" in result.output
 
 

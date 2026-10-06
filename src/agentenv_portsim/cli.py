@@ -53,7 +53,7 @@ def setup(build_platform: str | None, source: Path | None):
     if subprocess.run(["docker", "build", "--platform", build_platform, "-t", IMAGE, str(root)]).returncode:
         raise click.ClickException("docker build failed")
     click.echo("Storing the image (docker save, can take a minute)")
-    artifact = DockerImageArtifact.put(id=f"mcp-server-{ENV_ID}", image_name=IMAGE,
+    artifact = DockerImageArtifact.put(id=IMAGE, image_name=IMAGE,
                                        description="PortSim env: the berth-planning MCP server and the dock-v1 packs")
     env = MCPServerEnv.put(id=ENV_ID, docker_image_artifact=artifact, environment_name=ENV_ID,
                            env_provider_type="server")

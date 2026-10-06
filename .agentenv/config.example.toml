@@ -28,7 +28,7 @@ agent_default = "local"
 #
 # [stores.image.config]
 # registry_host     = "ghcr.io"
-# repository_prefix = "earakely-scale"   # images go to ghcr.io/earakely-scale/<image name>
+# repository_prefix = "your-github-user"   # your GHCR namespace: setup pushes ghcr.io/<it>/agentenv-portsim-env:vN
 #
 # [stores.secret]
 # impl = "agent_env.store.secret_store:LocalSecretStore"

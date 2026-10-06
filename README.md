@@ -79,9 +79,10 @@ are stored under `~/.local/state/agent-env`. Run `agent-env` from inside the che
 `.agentenv/config.toml`.
 
 `setup` builds for the Docker host's own platform (`linux/arm64` on Apple Silicon). For Modal, switch
-`.agentenv/config.toml` to the `modal_vm` profile it describes and run `agent-env portsim setup --platform
-linux/amd64`, which pushes the image to the registry the profile names. In an existing agent-env install,
-`agent-env plugin add ./agentenv-portsim-plugin` adds the plugin.
+`.agentenv/config.toml` to the `modal_vm` profile it describes, set its `repository_prefix` to your own GHCR
+namespace, and run `agent-env portsim setup --platform linux/amd64`, which pushes the image to
+`ghcr.io/<namespace>/agentenv-portsim-env`. In an existing agent-env install, `agent-env plugin add
+./agentenv-portsim-plugin` adds the plugin.
 
 <details>
 <summary>Troubleshooting</summary>
