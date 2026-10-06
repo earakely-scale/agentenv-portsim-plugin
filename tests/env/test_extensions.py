@@ -35,6 +35,11 @@ async def test_card(http):
     assert {t["name"] for t in card["capabilities"]["tools"]} == {"get_situation", "check_plan", "submit_plan"}
 
 
+def test_nothing_else_is_served(env):
+    assert sorted(route.path for route in env.mcp.http_app().routes) == [
+        "/.well-known/agent-env.json", "/agentenv", "/agentenv/ext/load_task", "/agentenv/ext/submit", "/mcp"]
+
+
 async def test_load_task_starts_a_new_episode(env, tools, http):
     await tools("check_plan", plan=[])
     other = next(t.task_id for t in env.pack.tasks if t is not env.task)
