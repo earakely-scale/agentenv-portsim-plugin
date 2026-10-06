@@ -55,6 +55,9 @@ The tests check this without calling any model:
    its requests must equal those upstream's harness sends for the same turns (`scripts/record_harness.py`), and each
    episode must end with its published reward.
 
+Whether a model scores here as it did upstream is a separate question, answered week by week rather than by a pass
+test: see [The comparison with the published eval](#the-comparison-with-the-published-eval), which is pending.
+
 What differs is how the env is served, not what the agent sees:
 
 - **Transport.** Upstream serves its tools through OpenEnv, where an episode runs over a WebSocket session. Here an
@@ -167,7 +170,8 @@ What differs from upstream's harness:
 - **One endpoint.** Upstream's chains of fallback providers are gone; every model goes through the proxy.
 - **Cost.** Each turn's token usage is priced from a table pinned in the agent, which holds
   `anthropic/claude-sonnet-5-5`, `openai/gpt-6.1-sol` and `fireworks_ai/glm-5p3-flash`; any other model fails before
-  its first request. The episode stops before a request that could take its spend past `PORTSIM_MAX_COST_USD` ($5 in
+  its first request. A request whose usage never arrives (it failed, or the harness cut its stream) is charged the most
+  it could have cost. The episode stops before a request that could take its spend past `PORTSIM_MAX_COST_USD` ($5 in
   the generated tasks).
 - **Failures.** A model error after the SDK's retries, an env error, a turn that would start after the task's two
   hours, or the cost cap fails the run as an infrastructure error, with the episode so far, instead of scoring it.
@@ -182,14 +186,37 @@ agent-env portsim sweep report pilot   # results/parity.md
 
 - Each attempt is its own `agent-env run` process. Its log, its row in `results.jsonl` and the agent's transcript go
   to `results/runs/<name>/`.
-- `--tasks` takes `all`, `g2` or task ids. `g2` is ten eval weeks picked from the pack alone, spread over the tiers
-  and, within each tier, over ship counts.
+- `--tasks` takes `all`, `g2` or task ids; `g2` is the ten weeks of
+  [the comparison](#the-comparison-with-the-published-eval).
 - An attempt starts only if the spend so far plus the episode cap (`--episode-cap-usd`, default $5) of every attempt
-  running, the new one included, stays within `--cap-usd`.
+  running, the new one included, stays within `--cap-usd`. An attempt whose spend isn't known counts at its cap.
 - A failed attempt is retried up to twice; an episode stopped at its cost cap is not. Running the same sweep again
-  resumes it, and Ctrl-C tears the running attempts down.
+  resumes it. Ctrl-C, or an error in the sweep itself, tears the running attempts down and records them.
 - `report` compares each model with its episodes in the published dock-eval50 run (`data/published/`) on the same
-  tasks: means with upstream's bootstrap CIs, per tier and week by week.
+  tasks: means with upstream's bootstrap CIs, the difference per task, per tier and week by week, with submitted,
+  feasible and optimal counts, turns, tokens and cost.
+
+### The comparison with the published eval
+
+The comparison plays `portsim-llm` with the published closed models, `openai/gpt-6.1-sol` and
+`anthropic/claude-sonnet-5-5`, on ten eval weeks, and sets each week's reward next to the published one. It reports
+the differences without a pass or fail line. **It is pending: no results are published here yet.**
+
+The ten weeks (`--tasks g2`) were fixed from the pack alone, before any model played them:
+
+1. The tiers share the ten slots in proportion to their size, by largest remainder (ties in the order standard, busy,
+   storm, extreme): standard 2, busy 3, storm 3, extreme 2.
+2. A tier of N tasks, sorted by (ships, task id), gives its n weeks at positions ⌊(2i+1)·N/(2n)⌋ for i = 0…n−1: the
+   middle task of each of n equal slices of that order.
+
+| Tier | Weeks (ships) |
+|---|---|
+| standard | `dock-36A-w35x1-standard-0` (19), `dock-36A-w17x1-standard-0` (29) |
+| busy | `dock-24B-w06x1-busy-0` (17), `dock-36A-w05x1-busy-0` (27), `dock-36A-w05x2-busy-0` (51) |
+| storm | `dock-24B-w35x2-storm-0` (24), `dock-24B-w06x2-storm-0` (32), `dock-36A-w15x2-storm-0` (56) |
+| extreme | `dock-24B-w35x2-extreme-1` (25), `dock-36A-w35x2-extreme-0` (39) |
+
+Both quays are in it: four weeks at 24B and six at 36A. `tests/sweep/` recomputes the list from the pack.
 
 ## The environment
 
