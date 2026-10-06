@@ -25,6 +25,8 @@ Data licensed under CC BY-SA 4.0 (data/LICENSE), not under the Apache License:
   envs/berth_planning/tasks/.
 - tests/golden/: outputs recorded from PortSimEnv on dock-v1 tasks.
 - The plans in src/agentenv_portsim/bundles/portsim/tasks/, taken from the dock-v1 task packs.
+- data/published/dock-eval50/index.json: the published dock-eval50 results, copied unchanged from
+  results/rollouts/dock-eval50/index.json.
 
 Contains data from the Port de Barcelona open data portal (https://opendata.portdebarcelona.cat/),
 licensed under CC BY-SA 4.0. The task packs are a database Adithya S Kolavi derived from it and shared
