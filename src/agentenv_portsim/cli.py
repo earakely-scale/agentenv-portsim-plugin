@@ -8,6 +8,8 @@ from agent_env.a2a_agent import A2AAgent
 from agent_env.artifact import DockerImageArtifact
 from agent_env.env import MCPServerEnv
 
+from .tasks import tasks_group
+
 ENV_ID = "portsim"
 IMAGE = "agentenv-portsim-env"
 AGENT_ID = "portsim-llm"
@@ -78,3 +80,6 @@ def setup(build_platform: str | None, source: Path | None, agent: bool):
     if agent:
         _register_agent(root, build_platform)
     click.echo("Next: agent-env run portsim --task smoke")
+
+
+portsim.add_command(tasks_group)
