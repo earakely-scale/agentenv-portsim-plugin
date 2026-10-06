@@ -7,6 +7,7 @@ import click
 from agent_env.artifact import DockerImageArtifact
 from agent_env.env import MCPServerEnv
 
+from .sweep import sweep_group
 from .tasks import tasks_group
 
 ENV_ID = "portsim"
@@ -64,3 +65,4 @@ def setup(build_platform: str | None, source: Path | None):
 
 
 portsim.add_command(tasks_group)
+portsim.add_command(sweep_group)
