@@ -18,12 +18,14 @@ rollouts from the [dataset](https://huggingface.co/datasets/FineEnvs/PortSimEnv)
 
 This repository is an environment plugin that runs PortSimEnv v1 in the
 [AgentEnv Framework](https://www.agentenvframework.com), Scale AI's open-source framework for building RL
-environments, at parity with upstream: the same tools, the same tasks and the same reward for the same plan. A live
-port is next.
+environments, at parity with upstream: the same tools, the same tasks and the same reward for the same plan. Upstream's
+agent harness comes along as the A2A agent `portsim-llm`, so a model plays the 50 eval tasks as it did in the
+published eval. A live port is next.
 
 **Contents:** [Parity](#parity-with-portsimenv) · [Run it yourself](#run-it-yourself) · [Tasks](#tasks) ·
-[The environment](#the-environment) · [Grading](#grading) · [Built on the AgentEnv Framework](#built-on-the-agentenv-framework) ·
-[Layout](#repository-layout) · [Development](#development) · [Licence and credits](#licence-and-credits)
+[Play a model](#play-a-model) · [The environment](#the-environment) · [Grading](#grading) ·
+[Built on the AgentEnv Framework](#built-on-the-agentenv-framework) · [Layout](#repository-layout) ·
+[Development](#development) · [Licence and credits](#licence-and-credits)
 
 ## Parity with PortSimEnv
 
@@ -48,6 +50,10 @@ The tests check this without calling any model:
 3. **Goldens.** What the episodes never reach (the tool list, the 11th check, the 24-call limit, calls after a
    submit) is compared the same way against outputs recorded from upstream's env (`scripts/record_goldens.py`).
 4. **Wiring.** The three [tasks](#tasks) run through `agent-env` and score as expected; CI runs them on every change.
+5. **Harness.** `portsim-llm` plays five published episodes, on all three model APIs, against a stand-in model
+   server that answers with the recorded turns. The messages and steps it records must equal the published ones,
+   its requests must equal those upstream's harness sends for the same turns (`scripts/record_harness.py`), and each
+   episode must end with its published reward.
 
 What differs is how the env is served, not what the agent sees:
 
@@ -58,8 +64,7 @@ What differs is how the env is served, not what the agent sees:
 - **Reading the grade.** The env grades the plan once, at submit, and keeps the reward `submit_plan` returns, for the
   plan as validated against the tool's input schema (a ship id sent as `3.0` is ship 3); the task's verifier reads it
   from `data/get`.
-- **Not here:** the 3D viewer, the web UI, the task API and upstream's agent harness. Play and watch episodes in
-  upstream's Spaces.
+- **Not here:** the 3D viewer, the web UI and the task API. Play and watch episodes in upstream's Spaces.
 
 ## Run it yourself
 
@@ -120,7 +125,71 @@ Terminals Barcelona) and 36A (Terminal Catalunya, BEST):
 | dock-v1-train | 1,050 | standard 266, busy 260, storm 262, extreme 262 | 12 to 90 |
 
 Ids read `dock-<quay>-w<week>x<weeks>-<tier>-<seed>`, e.g. `dock-24B-w07x1-busy-0`. No week appears in both packs.
-Tasks that put a model on the 50 eval tasks aren't in the bundle yet.
+To put a model on them, see [Play a model](#play-a-model).
+
+## Play a model
+
+`portsim-llm` (`agents/portsim-llm/agent.py`) is upstream's harness loop as an A2A agent. It keeps upstream's system
+prompt and opening message, its nudges, notes and limits (12 turns, 32,000 output tokens a turn) and the episode
+record upstream publishes, and it calls each model on the API upstream used for its provider, through agent-env's
+model endpoint, a [LiteLLM](https://docs.litellm.ai/) proxy:
+
+| Model id | API |
+|---|---|
+| `anthropic/...` | Messages, streamed |
+| `openai/...` | Responses, streamed, with encrypted reasoning, effort `medium` and summary `auto` |
+| any other | chat completions, streamed |
+
+You need a LiteLLM proxy and a key for it. Name them in `.agentenv/config.toml`, or set `LITELLM_BASE_URL` and
+`LITELLM_API_KEY`:
+
+```toml
+[model]
+base_url = "https://your-litellm-proxy"
+api_key  = "secret:PORTSIM_MODEL_KEY"   # read through [stores.secret]; the local store takes it from the env var
+```
+
+Then build both images, write the eval tasks and play one:
+
+```bash
+agent-env portsim setup --agent                        # the env and portsim-llm, for this machine
+agent-env portsim tasks generate --pack dock-v1-eval   # 50 tasks in results/bundles/dock-v1-eval
+agent-env run results/bundles/dock-v1-eval --task dock-24B-w06x1-busy-0 --model anthropic/claude-sonnet-5-5
+```
+
+Each task deploys the env, loads its PortSim task, deploys `portsim-llm`, plays one episode and grades the plan with
+`portsim-verifier`. A task names no model; `--model` picks it.
+
+What differs from upstream's harness:
+
+- **The env** is reached over MCP. MCP has no done flag, so the episode ends when `submit_plan` reports
+  `"submitted": true` or after the 24th call.
+- **One endpoint.** Upstream's chains of fallback providers are gone; every model goes through the proxy.
+- **Cost.** Each turn's token usage is priced from a table pinned in the agent, which holds
+  `anthropic/claude-sonnet-5-5`, `openai/gpt-6.1-sol` and `fireworks_ai/glm-5p3-flash`; any other model fails before
+  its first request. The episode stops before a request that could take its spend past `PORTSIM_MAX_COST_USD` ($5 in
+  the generated tasks).
+- **Failures.** A model error after the SDK's retries, an env error, a turn that would start after the task's two
+  hours, or the cost cap fails the run as an infrastructure error, with the episode so far, instead of scoring it.
+
+A sweep plays models over tasks and reps under a spend cap, and reports them against the published eval:
+
+```bash
+agent-env portsim sweep run --name pilot --models anthropic/claude-sonnet-5-5,openai/gpt-6.1-sol --tasks g2 \
+    --cap-usd 20
+agent-env portsim sweep report pilot   # results/parity.md
+```
+
+- Each attempt is its own `agent-env run` process. Its log, its row in `results.jsonl` and the agent's transcript go
+  to `results/runs/<name>/`.
+- `--tasks` takes `all`, `g2` or task ids. `g2` is ten eval weeks picked from the pack alone, spread over the tiers
+  and, within each tier, over ship counts.
+- An attempt starts only if the spend so far plus the episode cap (`--episode-cap-usd`, default $5) of every attempt
+  running, the new one included, stays within `--cap-usd`.
+- A failed attempt is retried up to twice; an episode stopped at its cost cap is not. Running the same sweep again
+  resumes it, and Ctrl-C tears the running attempts down.
+- `report` compares each model with its episodes in the published dock-eval50 run (`data/published/`) on the same
+  tasks: means with upstream's bootstrap CIs, per tier and week by week.
 
 ## The environment
 
@@ -171,18 +240,23 @@ heavy lifting; this repository adds PortSimEnv. Each piece maps to a framework c
 |---|---|
 | [Environment](https://www.agentenvframework.com/docs/environments/creating): MCP tools, a data plane and extensions in one container | `src/agentenv_portsim/server.py`, an `AgentEnvEnvironment` with three tools, `data/reset` and `data/get`, and two extensions |
 | [Plugin](https://www.agentenvframework.com/docs/plugins/environment-plugins): a pip package with entry points | `pyproject.toml`: the bundle (`agent_env.bundles`) and the `agent-env portsim` commands (`agent_env.cli_plugins`) |
-| [Tasks](https://www.agentenvframework.com/docs/tasks/creating) and verifiers | `src/agentenv_portsim/bundles/portsim/`: the tasks and `portsim-verifier`, run with `agent-env run portsim --task <task>` |
-| [Registry](https://www.agentenvframework.com/docs/registry): versioned images, envs and runs | `agent-env portsim setup` builds the image `agentenv-portsim-env` and registers the env `portsim`; every run and grade is stored |
+| [Tasks](https://www.agentenvframework.com/docs/tasks/creating) and verifiers | `src/agentenv_portsim/bundles/portsim/`: the wiring tasks and `portsim-verifier`, run with `agent-env run portsim --task <task>`; `agent-env portsim tasks generate` writes a pack's tasks as a folder bundle |
+| [A2A agent](https://www.agentenvframework.com/docs/agents/creating): an agent in a container, on agent-env's model endpoint | `agents/portsim-llm/`, an `AgentEnvAgent` that reads the env's MCP server from the task and returns its episode as the trajectory |
+| [Registry](https://www.agentenvframework.com/docs/registry): versioned images, envs, agents and runs | `agent-env portsim setup` builds the image `agentenv-portsim-env` and registers the env `portsim`, and with `--agent` the agent `portsim-llm`; every run and grade is stored |
 
 ## Repository layout
 
 ```
-src/agentenv_portsim/   the env (server.py) and the agent-env portsim commands (cli.py)
+src/agentenv_portsim/   the env (server.py), the agent-env portsim commands (cli.py), the eval tasks (tasks.py)
+                        and the sweep and its report (sweep.py)
   bundles/portsim/      the wiring tasks and portsim-verifier
 src/berth_core/         PortSimEnv's core: tasks, checker, reward, prompts; copied unchanged (VENDORED.md)
-data/                   the dock-v1-eval and dock-v1-train task packs, copied unchanged (CC BY-SA 4.0)
-tests/                  env, packaging, replay and golden tests
-scripts/                record_goldens.py
+agents/portsim-llm/     the portsim-llm agent and its image
+data/                   the dock-v1-eval and dock-v1-train task packs, and the published dock-eval50 results in
+                        published/, copied unchanged (CC BY-SA 4.0)
+tests/                  env, agent, packaging, replay, golden and sweep tests; fake_litellm.py stands in for the
+                        model endpoint
+scripts/                record_goldens.py, record_harness.py, replay_episode.py
 Dockerfile              the env image
 ```
 
@@ -196,8 +270,18 @@ docker build -t agentenv-portsim-env .   # the env image, for this machine's pla
 .venv/bin/python -m agentenv_portsim.server   # on :18765, with the packs in data/
 ```
 
+`scripts/replay_episode.py` plays a published episode through `agent-env run` on local Docker with no model spend:
+the stand-in model server answers `portsim-llm` with the recorded turns, and the task must score the published reward.
+
+```bash
+agent-env portsim setup --agent && agent-env portsim tasks generate --pack dock-v1-eval
+PYTHONPATH=tests .venv/bin/python scripts/replay_episode.py --bundle results/bundles/dock-v1-eval \
+    --task dock-24B-w06x1-busy-0 --published anthropic:claude-sonnet-5-5 --model anthropic/claude-sonnet-5-5
+```
+
 CI (`.github/workflows/ci.yml`) lints, runs the tests on Python 3.11 and 3.12 and `agent-env plugin check`, then
-builds the image, runs the three wiring tasks and runs the golden and replay tests against the image (`PORTSIM_URL`).
+builds both images, runs the three wiring tasks, checks the 50 eval tasks with a dry run, and runs the golden, replay
+and harness tests against the env image (`PORTSIM_URL`).
 Contributions are welcome; [CONTRIBUTING.md](CONTRIBUTING.md) covers how a change gets in and what must not change.
 
 ## Licence and credits
@@ -207,14 +291,15 @@ The wheel and the env image carry both, so the package's licence is `Apache-2.0 
 
 - **[PortSimEnv v1](https://github.com/adithya-s-k/FineEnvs/tree/b0f4c2f9526e3c45d608b4f92f6ec6c71fecc152/07-simulation-environments/portsim-v1)**
   is by Adithya S Kolavi, part of [FineEnvs](https://github.com/adithya-s-k/FineEnvs), under the Apache License
-  2.0. `src/berth_core/` is copied from it unchanged at commit `b0f4c2f` ([VENDORED.md](VENDORED.md)), and the env's
-  tools are ported from its OpenEnv server.
+  2.0. `src/berth_core/` is copied from it unchanged at commit `b0f4c2f` ([VENDORED.md](VENDORED.md)), the env's
+  tools are ported from its OpenEnv server, and `portsim-llm` is ported from its agent harness.
 - **The task packs** in `data/` were built by Adithya S Kolavi from the Port of Barcelona's 2024 container calls and
   are licensed under CC BY-SA 4.0 ([data/LICENSE](data/LICENSE)). Contains data from the Port de Barcelona open data
   portal. `tests/golden/` and the plans in the bundle's tasks are derived from them, under the same licence.
-- **The published episodes** the replay tests read come from the
+- **The published episodes** the replay and harness tests read come from the
   [PortSimEnv dataset](https://huggingface.co/datasets/FineEnvs/PortSimEnv) (CC BY-SA 4.0), fetched at a pinned
-  revision and never stored here.
+  revision and never stored here. The published dock-eval50 results that `sweep report` compares with,
+  `data/published/dock-eval50/index.json`, are copied unchanged from upstream's repository, under the same licence.
 - **[AgentEnv Framework](https://www.agentenvframework.com)**
   ([scaleapi/agentenv-framework](https://github.com/scaleapi/agentenv-framework)) runs the tasks and the registry this
   plugin plugs into.

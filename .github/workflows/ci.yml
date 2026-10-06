@@ -66,6 +66,10 @@ jobs:
           grep -qE 'tasks/smoke\.json v[0-9]+: passed \([^:]+: 1\)' wiring.log
           grep -qE 'tasks/wiring-infeasible\.json v[0-9]+: scored below 1 \([^:]+: 0\.176471\)' wiring.log
           grep -qE 'tasks/wiring-nosubmit\.json v[0-9]+: scored below 1 \([^:]+: 0\)' wiring.log
+      - name: The 50 eval tasks pass agent-env's checks against the registered env and agent
+        run: |
+          agent-env portsim tasks generate --pack dock-v1-eval
+          agent-env run results/bundles/dock-v1-eval --dry-run
       - name: The image answers as upstream's env does, and portsim-llm plays published episodes back on it
         run: |
           docker run -d -p 18765:18765 agentenv-portsim-env
