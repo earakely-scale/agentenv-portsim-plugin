@@ -1,0 +1,57 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "agentenv-portsim"
+version = "0.1.0"
+description = "PortSimEnv as an AgentEnv environment: an agent re-plans a disrupted week of container-ship berthing at a Port of Barcelona quay through MCP tools."
+readme = "README.md"
+license = "Apache-2.0 AND CC-BY-SA-4.0"
+license-files = ["LICENSE", "NOTICE", "data/LICENSE"]
+requires-python = ">=3.11"
+keywords = ["agentenv", "mcp", "reinforcement-learning", "llm-agents", "portsim", "berth-planning", "scheduling"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+# The env image installs the same server dependencies, minus agentenv-framework (see Dockerfile).
+dependencies = [
+    "agentenv-framework>=0.9.1275",
+    "agentenv-framework-protocol>=0.1.290,<0.2",
+    "fastmcp==3.4.8",
+    "pydantic>=2.13,<2.14",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<10", "ruff>=0.16,<0.17", "huggingface_hub>=1,<2", "pyarrow>=20,<26", "hatchling>=1.27"]
+
+[project.urls]
+Source = "https://github.com/earakely-scale/agentenv-portsim-plugin"
+PortSimEnv = "https://github.com/adithya-s-k/FineEnvs/tree/main/07-simulation-environments/portsim-v1"
+
+[project.entry-points."agent_env.bundles"]
+portsim = "agentenv_portsim.bundles"
+
+[project.entry-points."agent_env.cli_plugins"]
+portsim = "agentenv_portsim.cli:portsim"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agentenv_portsim", "src/berth_core"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"data" = "agentenv_portsim/data"
+
+[tool.hatch.build.targets.sdist]
+include = ["/src", "/data", "/tests", "/Dockerfile", "/README.md", "/LICENSE", "/NOTICE", "/VENDORED.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+extend-exclude = ["src/berth_core"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "UP", "I"]
