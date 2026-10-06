@@ -4,11 +4,15 @@ import subprocess
 from pathlib import Path
 
 import click
+from agent_env.a2a_agent import A2AAgent
 from agent_env.artifact import DockerImageArtifact
 from agent_env.env import MCPServerEnv
 
 ENV_ID = "portsim"
 IMAGE = "agentenv-portsim-env"
+AGENT_ID = "portsim-llm"
+AGENT_IMAGE = "agentenv-portsim-llm"
+AGENT_MODEL = "anthropic/claude-sonnet-5-5"
 REPO = "https://github.com/earakely-scale/agentenv-portsim-plugin"
 
 
@@ -39,14 +43,27 @@ def _docker_platform() -> str:
     return out.stdout.strip()
 
 
+def _register_agent(root: Path, build_platform: str) -> None:
+    click.echo(f"Building {AGENT_IMAGE} for {build_platform}")
+    build = ["docker", "build", "--platform", build_platform, "-t", AGENT_IMAGE, str(root / "agents" / AGENT_ID)]
+    if subprocess.run(build).returncode:
+        raise click.ClickException("docker build of the portsim-llm agent failed")
+    artifact = DockerImageArtifact.put(id=AGENT_IMAGE, image_name=AGENT_IMAGE,
+                                       description="portsim-llm: PortSimEnv's harness loop as an A2A agent")
+    agent = A2AAgent.put(id=AGENT_ID, docker_image_artifact=artifact, metadata={"default_model": AGENT_MODEL})
+    click.echo(f"Registered A2A agent {agent.id!r} version {agent.version} (image {artifact.image_name})")
+
+
 @portsim.command()
 @click.option("--platform", "build_platform",
               help="Platform to build for. Default: the Docker host's (linux/arm64 on Apple Silicon); "
                    "remote sandboxes need linux/amd64.")
 @click.option("--source", type=click.Path(exists=True, file_okay=False, path_type=Path),
               help="Checkout of this repo to build. Default: the one an editable install runs from, or the cwd.")
-def setup(build_platform: str | None, source: Path | None):
-    """Build the env image and register it as the MCP server env `portsim` on the `server` provider."""
+@click.option("--agent", is_flag=True, help="Also build the portsim-llm agent for the same platform and register it.")
+def setup(build_platform: str | None, source: Path | None, agent: bool):
+    """Build the env image and register it as the MCP server env `portsim` on the `server` provider; with --agent,
+    the portsim-llm agent too."""
     root = _checkout(source)
     build_platform = build_platform or _docker_platform()
     click.echo(f"Building {IMAGE} for {build_platform} from {root}")
@@ -58,4 +75,6 @@ def setup(build_platform: str | None, source: Path | None):
     env = MCPServerEnv.put(id=ENV_ID, docker_image_artifact=artifact, environment_name=ENV_ID,
                            env_provider_type="server")
     click.echo(f"Registered env {env.id!r} version {env.version} (image {artifact.image_name})")
+    if agent:
+        _register_agent(root, build_platform)
     click.echo("Next: agent-env run portsim --task smoke")

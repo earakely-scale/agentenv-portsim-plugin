@@ -58,16 +58,16 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install '.[dev]'
-      # The README's quickstart: build and register the image, then the wiring tasks, which call no model.
-      - run: agent-env portsim setup
+      # The README's quickstart: build and register the images, then the wiring tasks, which call no model.
+      - run: agent-env portsim setup --agent
       - name: The optimal plan scores 1, the infeasible plan 0.176471, and no submission 0
         run: |
           agent-env run portsim --task smoke --task wiring-infeasible --task wiring-nosubmit | tee wiring.log
           grep -qE 'tasks/smoke\.json v[0-9]+: passed \([^:]+: 1\)' wiring.log
           grep -qE 'tasks/wiring-infeasible\.json v[0-9]+: scored below 1 \([^:]+: 0\.176471\)' wiring.log
           grep -qE 'tasks/wiring-nosubmit\.json v[0-9]+: scored below 1 \([^:]+: 0\)' wiring.log
-      - name: The image answers the golden and replayed calls as upstream's env does
+      - name: The image answers as upstream's env does, and portsim-llm plays published episodes back on it
         run: |
           docker run -d -p 18765:18765 agentenv-portsim-env
           curl -sf --retry 30 --retry-all-errors --retry-delay 1 -o /dev/null http://127.0.0.1:18765/.well-known/agent-env.json
-          PORTSIM_URL=http://127.0.0.1:18765 pytest tests/golden tests/replay/test_transcripts.py
+          PORTSIM_URL=http://127.0.0.1:18765 pytest tests/golden tests/replay/test_transcripts.py tests/replay/test_harness.py
