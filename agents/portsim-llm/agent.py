@@ -1,6 +1,7 @@
 """PortSimEnv's harness loop (FineEnvs portsim-v1 b0f4c2f, berth_openenv/agent.py) as an A2A agent: one episode on the
 env's MCP tools through agent-env's model endpoint, on the API upstream calls for the model's provider. Cost is usage
-times PRICES; an episode stops before a request that could take it past PORTSIM_MAX_COST_USD."""
+times PRICES, or the most a request could cost when its usage is lost (it failed, or the harness cut its stream); an
+episode stops before a request that could take it past PORTSIM_MAX_COST_USD."""
 
 import json
 import logging
@@ -33,6 +34,7 @@ log = logging.getLogger("portsim-llm")
 REQUEST_TIMEOUT = 900.0
 NOTES_CHARS = 8000
 MAX_TOOL_CALLS = 24
+HARNESS_CAP = "length (harness cap)"
 PRICES = {  # USD per 1M tokens: input, output, cache read. LiteLLM public price map, 2026-10-06.
     "anthropic/claude-sonnet-5-5": (2.00, 10.00, 0.20),
     "openai/gpt-6.1-sol": (2.00, 10.00, 0.10),
@@ -268,7 +270,7 @@ class ChatAgent:
         budget, seen = self.max_tokens * 5, 0
         async for chunk in stream:
             if seen > budget:
-                stop = "length (harness cap)"
+                stop = HARNESS_CAP
                 await stream.close()
                 break
             if u := getattr(chunk, "usage", None):
@@ -366,7 +368,7 @@ class Episode:
 
     def fail(self, code: str, message: str | None = None, error: BaseException | None = None) -> None:
         if error is not None:
-            self.error = f"{type(error).__name__}: {str(error)[:800]}".replace(self.key, "<LITELLM_API_KEY>")
+            self.error = f"{type(error).__name__}: {str(error).replace(self.key, '<LITELLM_API_KEY>')[:800]}"
             self.record["errors"].append(self.error)
         self.failure = (code, message or self.error)
         self.record["end_reason"] = code
@@ -419,8 +421,9 @@ class Episode:
             try:
                 t = await agent.step(request)
             except PROVIDER_ERRORS as e:
+                self.spent += most
                 return self.fail("provider_error", error=e)
-            self.spent += cost(t.usage, price)
+            self.spent += most if t.stop == HARNESS_CAP else cost(t.usage, price)
             self.cached += t.usage["cached"]
             self.written += t.usage["cache_write"]
             record["turns"] += 1

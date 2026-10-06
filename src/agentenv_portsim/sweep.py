@@ -113,7 +113,7 @@ def context(instance: str) -> dict:
 
 def trajectory(uri: str) -> bytes:
     with namespace_routing():
-        return get_config().get_object_store().get(uri)
+        return get_config().get_object_store_at(uri).get(uri)
 
 
 def task_ids(spec: str) -> list[str]:
@@ -163,13 +163,13 @@ def start(sweep: Sweep, run: tuple[str, str, int], number: int) -> Attempt:
     return Attempt(run, number, started, log, proc)
 
 
-def outcome(sweep: Sweep, attempt: Attempt, earlier: list[dict], interrupted: bool = False) -> dict:
+def outcome(sweep: Sweep, attempt: Attempt, earlier: list[dict], interrupted: bool = False, read: bool = True) -> dict:
     """The attempt's row, from the instance its run stored: the verifier's grade and episode, and the play step's
-    summary, failure and trajectory."""
+    summary, failure and trajectory. Without ``read`` (the sweep itself failed), from the log alone."""
     model, task, rep = attempt.run
     found = INSTANCE.findall(attempt.log.read_text(errors="replace"))
     wall, instance = (float(found[-1][0]), found[-1][1]) if found else (None, None)
-    ctx = context(instance) if instance else {}
+    ctx = context(instance) if instance and read else {}
     m = ctx.get("metadata") or {}
     v = (m.get("verifications") or {}).get("portsim") or {}
     pr = next((p for p in ctx.get("prompt_responses") or [] if p.get("step_id") == "play"), None)
@@ -225,7 +225,8 @@ def _spend(rows: list[dict], cap: float) -> str:
 def run(sweep: Sweep, cap_usd: float, parallel: int, echo=click.echo) -> int:
     """Plays the runs results.jsonl doesn't hold as final, `parallel` attempts at a time, while the spend so far plus
     the episode cap of every attempt running and the next stays within ``cap_usd``. Returns the exit code: 0 when
-    every run is final, 1 when the sweep stopped early, 130 when a signal stopped it."""
+    every run is final, 1 when the sweep stopped early, 130 when a signal stopped it. If the sweep itself fails, it
+    tears its attempts down and records them from their logs, at their caps, before the error propagates."""
     cap = sweep.episode_cap_usd
     rows = results(sweep.out)
     queue = [r for r in sweep.runs() if not final(of(rows, r))]
@@ -235,14 +236,32 @@ def run(sweep: Sweep, cap_usd: float, parallel: int, echo=click.echo) -> int:
     caught: list[int] = []
     previous = {s: signal.signal(s, lambda signum, _: caught.append(signum)) for s in (signal.SIGINT, signal.SIGTERM)}
 
-    def record(attempt: Attempt, interrupted: bool = False) -> dict:
+    def record(attempt: Attempt, interrupted: bool = False, read: bool = True) -> dict:
         nonlocal spent
-        row = outcome(sweep, attempt, of(rows, attempt.run), interrupted)
+        row = outcome(sweep, attempt, of(rows, attempt.run), interrupted, read)
+        running.remove(attempt)
         rows.append(row)
         spent += cost(row, cap)
         with (sweep.out / "results.jsonl").open("a") as f:
             f.write(json.dumps(row) + "\n")
         return row
+
+    def finish(attempt: Attempt) -> dict:
+        row = record(attempt)
+        if row["outcome"] == "scored":
+            echo(f"done {attempt.label}: reward {row['reward']} ({row['end_reason']}), {_money(row, cap)} "
+                 f"(spent ${spent:.2f})")
+        else:
+            echo(f"failed {attempt.label}: {row['error_code']} {'retry' if row['retryable'] else 'final'} "
+                 f"({_money(row, cap)})")
+        return row
+
+    def tear_down(read: bool) -> None:
+        for attempt in running:
+            attempt.proc.terminate()
+        for attempt in list(running):
+            attempt.proc.wait()
+            echo(f"interrupted {attempt.label} ({_money(record(attempt, interrupted=True, read=read), cap)})")
 
     try:
         if queue:
@@ -260,25 +279,19 @@ def run(sweep: Sweep, cap_usd: float, parallel: int, echo=click.echo) -> int:
                 break
             time.sleep(POLL_SECONDS)
             for attempt in [a for a in running if a.proc.poll() is not None]:
-                running.remove(attempt)
-                row = record(attempt)
-                if row["outcome"] == "scored":
-                    echo(f"done {attempt.label}: reward {row['reward']} ({row['end_reason']}), {_money(row, cap)} "
-                         f"(spent ${spent:.2f})")
-                    continue
-                echo(f"failed {attempt.label}: {row['error_code']} {'retry' if row['retryable'] else 'final'} "
-                     f"({_money(row, cap)})")
+                row = finish(attempt)
                 if row["error_code"] in STOPS:
                     stopped = f"{row['error_code']} from {attempt.label}: {row['error']}"
                 elif row["retryable"]:
                     queue.append(attempt.run)
         if caught:
-            for attempt in running:
-                attempt.proc.terminate()
-            for attempt in running:
-                attempt.proc.wait()
-                echo(f"interrupted {attempt.label} ({_money(record(attempt, interrupted=True), cap)})")
+            for attempt in [a for a in running if a.proc.poll() is not None]:
+                finish(attempt)
+            tear_down(read=True)
             return 130
+    except BaseException:
+        tear_down(read=False)
+        raise
     finally:
         for s, handler in previous.items():
             signal.signal(s, handler)

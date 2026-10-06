@@ -186,6 +186,41 @@ def test_a_signal_tears_the_attempts_down_and_their_rows_dont_count(fake, monkey
         (1, "interrupted", True), (2, "failed", True), (3, "failed", True), (4, "failed", False)]
 
 
+def test_an_attempt_that_ended_before_the_signal_keeps_its_own_row(fake, monkeypatch):
+    fake.script({f"{SONNET}|{T1}": [{"context": scored(T1, SONNET)}],
+                 "*": [{"context": agent_failed(T2, SONNET, "cost_cap", cost=0.49), "sleep": 0.3, "exit": 1}]})
+    read = sweep.context
+
+    def interrupt_once_t2_has_ended(instance):
+        if T1 in instance:
+            while not [c for c in fake.calls() if "end" in c and T2 in c["argv"]]:
+                time.sleep(0.02)
+            time.sleep(0.3)
+            os.kill(os.getpid(), signal.SIGINT)
+        return read(instance)
+
+    monkeypatch.setattr(sweep, "context", interrupt_once_t2_has_ended)
+    result = sweep_run("--models", SONNET, "--tasks", f"{T1},{T2}", "--cap-usd", "10", "--parallel", "2")
+    assert result.exit_code == 130
+    assert [brief(r) for r in rows()] == [(T1, 1, "scored", None, 0.224018, False),
+                                          (T2, 1, "failed", "cost_cap", 0.49, False)]
+
+
+def test_a_sweep_that_fails_tears_its_attempts_down_and_counts_them_at_the_cap(fake, monkeypatch):
+    fake.script({f"{SONNET}|{T1}": [{"context": scored(T1, SONNET)}],
+                 "*": [{"wait": True, "context": scored(T2, SONNET)}]})
+
+    def unreadable(instance):
+        raise RuntimeError("the store is down")
+
+    monkeypatch.setattr(sweep, "context", unreadable)
+    result = sweep_run("--models", SONNET, "--tasks", f"{T1},{T2}", "--cap-usd", "10", "--parallel", "2")
+    assert str(result.exception) == "the store is down"
+    assert [(r["task_id"], r["outcome"], r["exit"], r["cost_usd"], r["retryable"]) for r in rows()] == [
+        (T1, "interrupted", 0, None, True), (T2, "interrupted", 143, None, True)]
+    assert len([c for c in fake.calls() if "end" in c]) == 2
+
+
 @pytest.mark.parametrize(("context", "outcome", "cost"), [(scored(T1, SONNET), "scored", 0.224018),
                                                           (None, "interrupted", None)])
 def test_an_interrupted_attempt_keeps_a_grade_its_run_recorded(fake, tmp_path, context, outcome, cost):
