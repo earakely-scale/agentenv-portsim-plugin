@@ -1,4 +1,4 @@
-"""G1 (c): the env answers as upstream's does where the published transcripts never go (scripts/record_goldens.py)."""
+"""The env answers as upstream's does where the published transcripts never go (scripts/record_goldens.py)."""
 
 import json
 from pathlib import Path

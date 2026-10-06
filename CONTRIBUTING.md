@@ -9,7 +9,7 @@ Thanks for helping. Fixes, tasks, tests, docs and bug reports are all welcome.
 2. **Fork, branch and open a pull request against `main`.** Fill in the template: what changes, why, and how you
    tested it.
 3. **CI must pass:** lint, the tests on Python 3.11 and 3.12, `agent-env plugin check`, and the image build that
-   runs the three wiring tasks.
+   runs the three wiring tasks and the golden and replay tests against the image.
 4. **The maintainer reviews and approves every pull request.** `main` is protected: a pull request merges only
    with an approving review from the code owner ([.github/CODEOWNERS](.github/CODEOWNERS)), green checks and its
    conversations resolved. Pull requests are squash-merged, so the title becomes the commit message.

@@ -15,7 +15,7 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
-# The env image installs the same server dependencies, minus agentenv-framework (see Dockerfile).
+# The env image pins its own server dependencies (Dockerfile); CI runs the golden and replay tests against it.
 dependencies = [
     "agentenv-framework>=0.9.1275",
     "agentenv-framework-protocol>=0.1.290,<0.2",

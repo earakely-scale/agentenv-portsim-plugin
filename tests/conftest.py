@@ -30,7 +30,11 @@ def free_port() -> int:
 
 @pytest.fixture(scope="session")
 def server():
-    """`python -m agentenv_portsim.server`, as the image runs it, on a free port."""
+    """The env server at PORTSIM_URL (CI points it at the image), else `python -m agentenv_portsim.server`, as the
+    image runs it, on a free port."""
+    if url := os.environ.get("PORTSIM_URL"):
+        yield url
+        return
     port = free_port()
     proc = subprocess.Popen([sys.executable, "-m", "agentenv_portsim.server"],
                             env={**os.environ, "MCP_HOST": "127.0.0.1", "MCP_PORT": str(port)},

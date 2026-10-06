@@ -75,6 +75,14 @@ async def test_submit_is_graded_once(env, tools):
     assert (env.reward, env.grade["reward"], env.calls_used) == (1.0, 1.0, 3)
 
 
+@pytest.mark.parametrize(("coerce", "reward"), [(lambda e: e | {"ship": float(e["ship"])}, 1.0),
+                                                 (lambda e: e | {"cranes": True}, 0.023529)],
+                         ids=["float-ship", "bool-cranes"])
+async def test_the_reward_kept_is_the_one_submit_plan_returns_for_the_validated_plan(env, tools, coerce, reward):
+    plan = [coerce(entry) for entry in optimal(env)]
+    assert json.loads(await tools("submit_plan", plan=plan))["reward"] == env.reward == env.grade["reward"] == reward
+
+
 async def test_an_infeasible_submit_lists_20_violations_at_most(env, tools):
     env.load_task(max(env.pack.tasks, key=lambda t: len(t.ships)).task_id)
     out = json.loads(await tools("submit_plan", plan=[]))

@@ -1,5 +1,6 @@
-"""G1 (b): the 830 tool calls of the 300 published episodes, replayed in order over MCP, each on its episode's task,
-return the recorded outputs byte for byte, except the one in ALLOWED."""
+"""The 830 tool calls of the 300 published episodes, replayed in order over MCP, each on its episode's task, return
+the recorded outputs byte for byte, except the one in ALLOWED, whose recorded output differs and whose output here is
+pinned; each submitted episode then reports its published reward and grade in data/get."""
 
 import json
 
@@ -7,7 +8,8 @@ import pytest
 
 pytestmark = pytest.mark.anyio
 
-ALLOWED = {("openai:gpt-6.1-sol", "dock-24B-w35x2-storm-1", 2): "the recorded output differs; allow-listed"}
+ALLOWED = {("openai:gpt-6.1-sol", "dock-24B-w35x2-storm-1", 2):
+           '{"submitted":true,"feasible":true,"reward":1.0,"cost":312,"delay_cost":282,"moves":6}'}
 
 
 def tool_calls(episode: dict):
@@ -21,7 +23,7 @@ def tool_calls(episode: dict):
 
 
 async def test_recorded_outputs(harness, episodes):
-    replayed, differs = 0, {}
+    replayed, differs, graded = 0, {}, {}
     for episode in episodes:
         await harness.load_task(episode["task_id"])
         async with harness.session() as session:
@@ -30,6 +32,12 @@ async def test_recorded_outputs(harness, episodes):
                 replayed += 1
                 if output != recorded:
                     differs[episode["model"], episode["task_id"], i] = recorded, output
+        if episode["submitted"]:
+            data = await harness.data()
+            graded[episode["model"], episode["task_id"]] = (
+                (data["reward"], data["grade"]), (episode["reward"], json.loads(episode["grade"])))
     assert replayed == 830
-    assert {key: v for key, v in differs.items() if key not in ALLOWED} == {}
+    assert {key: v for key, v in differs.items() if ALLOWED.get(key) != v[1]} == {}
     assert differs.keys() == ALLOWED.keys()
+    assert len(graded) == 202
+    assert {key: v for key, v in graded.items() if v[0] != v[1]} == {}

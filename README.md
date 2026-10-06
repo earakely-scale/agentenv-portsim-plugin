@@ -55,7 +55,9 @@ What differs is how the env is served, not what the agent sees:
   AgentEnv env server serves them over MCP (streamable HTTP at `/mcp`), one episode per container.
 - **Choosing a task.** Upstream's `reset(task_id=...)` is the extension `urn:portsim:load-task/v1`, which a task
   applies with `apply_server_config`.
-- **Reading the grade.** The env grades the plan at submit; the task's verifier reads the reward from `data/get`.
+- **Reading the grade.** The env grades the plan once, at submit, and keeps the reward `submit_plan` returns, for the
+  plan as validated against the tool's input schema (a ship id sent as `3.0` is ship 3); the task's verifier reads it
+  from `data/get`.
 - **Not here:** the 3D viewer, the web UI, the task API and upstream's agent harness. Play and watch episodes in
   upstream's Spaces.
 
@@ -195,8 +197,8 @@ docker build -t agentenv-portsim-env .   # the env image, for this machine's pla
 ```
 
 CI (`.github/workflows/ci.yml`) lints, runs the tests on Python 3.11 and 3.12 and `agent-env plugin check`, then
-builds the image and runs the three wiring tasks. Contributions are welcome; [CONTRIBUTING.md](CONTRIBUTING.md)
-covers how a change gets in and what must not change.
+builds the image, runs the three wiring tasks and runs the golden and replay tests against the image (`PORTSIM_URL`).
+Contributions are welcome; [CONTRIBUTING.md](CONTRIBUTING.md) covers how a change gets in and what must not change.
 
 ## Licence and credits
 
