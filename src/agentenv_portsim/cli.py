@@ -1,4 +1,5 @@
-"""`agent-env portsim`: build the PortSim env image and register it."""
+"""`agent-env portsim`: build and register the PortSim env and the portsim-llm agent, write the eval tasks, and
+sweep models over them."""
 
 import subprocess
 from pathlib import Path
@@ -21,7 +22,7 @@ REPO = "https://github.com/earakely-scale/agentenv-portsim-plugin"
 
 @click.group()
 def portsim():
-    """PortSim: build and register the env."""
+    """PortSim: build and register the env and agent, write the eval tasks, and sweep models over them."""
 
 
 def _checkout(source: Path | None) -> Path:
