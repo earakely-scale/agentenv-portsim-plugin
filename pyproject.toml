@@ -24,7 +24,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8,<10", "ruff>=0.16,<0.17", "huggingface_hub>=1,<2", "pyarrow>=20,<26", "hatchling>=1.27"]
+dev = ["pytest>=8,<10", "ruff>=0.16,<0.17", "huggingface_hub>=1,<2", "pyarrow>=20,<26", "hatchling>=1.27",
+       "anthropic==1.11.0", "openai==2.54.0"]
 
 [project.urls]
 Source = "https://github.com/earakely-scale/agentenv-portsim-plugin"
@@ -45,7 +46,7 @@ exclude = ["src/agentenv_portsim/data"]
 "data" = "agentenv_portsim/data"
 
 [tool.hatch.build.targets.sdist]
-include = ["/src", "/data", "/tests", "/Dockerfile", "/README.md", "/LICENSE", "/NOTICE", "/VENDORED.md"]
+include = ["/src", "/data", "/tests", "/agents", "/Dockerfile", "/README.md", "/LICENSE", "/NOTICE", "/VENDORED.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
