@@ -69,5 +69,5 @@ jobs:
       - name: The image answers the golden and replayed calls as upstream's env does
         run: |
           docker run -d -p 18765:18765 agentenv-portsim-env
-          curl -sf --retry 30 --retry-connrefused --retry-delay 1 -o /dev/null http://127.0.0.1:18765/.well-known/agent-env.json
+          curl -sf --retry 30 --retry-all-errors --retry-delay 1 -o /dev/null http://127.0.0.1:18765/.well-known/agent-env.json
           PORTSIM_URL=http://127.0.0.1:18765 pytest tests/golden tests/replay/test_transcripts.py
