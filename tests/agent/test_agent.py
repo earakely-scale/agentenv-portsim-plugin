@@ -221,12 +221,23 @@ async def test_a_cap_below_the_first_request_sends_nothing(play, monkeypatch):
     assert (result.error.code, fake.requests, summary(result)["cost_usd"]) == ("cost_cap", [], 0.0)
 
 
+async def test_a_chat_stream_the_harness_cuts_is_charged_at_its_bound(play):
+    result, _ = await play([turn(content="x" * 6000, input=100_000, output=100_000),
+                            {**SUBMIT, "usage": {"input": 10, "output": 10}}], GLM, model_params={"max_tokens": 1000})
+    s, record = summary(result), result.native_trajectory.payload
+    assert [m["stop"] for m in record["messages"] if m["role"] == "assistant"] == ["length (harness cap)", "stop"]
+    assert (s["end_reason"], s["input_tokens"], s["output_tokens"]) == ("submitted", 10, 10)
+    assert s["cost_usd"] > 5 * 1000 * 0.50 / 1e6
+
+
 @pytest.mark.parametrize(("model", "requests"), [(SONNET, 5), (GPT, 4), (GLM, 4)])
 async def test_a_failing_provider_is_a_provider_error_after_the_sdk_retries(play, model, requests):
     result, fake = await play([{"status": 500}], model)
+    s = summary(result)
     assert (result.error.code, len(fake.requests)) == ("provider_error", requests)
-    assert summary(result)["error"].startswith("InternalServerError: ")
-    assert result.native_trajectory.payload["errors"] == [summary(result)["error"]]
+    assert s["error"].startswith("InternalServerError: ")
+    assert result.native_trajectory.payload["errors"] == [s["error"]]
+    assert 32000 * (5 if model == GLM else 1) * portsim_llm.PRICES[model][1] / 1e6 < s["cost_usd"] <= 5
 
 
 async def test_an_env_that_cannot_be_reached_is_an_env_error(play):
@@ -282,3 +293,9 @@ async def test_the_key_stays_out_of_the_result_and_the_logs(play, caplog):
     assert KEY not in repr(result)
     assert KEY not in caplog.text
     assert "turn 1: 1 tool calls, stop stop, $0.0000 spent" in caplog.text
+
+
+def test_an_error_is_scrubbed_of_the_key_before_it_is_cut_to_800_characters():
+    episode = portsim_llm.Episode(portsim_llm.PortSimConfig(), {"LITELLM_API_KEY": KEY})
+    episode.fail("provider_error", error=RuntimeError("x" * 795 + KEY))
+    assert episode.error == "RuntimeError: " + "x" * 795 + "<LITE"
