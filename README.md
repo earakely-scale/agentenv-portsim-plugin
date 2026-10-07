@@ -3,6 +3,8 @@
 [![CI](https://github.com/earakely-scale/agentenv-portsim-plugin/actions/workflows/ci.yml/badge.svg)](https://github.com/earakely-scale/agentenv-portsim-plugin/actions/workflows/ci.yml)
 [![License: Apache-2.0, data CC BY-SA 4.0](https://img.shields.io/badge/license-Apache--2.0%20%C2%B7%20data%20CC%20BY--SA%204.0-blue)](NOTICE)
 [![Built on the AgentEnv Framework](https://img.shields.io/badge/built%20on-AgentEnv%20Framework-6f42c1)](https://www.agentenvframework.com)
+[![Replay Space on Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97%20Space-replays%20in%203D-yellow)](https://huggingface.co/spaces/earakely-scale/PortSimEnv-AgentEnv)
+[![Dataset on Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97%20Dataset-tasks%20and%20runs-yellow)](https://huggingface.co/datasets/earakely-scale/PortSimEnv-AgentEnv)
 
 <p align="center">
   <a href="https://github.com/earakely-scale/agentenv-portsim-plugin/releases/tag/replays-2026-10-07"><img src="assets/live-port.webp" width="100%" alt="GPT-6.1 Sol plays a live week at the Port of Barcelona on AgentEnv: the virtual clock runs, bulletins arrive, and the agent re-plans watch by watch on PortSimEnv's 3D quay"></a>
@@ -71,6 +73,10 @@ week is new here.
   - `agent-env portsim setup` builds the images and registers the envs and the agent.
   - `tasks generate`, `sweep run` and `sweep report` play models over the weeks under a spend cap.
   - `view` and `record` replay runs on a 3D twin of the quay and film them ([Watch a run](#watch-a-run)).
+- **On the Hugging Face Hub.** The dataset
+  [earakely-scale/PortSimEnv-AgentEnv](https://huggingface.co/datasets/earakely-scale/PortSimEnv-AgentEnv) holds the
+  tasks as runnable bundles (the 50 eval weeks and the 15 live weeks), the live references and every recorded run.
+  The [Space](https://huggingface.co/spaces/earakely-scale/PortSimEnv-AgentEnv) replays the runs in 3D.
 - **Results.** GPT-6.1 Sol and Claude Sonnet 5.5 on ten weeks planned in one go
   ([the comparison with upstream's eval](#the-comparison-with-the-published-eval)) and on all 15 live weeks
   ([the first live results](#the-first-live-results)).
