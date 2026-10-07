@@ -56,7 +56,7 @@ The tests check this without calling any model:
    episode must end with its published reward.
 
 Whether a model scores here as it did upstream is a separate question, answered week by week rather than by a pass
-test: see [The comparison with the published eval](#the-comparison-with-the-published-eval), which is pending.
+test: see [The comparison with the published eval](#the-comparison-with-the-published-eval).
 
 What differs is how the env is served, not what the agent sees:
 
@@ -200,7 +200,19 @@ agent-env portsim sweep report pilot   # results/parity.md
 
 The comparison plays `portsim-llm` with the published closed models, `openai/gpt-6.1-sol` and
 `anthropic/claude-sonnet-5-5`, on ten eval weeks, and sets each week's reward next to the published one. It reports
-the differences without a pass or fail line. **It is pending: no results are published here yet.**
+the differences without a pass or fail line. The first run, sweep `g2` on Modal VMs, is in
+[`results/parity.md`](results/parity.md); it cost $5.19 for 20 episodes:
+
+| Model | Ours, mean of 10 weeks | Published, same 10 weeks | Weeks within ±0.05 | Tokens in/out per episode, ours / published |
+|---|---:|---:|---:|---|
+| GPT-6.1 Sol | 0.907 | 0.872 | 8 of 10 | 30.3k/6.7k / 29.4k/6.6k |
+| Claude Sonnet 5.5 | 0.778 | 0.839 | 7 of 10 | 48.1k/26.2k / 107.2k/30.4k |
+
+Each week is one episode on each side, so a single week can differ by a lot: GPT-6.1 Sol scored 1.0 on
+`dock-36A-w35x2-extreme-0` where the published run has 0.700, and on the 56-ship storm week Sonnet 5.5 spent both of
+its turns' 32k output tokens without calling a tool and ended with 0 (the published episode played 8 turns and scored
+0.379), which also accounts for most of the gap in Sonnet's input tokens. Per turn, input and output tokens track the
+published episodes.
 
 The ten weeks (`--tasks g2`) were fixed from the pack alone, before any model played them:
 
