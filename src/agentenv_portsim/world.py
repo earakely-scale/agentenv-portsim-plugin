@@ -76,23 +76,23 @@ def excuse(before: Task, after: Task, frozen: Plan) -> tuple[list[tuple[int, str
 
 def grade_week(task: Task, plan: Plan, excused_problems: Iterable[tuple[int, str]],
                excused_cost: Mapping[int, int]) -> dict:
-    excused = set(excused_problems)
+    allowed = set(excused_problems)
     res = evaluate(task, plan)
-    violations, kept = [], []
+    violations, excused = [], []
     for r in res.ships:
         for p in r.problems:
-            (kept if (r.ship, rule(p)) in excused else violations).append({"ship": r.ship, "problem": p})
+            (excused if (r.ship, rule(p)) in allowed else violations).append({"ship": r.ship, "problem": p})
     feasible = not violations
-    clean = sum(all((r.ship, rule(p)) in excused for p in r.problems) for r in res.ships) / len(task.ships)
+    clean = sum(all((r.ship, rule(p)) in allowed for p in r.problems) for r in res.ships) / len(task.ships)
     raw_cost = sum(r.cost for r in res.ships)
-    forgiven = sum(min(r.cost, excused_cost.get(r.ship, 0)) for r in res.ships)
-    cost = raw_cost - forgiven if feasible else None
+    waived = sum(min(r.cost, excused_cost.get(r.ship, 0)) for r in res.ships)
+    cost = raw_cost - waived if feasible else None
     optimal, floor = task.reference["optimal_cost"], unavoidable_cost(task)
     reward, quality = score_v3(cost, feasible, clean, optimal, int(task.rules.get("gap_k", 100)), floor)
     return {"reward": round(reward, 6), "feasible": feasible, "clean_fraction": round(clean, 4),
-            "quality": round(quality, 6), "cost": cost, "raw_cost": raw_cost, "excused_cost": forgiven,
+            "quality": round(quality, 6), "cost": cost, "raw_cost": raw_cost, "excused_cost": waived,
             "optimal_cost": optimal, "unavoidable_cost": floor, "regret": cost - optimal if feasible else None,
-            "violations": violations, "excused": kept}
+            "violations": violations, "excused": excused}
 
 
 class Week:

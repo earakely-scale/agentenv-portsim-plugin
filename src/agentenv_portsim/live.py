@@ -48,6 +48,10 @@ def _raw(plan):
     return plan
 
 
+def _reply(week: Week, result: dict) -> str:
+    return _json({**result, "messages": week.drain()})
+
+
 @environment_card(name=LIVE_ENV)
 class PortSimLiveEnv(AgentEnvEnvironment):
     def __init__(self):
@@ -90,7 +94,7 @@ class PortSimLiveEnv(AgentEnvEnvironment):
         if week.last:
             return _reply(week, week.finish("done"))
         if self.set_time_url is None:
-            raise ValueError("the gateway clock is not synced: call urn:agentenv:clock/v1 sync_time first")
+            raise ValueError(f"the gateway clock is not synced: call {CLOCK_URI} sync_time first")
         async with httpx.AsyncClient() as http:
             response = await http.put(self.set_time_url, timeout=10, json={
                 "virtual_time": virtual_time(week.task, week.watches[week.watch + 1].hour),
@@ -140,10 +144,6 @@ class PortSimLiveEnv(AgentEnvEnvironment):
         if open_only and self.week.done:
             raise ValueError("the week is over")
         return self.week
-
-
-def _reply(week: Week, result: dict) -> str:
-    return _json({**result, "messages": week.drain()})
 
 
 class LiveEpisode(Middleware):

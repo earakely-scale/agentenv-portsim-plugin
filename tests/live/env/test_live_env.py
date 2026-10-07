@@ -122,6 +122,15 @@ async def test_confirm_berths_sets_windows_and_ships_left_out_keep_theirs(live, 
     assert plan_to_list(live.plan) == first
 
 
+async def test_a_window_with_cranes_out_of_range_is_kept_and_reported(live, tools):
+    window = {"ship": 0, "berth_hour": 1, "section": 4, "cranes": 0}
+    assert (await tools("confirm_berths", plan=[window]))["confirmed"] == [0]
+    checked = await tools("check_plan", plan=[])
+    assert checked["ships"][0]["problems"] == ["gets 0 cranes but can be worked by 1-5"]
+    await tools("advance")
+    assert (await tools("get_situation"))["windows"] == [window | {"departure": 24, "status": "departed"}]
+
+
 async def test_three_planning_calls_a_watch(live, tools):
     assert (await tools("check_plan", plan="{"))["planning_calls_left"] == 2
     assert (await tools.error("check_plan")).startswith("1 validation error for call[check_plan]\nplan\n")
