@@ -21,6 +21,7 @@ dependencies = [
     "agentenv-framework-protocol>=0.1.290,<0.2",
     "fastmcp==3.4.8",
     "pydantic>=2.13,<2.14",
+    "websockets>=15,<18",
 ]
 
 [project.optional-dependencies]
@@ -53,8 +54,9 @@ include = ["/src", "/data", "/tests", "/agents", "/Dockerfile", "/README.md", "/
 testpaths = ["tests"]
 markers = [
     "network: downloads from the public bucket",
+    "browser: drives headless Chrome and ffmpeg (and loads three.js from its CDN)",
 ]
-addopts = "-m 'not network'"
+addopts = "-m 'not network and not browser'"
 
 [tool.ruff]
 line-length = 120

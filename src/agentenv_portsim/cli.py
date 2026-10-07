@@ -9,6 +9,7 @@ from agent_env.a2a_agent import A2AAgent
 from agent_env.artifact import DockerImageArtifact
 from agent_env.env import MCPServerEnv
 
+from .record import record_command
 from .schedule import LIVE_ENV
 from .sweep import sweep_group
 from .tasks import tasks_group
@@ -93,3 +94,4 @@ def setup(build_platform: str | None, source: Path | None, agent: bool):
 portsim.add_command(tasks_group)
 portsim.add_command(sweep_group)
 portsim.add_command(view_command)
+portsim.add_command(record_command)
