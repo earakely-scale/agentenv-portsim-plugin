@@ -91,6 +91,12 @@ def test_the_episode_cap_reaches_the_agent(tmp_path, cap, env_value):
     assert deploy_agent["env_vars"] == {"PORTSIM_MAX_COST_USD": env_value}
 
 
+def test_hf_bill_to_reaches_the_agent(tmp_path):
+    tasks.generate("dock-v1-eval", tmp_path, task_ids=["dock-36A-w35x1-standard-0"], hf_bill_to="ScaleAI")
+    deploy_agent = json.loads((tmp_path / "tasks/dock-36A-w35x1-standard-0.json").read_text())[2]
+    assert deploy_agent["env_vars"] == {"PORTSIM_MAX_COST_USD": "5", "HF_BILL_TO": "ScaleAI"}
+
+
 @pytest.mark.parametrize(("args", "out"), [([], "results/bundles/dock-v1-eval"), (["--out", "elsewhere"], "elsewhere")])
 def test_generate_writes_to_out_or_results_bundles(tmp_path, monkeypatch, args, out):
     monkeypatch.chdir(tmp_path)

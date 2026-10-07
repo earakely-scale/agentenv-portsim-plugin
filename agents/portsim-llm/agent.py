@@ -276,8 +276,9 @@ class ChatAgent:
     route = "chat"
 
     def __init__(self, model: str, tools, system: str, max_tokens: int, base_url: str, api_key: str,
-                 effort: str | None = None):
-        self.client = openai.AsyncOpenAI(base_url=base_url, api_key=api_key, max_retries=3, timeout=REQUEST_TIMEOUT)
+                 effort: str | None = None, bill_to: str | None = None):
+        self.client = openai.AsyncOpenAI(base_url=base_url, api_key=api_key, max_retries=3, timeout=REQUEST_TIMEOUT,
+                                         default_headers={"X-HF-Bill-To": bill_to} if bill_to else None)
         self.model, self.max_tokens = model, max_tokens
         self.extra = {"reasoning_effort": effort} if effort in ("low", "medium", "high") else {}
         self.tools = [{"type": "function", "function": {
@@ -367,12 +368,12 @@ def route(model: str) -> str:
 
 
 def make_agent(model: str, tools, system: str, max_tokens: int, effort: str | None, root: str, key: str,
-               cache: bool = False):
+               cache: bool = False, bill_to: str | None = None):
     if route(model) == "messages":
         return AnthropicAgent(model, tools, system, max_tokens, root, key, effort, cache)
     if route(model) == "responses":
         return OpenAIResponsesAgent(model, tools, system, max_tokens, f"{root}/v1", key, effort or "medium")
-    return ChatAgent(model, tools, system, max_tokens, f"{root}/v1", key, effort)
+    return ChatAgent(model, tools, system, max_tokens, f"{root}/v1", key, effort, bill_to)
 
 
 def bound(agent, request: dict, price: tuple[float, float, float]) -> float:
@@ -399,6 +400,7 @@ class Episode:
         self.config, self.model = config, config.model
         self.base, self.key = environ.get("LITELLM_BASE_URL", ""), environ.get("LITELLM_API_KEY", "")
         self.max_cost = float(environ.get("PORTSIM_MAX_COST_USD", "5"))
+        self.bill_to = environ.get("HF_BILL_TO")
         self.started = time.time()
         self.record: dict[str, Any] = {"model": self.model, "messages": [], "steps": [],
                                        "final": {"submitted": False, "plan": None}, "reward": 0.0,
@@ -442,7 +444,7 @@ class Episode:
         tools = await env.tools()
         self.live = any(t.name == "advance" for t in tools)
         agent = make_agent(self.model, tools, system, config.model_params["max_tokens"], config.effort,
-                           self.base.rstrip("/").removesuffix("/v1"), self.key, self.live)
+                           self.base.rstrip("/").removesuffix("/v1"), self.key, self.live, self.bill_to)
         agent.user(opening)
         async with agent.client:
             await self.turns(env, agent)

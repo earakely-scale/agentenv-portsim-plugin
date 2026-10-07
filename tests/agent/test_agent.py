@@ -52,7 +52,7 @@ def free_port() -> int:
 @pytest.fixture(autouse=True)
 def environ(monkeypatch):
     for var in ["LITELLM_BASE_URL", "LITELLM_API_KEY", "PORTSIM_MAX_COST_USD", "ANTHROPIC_API_KEY",
-                "ANTHROPIC_AUTH_TOKEN", "OPENAI_API_KEY"]:
+                "ANTHROPIC_AUTH_TOKEN", "OPENAI_API_KEY", "HF_BILL_TO"]:
         monkeypatch.delenv(var, raising=False)
 
 
@@ -237,6 +237,15 @@ async def test_a_failing_provider_is_a_provider_error_after_the_sdk_retries(play
     assert s["error"].startswith("InternalServerError: ")
     assert result.native_trajectory.payload["errors"] == [s["error"]]
     assert 32000 * (5 if model == GLM else 1) * portsim_llm.PRICES[model][1] / 1e6 < s["cost_usd"] <= 5
+
+
+@pytest.mark.parametrize("bill_to", [None, "ScaleAI"])
+async def test_hf_bill_to_bills_the_chat_requests_to_that_organization(play, monkeypatch, bill_to):
+    if bill_to:
+        monkeypatch.setenv("HF_BILL_TO", bill_to)
+    result, fake = await play([SUBMIT], GLM)
+    assert summary(result)["end_reason"] == "submitted"
+    assert [headers.get("x-hf-bill-to") for _, headers, _ in fake.requests] == [bill_to]
 
 
 async def test_an_env_that_cannot_be_reached_is_an_env_error(play):

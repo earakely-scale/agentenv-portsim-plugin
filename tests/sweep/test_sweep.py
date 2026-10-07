@@ -109,9 +109,14 @@ def test_a_sweep_resumes_its_runs_that_are_not_final_and_refuses_other_settings(
     assert [a[a.index("--task") + 1] for a in fake.runs()] == [T1, T2]
     for other in (["--models", GPT, "--tasks", f"{T1},{T2}", "--episode-cap-usd", "0.5"],
                   ["--models", SONNET, "--tasks", T1, "--episode-cap-usd", "0.5"],
-                  [*args, "--k", "2"], ["--models", SONNET, "--tasks", f"{T1},{T2}"]):
+                  [*args, "--k", "2"], ["--models", SONNET, "--tasks", f"{T1},{T2}"],
+                  [*args, "--hf-bill-to", "ScaleAI"]):
         refused = sweep_run(*other, "--cap-usd", "5")
         assert refused.exit_code == 2 and "is another sweep" in refused.output
+    billed = sweep_run(*args, "--cap-usd", "5", "--hf-bill-to", "ScaleAI", name="b")
+    assert billed.exit_code == 0, billed.output
+    assert json.loads((sweep.RUNS / "b/sweep.json").read_text())["hf_bill_to"] == "ScaleAI"
+    assert json.loads((sweep.RUNS / f"b/bundle/tasks/{T1}.json").read_text())[2]["env_vars"]["HF_BILL_TO"] == "ScaleAI"
 
 
 def test_failures_are_retried_twice_a_capped_episode_is_final_and_a_deploy_failure_costs_nothing(fake):

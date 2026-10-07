@@ -58,6 +58,7 @@ class Sweep:
     k: int
     episode_cap_usd: float
     live: bool = False
+    hf_bill_to: str | None = None
 
     @property
     def out(self) -> Path:
@@ -141,13 +142,13 @@ def prepare(sweep: Sweep) -> None:
         raise click.UsageError("a sweep's name is 1 to 41 lowercase letters, digits and dashes, starting with no dash")
     path = sweep.out / "sweep.json"
     if path.is_file():
-        if {"live": False, **json.loads(path.read_text())} != asdict(sweep):
+        if {"live": False, "hf_bill_to": None, **json.loads(path.read_text())} != asdict(sweep):
             raise click.UsageError(f"{path} is another sweep; run it with its own models, tasks, k and episode cap: "
                                    f"{path.read_text().strip()}")
         return
     tasks.generate(EVAL_PACK, sweep.out / "bundle", task_ids=sweep.tasks, episode_cap_usd=sweep.episode_cap_usd,
-                   live=sweep.live)
-    spec = {key: value for key, value in asdict(sweep).items() if key != "live" or value}
+                   live=sweep.live, hf_bill_to=sweep.hf_bill_to)
+    spec = {key: value for key, value in asdict(sweep).items() if key not in ("live", "hf_bill_to") or value}
     path.write_text(json.dumps(spec, indent=2) + "\n")
 
 
@@ -610,14 +611,15 @@ def sweep_group():
               help="An episode's cost cap, passed to the agent as PORTSIM_MAX_COST_USD.")
 @click.option("--parallel", type=click.IntRange(min=1), default=4, show_default=True, help="Attempts at a time.")
 @click.option("--live", is_flag=True, help="Play the live weeks on portsim-live.")
+@click.option("--hf-bill-to", metavar="ORG", help=tasks.HF_BILL_TO_HELP)
 def run_command(name: str, models: str, task_spec: str, cap_usd: float, k: int, episode_cap_usd: float,
-                parallel: int, live: bool):
+                parallel: int, live: bool, hf_bill_to: str | None):
     """Play each model on each task k times, one `agent-env run` per attempt, logged under results/runs/<name>/logs.
     Each attempt is a line of results.jsonl; a failed one is retried up to twice, and running the sweep again plays
     the runs that aren't final yet. Ctrl-C tears the running attempts down."""
     if "" in models.split(","):
         raise click.UsageError("--models takes comma-separated model ids, none empty")
-    sweep = Sweep(name, models.split(","), task_ids(task_spec, live), k, episode_cap_usd, live)
+    sweep = Sweep(name, models.split(","), task_ids(task_spec, live), k, episode_cap_usd, live, hf_bill_to)
     prepare(sweep)
     raise SystemExit(run(sweep, cap_usd, parallel))
 

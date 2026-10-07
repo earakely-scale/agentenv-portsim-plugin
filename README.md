@@ -195,7 +195,9 @@ api_key  = "env:HF_TOKEN"
 ```
 
 with one of the open models upstream evaluated: `Qwen/Qwen3.8-2.4T-A95B:together`, `Qwen/Qwen3.8-27B:ovhcloud`,
-`zai-org/GLM-5.3-Flash:baseten` or `zai-org/GLM-5.3:together` (chat completions, streamed).
+`zai-org/GLM-5.3-Flash:baseten` or `zai-org/GLM-5.3:together` (chat completions, streamed). To bill an organization
+instead of the token's own account, pass `--hf-bill-to <org>` to `tasks generate` or `sweep run`; the agent sends it as
+`X-HF-Bill-To`.
 
 Then build both images, write the eval tasks and play one:
 
