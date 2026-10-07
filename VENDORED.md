@@ -2,13 +2,16 @@
 
 | Here | Upstream |
 |---|---|
-| `src/berth_core/` | `07-simulation-environments/portsim-v1/envs/berth_planning/core/berth_core/` |
 | `data/dock-v1-eval/` | `07-simulation-environments/portsim-v1/envs/berth_planning/tasks/dock-v1-eval/` (`manifest.json`, `tasks.jsonl`) |
 | `data/dock-v1-train/` | `07-simulation-environments/portsim-v1/envs/berth_planning/tasks/dock-v1-train/` (`manifest.json`, `tasks.jsonl.gz`) |
 | `data/published/dock-eval50/index.json` | `07-simulation-environments/portsim-v1/results/rollouts/dock-eval50/index.json` |
 | `src/agentenv_portsim/web/upstream/` | `07-simulation-environments/portsim-v1/envs/berth_planning/openenv/berth_openenv/web/`: the viewer's 23 files and `twin/SOURCES.md`; not `fixtures/`, `dev_server.py`, `img/` or the five twin data files |
 
 Source: [adithya-s-k/FineEnvs](https://github.com/adithya-s-k/FineEnvs) at commit `b0f4c2f`, copied unchanged.
+
+`berth_core` isn't copied: the package depends on FineEnvs' `berth-core`
+(`07-simulation-environments/portsim-v1/envs/berth_planning/core/`) at the same commit, pinned in `pyproject.toml` and
+the `Dockerfile`, and `tests/packaging/test_wheel.py` checks that both pin it.
 
 - `berth_core` and the viewer are Apache-2.0, by Adithya S Kolavi. `tests/viewer/test_vendored.py` pins the viewer's
   files.

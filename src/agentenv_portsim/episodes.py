@@ -6,9 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import click
-from pydantic import TypeAdapter
-
 from berth_core import MOVE_PENALTY, Plan, PlanError, Task, TaskPack, evaluate, grade, parse_plan, plan_to_list
+from pydantic import TypeAdapter
 
 from . import tasks
 from .live import WindowsArg, _json, _raw

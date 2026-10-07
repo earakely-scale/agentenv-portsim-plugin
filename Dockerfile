@@ -6,11 +6,11 @@ LABEL org.opencontainers.image.source="https://github.com/earakely-scale/agenten
       org.opencontainers.image.description="PortSimEnv as an AgentEnv environment. Contains data from the Port de Barcelona open data portal."
 ENV PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1 \
     BERTH_TASKS_DIR=/app/data/dock-v1-eval:/app/data/dock-v1-train
-RUN pip install "agentenv-framework-protocol==0.1.290" "fastmcp==3.4.8" "mcp==1.30.0" "pydantic==2.13.5"
+RUN pip install "agentenv-framework-protocol==0.1.290" "fastmcp==3.4.8" "mcp==1.30.0" "pydantic==2.13.5" \
+    "berth-core @ https://github.com/adithya-s-k/FineEnvs/archive/b0f4c2f9526e3c45d608b4f92f6ec6c71fecc152.tar.gz#subdirectory=07-simulation-environments/portsim-v1/envs/berth_planning/core"
 WORKDIR /app
 COPY LICENSE NOTICE /app/
 COPY data /app/data
-COPY src/berth_core /app/berth_core
 COPY src/agentenv_portsim /app/agentenv_portsim
 RUN useradd --create-home --uid 1000 portsim
 USER portsim

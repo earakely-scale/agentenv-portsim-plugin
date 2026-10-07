@@ -10,11 +10,11 @@ from agent_env.bundle.parse import BundleKind, parse_bundle
 from agent_env.bundle.plan import check_bundle
 from agent_env.bundle.resolve import resolve_bundle
 from agent_env.task_step.registry import get_task_step_registry
+from berth_core import rules, situation
 from click.testing import CliRunner
 
 from agentenv_portsim import tasks
 from agentenv_portsim.cli import portsim
-from berth_core import rules, situation
 
 VERIFY = files("agentenv_portsim.bundles").joinpath("portsim/artifacts/portsim-verifier/verify.py").read_bytes()
 

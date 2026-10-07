@@ -4,7 +4,6 @@ import json
 
 import pytest
 from agentenv_protocol import client
-
 from berth_core import parse_plan, plan_to_list
 
 pytestmark = pytest.mark.anyio

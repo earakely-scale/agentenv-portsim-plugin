@@ -10,10 +10,9 @@ import portsim_llm
 import pytest
 from agent_env.a2a_agent.a2a_agent import A2AAgent
 from agentenv_protocol.a2a_agent import TaskOutcome, TaskRequest, TextPart
+from berth_core import TaskPack
 from fake_litellm import FakeLiteLLM
 from starlette.testclient import TestClient
-
-from berth_core import TaskPack
 
 pytestmark = pytest.mark.anyio
 

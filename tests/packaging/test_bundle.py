@@ -9,9 +9,8 @@ from agent_env.bundle.installed import checked, find_bundle
 from agent_env.bundle.parse import BundleKind
 from agent_env.cli import cli
 from agent_env.task_step.registry import get_task_step_registry
-from click.testing import CliRunner
-
 from berth_core import TaskPack, grade, parse_plan
+from click.testing import CliRunner
 
 ROOT = Path(__file__).resolve().parents[2]
 TASK_ID = "dock-24B-w07x1-busy-0"

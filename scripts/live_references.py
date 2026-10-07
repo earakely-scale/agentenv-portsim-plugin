@@ -19,12 +19,12 @@ import time
 from pathlib import Path
 
 import ortools
-from ortools.sat.python import cp_model
-
-from agentenv_portsim import schedule, tasks, world
 from berth_core import Plan, Task, plan_to_list
 from berth_core.model import MOVE_PENALTY
 from berth_core.solve import naive_replan
+from ortools.sat.python import cp_model
+
+from agentenv_portsim import schedule, tasks, world
 
 ROOT = Path(__file__).resolve().parents[1]
 PACK = "dock-v1-eval"

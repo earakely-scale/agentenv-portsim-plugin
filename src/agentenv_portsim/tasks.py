@@ -7,7 +7,6 @@ from importlib.resources import files
 from pathlib import Path
 
 import click
-
 from berth_core import Task, TaskPack, rules, situation
 
 from .schedule import END_WEEK_URI, LIVE_ENV, LIVE_LOAD_URI, MAX_TURNS, NOTICE_TOOL, PLANNING_CALLS, schedule, triggers

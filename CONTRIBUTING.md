@@ -59,7 +59,7 @@ spend (README, [Development](README.md#development)). For a change to the live p
 | The live references | `scripts/live_references.py`, which writes `data/live/references.jsonl` | `tests/live/tasks/test_live_references.py` |
 | `portsim-llm`'s live mode | `agents/portsim-llm/agent.py` | `tests/agent/test_agent_live.py`; v1's requests must stay as `tests/golden/harness.json` has them |
 | Watching runs: `agent-env portsim view` and `record`, the live week's panel and chart marks, the twin download | `src/agentenv_portsim/episodes.py`, `view.py`, `record.py`, `twin.py`, `web/ext/` | `tests/viewer/`; the README's [Watch a run](README.md#watch-a-run) |
-| PortSimEnv's core, viewer, task packs or published results | never here: `src/berth_core/`, `src/agentenv_portsim/web/upstream/`, `data/dock-v1-eval/`, `data/dock-v1-train/` and `data/published/` are copied unchanged from upstream ([VENDORED.md](VENDORED.md)) | a new upstream commit is vendored whole, and VENDORED.md names it |
+| PortSimEnv's core, viewer, task packs or published results | never here: `berth_core` is a dependency pinned to a FineEnvs commit, and `src/agentenv_portsim/web/upstream/`, `data/dock-v1-eval/`, `data/dock-v1-train/` and `data/published/` are copied unchanged from upstream ([VENDORED.md](VENDORED.md)) | a new upstream commit is vendored whole, the berth-core pin moves with it, and VENDORED.md names it |
 
 ## Conventions
 
@@ -68,8 +68,8 @@ spend (README, [Development](README.md#development)). For a change to the live p
   taken here. The same goes for `portsim-llm`: its prompts, nudges, limits and requests match upstream's harness, and
   `tests/golden/harness.json` holds them to it. The live port is this repository's own and has no upstream to match;
   `tests/live/` holds its tools, prompts, schedule and grade instead.
-- **Vendored files stay unchanged.** `src/berth_core/`, `src/agentenv_portsim/web/upstream/`,
-  `data/dock-v1-eval/`, `data/dock-v1-train/` and `data/published/` match upstream byte for byte; the task packs'
+- **Vendored files stay unchanged.** `src/agentenv_portsim/web/upstream/`, `data/dock-v1-eval/`,
+  `data/dock-v1-train/` and `data/published/` match upstream byte for byte; the task packs'
   sha256 is checked when they load, and `tests/viewer/test_vendored.py` checks the viewer's. A change to the viewer
   goes in `web/ext/`, through its index.html's import map. The viewer's 3D twin is OpenStreetMap data (ODbL): it is
   never committed, and anything rendered from it carries the attribution.
