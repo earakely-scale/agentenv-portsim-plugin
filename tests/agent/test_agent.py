@@ -248,6 +248,14 @@ async def test_hf_bill_to_bills_the_chat_requests_to_that_organization(play, mon
     assert [headers.get("x-hf-bill-to") for _, headers, _ in fake.requests] == [bill_to]
 
 
+@pytest.mark.parametrize("model", [SONNET, GPT, GLM])
+async def test_a_provider_that_refuses_the_account_ends_the_run_at_no_cost(play, model):
+    result, fake = await play([{"status": 402}], model)
+    s = summary(result)
+    assert (result.error.code, len(fake.requests), s["cost_usd"]) == ("provider_refused", 1, 0)
+    assert "402" in s["error"]
+
+
 async def test_an_env_that_cannot_be_reached_is_an_env_error(play):
     result, fake = await play([SUBMIT], mcp_url=f"http://127.0.0.1:{free_port()}/mcp")
     assert (result.error.code, fake.requests) == ("env_error", [])
@@ -296,7 +304,7 @@ async def test_the_result_carries_the_text_summary_usage_and_rollout(play):
 async def test_the_key_stays_out_of_the_result_and_the_logs(play, caplog):
     caplog.set_level(logging.DEBUG)
     result, _ = await play([turn(call("check_plan", {"plan": []})), {"status": 401, "message": f"bad key {KEY}"}])
-    assert result.error.code == "provider_error"
+    assert result.error.code == "provider_refused"
     assert "<LITELLM_API_KEY>" in summary(result)["error"]
     assert KEY not in repr(result)
     assert KEY not in caplog.text

@@ -97,10 +97,10 @@ def of(rows: list[dict], run: tuple[str, str, int]) -> list[dict]:
 
 
 def final(rows: list[dict]) -> bool:
-    """A run is final once scored, stopped at its cost cap, or after MAX_ATTEMPTS counted attempts; an interrupted
-    attempt doesn't count."""
+    """A run is final once scored, stopped at its cost cap, refused by the provider, or after MAX_ATTEMPTS counted
+    attempts; an interrupted attempt doesn't count."""
     counted = [r for r in rows if r["outcome"] != "interrupted"]
-    return (any(r["outcome"] == "scored" or r["error_code"] == "cost_cap" for r in counted)
+    return (any(r["outcome"] == "scored" or r["error_code"] in ("cost_cap", "provider_refused") for r in counted)
             or len(counted) >= MAX_ATTEMPTS)
 
 

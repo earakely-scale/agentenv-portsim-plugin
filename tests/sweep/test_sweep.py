@@ -144,6 +144,14 @@ def test_failures_are_retried_twice_a_capped_episode_is_final_and_a_deploy_failu
     assert f"{SONNET}: 1 scored, 2 unscored, 0 not final, of 3 runs; $0.86 spent" in result.output
 
 
+def test_a_run_the_provider_refused_is_final(fake):
+    fake.script({"*": [{"context": agent_failed(T1, SONNET, "provider_refused", cost=0), "exit": 1}]})
+    result = sweep_run("--models", SONNET, "--tasks", T1, "--cap-usd", "1", "--episode-cap-usd", "0.5")
+    assert result.exit_code == 0, result.output
+    assert [brief(r) for r in rows()] == [(T1, 1, "failed", "provider_refused", 0.0, False)]
+    assert f"failed {SONNET} {T1} r1 a1: provider_refused final ($0.0000)" in result.output
+
+
 @pytest.mark.parametrize(("context", "code"), [(None, "no_instance"), (timed_out(), "TimeoutError"),
                                                (crashed(T1, SONNET), "RuntimeError")])
 def test_a_run_without_a_recorded_spend_is_retried_and_counted_at_the_cap(fake, context, code):

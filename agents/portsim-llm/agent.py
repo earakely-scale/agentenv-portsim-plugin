@@ -391,6 +391,7 @@ def cost(usage: dict, price: tuple[float, float, float]) -> float:
 
 
 PROVIDER_ERRORS = (anthropic.APIError, openai.APIError, httpx.HTTPError, httpx2.HTTPError, ProviderError)
+REFUSED = {401, 402, 403}  # the key or the account: nothing billed, and a retry gets the same answer
 
 
 # ================================================================ episode
@@ -470,6 +471,8 @@ class Episode:
             try:
                 t = await agent.step(request)
             except PROVIDER_ERRORS as e:
+                if getattr(e, "status_code", None) in REFUSED:
+                    return self.fail("provider_refused", error=e)
                 self.spent += most
                 return self.fail("provider_error", error=e)
             self.spent += most if t.stop == HARNESS_CAP else cost(t.usage, price)

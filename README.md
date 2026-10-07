@@ -217,9 +217,10 @@ What differs from upstream's harness:
 - **One endpoint.** Upstream's chains of fallback providers are gone; every model goes through the proxy.
 - **Cost.** Each turn's token usage is priced from a table pinned in the agent, which holds
   `anthropic/claude-sonnet-5-5`, `openai/gpt-6.1-sol`, `fireworks_ai/glm-5p3-flash` and the four open models on the
-  Hugging Face router; any other model fails before its first request. A request whose usage never arrives (it failed, or the harness cut its stream) is charged the most
-  it could have cost. The episode stops before a request that could take its spend past `PORTSIM_MAX_COST_USD` ($5 in
-  the generated tasks).
+  Hugging Face router; any other model fails before its first request. A request whose usage never arrives (it failed,
+  or the harness cut its stream) is charged the most it could have cost, except one the provider refused (401, 402 or
+  403: the key or the account), which costs nothing and ends the run as `provider_refused`. The episode stops before a
+  request that could take its spend past `PORTSIM_MAX_COST_USD` ($5 in the generated tasks).
 - **Failures.** A model error after the SDK's retries, an env error, a turn that would start after the task's two
   hours, or the cost cap fails the run as an infrastructure error, with the episode so far, instead of scoring it.
 
@@ -237,7 +238,7 @@ agent-env portsim sweep report pilot   # results/parity.md
   [the comparison](#the-comparison-with-the-published-eval).
 - An attempt starts only if the spend so far plus the episode cap (`--episode-cap-usd`, default $5) of every attempt
   running, the new one included, stays within `--cap-usd`. An attempt whose spend isn't known counts at its cap.
-- A failed attempt is retried up to twice; an episode stopped at its cost cap is not. Running the same sweep again
+- A failed attempt is retried up to twice; an episode stopped at its cost cap, or refused by the provider, is not. Running the same sweep again
   resumes it. Ctrl-C, or an error in the sweep itself, tears the running attempts down and records them.
 - `report` compares each model with its episodes in the published dock-eval50 run (`data/published/`) on the same
   tasks: means with upstream's bootstrap CIs, the difference per task, per tier and week by week, with submitted,
