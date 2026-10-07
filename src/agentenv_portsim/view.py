@@ -9,7 +9,7 @@ from urllib.parse import parse_qs, unquote, urlsplit
 import click
 
 from . import twin
-from .episodes import Runs
+from .episodes import ReplayError, Runs
 from .sweep import PUBLISHED, RUNS
 
 WEB = Path(__file__).resolve().parent / "web"
@@ -28,6 +28,7 @@ def _json(obj) -> Response:
 
 
 def _file(root: Path, name: str) -> Response:
+    root = root.resolve()
     path = (root / name).resolve()
     if not path.is_relative_to(root) or not path.is_file():
         return NOT_FOUND
@@ -63,7 +64,10 @@ def route(runs: Runs, twin_dir: Path, path: str) -> Response:
         case ["api", "runs", run] if run in runs.runs:
             return _json({"run": run, "episodes": runs.episodes(run)})
         case ["api", "runs", run, "episode"] if run in runs.runs and episode in runs.runs[run].rows:
-            return _json(runs.rollout(run, *episode))
+            try:
+                return _json(runs.rollout(run, *episode))
+            except ReplayError as e:
+                return 500, {"Content-Type": "application/json"}, json.dumps({"error": str(e)}).encode()
     return NOT_FOUND
 
 
@@ -92,7 +96,11 @@ def view_command(sweeps: tuple[str, ...], port: int):
     runs = Runs(RUNS, list(sweeps) or None)
     if not runs.runs:
         raise click.UsageError(f"no sweeps under {RUNS}: run `agent-env portsim sweep run` first")
-    server = serve(runs, twin.ensure(), port)
+    twin_dir = twin.ensure()
+    try:
+        server = serve(runs, twin_dir, port)
+    except OSError as e:
+        raise click.UsageError(f"can't serve on port {port} ({e.strerror}): pass another --port") from e
     click.echo(twin.ATTRIBUTION)
     click.echo(f"Serving {', '.join(runs.runs)} at http://127.0.0.1:{server.server_port}/viewer/ (Ctrl-C to stop)")
     try:

@@ -1,17 +1,30 @@
-"""The film's timeline, the Chrome and ffmpeg command lines, and (with Chrome, ffmpeg and the network) a short take."""
+"""The film's timeline, the Chrome and ffmpeg command lines, and (with Chrome, ffmpeg and the network) a short take and
+a live week that shows no news before its bulletin."""
 
 import json
+import re
 import shutil
 import subprocess
+import threading
 
+import click
 import pytest
 from click.testing import CliRunner
 from recorded import LIVE, ROOT, SONNET
 
 from agentenv_portsim import record, twin
-from agentenv_portsim.record import Frame, chrome_args, ffmpeg_args, gif_args, timeline
+from agentenv_portsim.record import Frame, Page, chrome_args, ffmpeg_args, gif_args, timeline
+from agentenv_portsim.view import serve
 
 PACE = {"fps": 10, "step_seconds": 1, "hours_per_second": 20, "intro_seconds": 1, "outro_seconds": 2}
+SHOWN = """import("/viewer/ext/stage.js").then(({ currentStage }) => {
+  const { chart, scene } = currentStage();
+  const text = (selector) => document.querySelector(selector).innerText;
+  return { task: chart.task, scene: scene.task === chart.task, drawn: [...chart.shipEls.keys()],
+           afloat: [...scene.actors.values()].filter((a) => a.ship).map((a) => a.id),
+           winds: chart.svg.querySelectorAll("g.wind").length, outages: chart.svg.querySelectorAll("g.outage").length,
+           panel: text(".ps-watch") + text(".ps-chip"), transcript: text("#transcript") };
+})"""
 
 
 def hours(frames: list[Frame]) -> list[float]:
@@ -76,3 +89,54 @@ def test_a_one_second_take(monkeypatch, tmp_path):
     [stream] = info["streams"]
     assert [stream[k] for k in ("width", "height", "nb_read_frames", "pix_fmt")] == [1280, 720, "10", "yuv420p"]
     assert info["format"]["tags"]["comment"] == twin.ATTRIBUTION
+
+
+def test_a_page_that_never_answers_is_a_click_error(monkeypatch):
+    class Silent:
+        def send(self, message):
+            pass
+
+        def recv(self, timeout):
+            raise TimeoutError
+
+    monkeypatch.setattr(record, "ANSWER_SECONDS", 0.01)
+    with pytest.raises(click.ClickException, match="Chrome did not answer Page.navigate"):
+        Page(Silent()).call("Page.navigate", url="about:blank")
+
+
+@pytest.mark.browser
+def test_a_live_week_shows_no_news_before_its_bulletin(runs):
+    run, model, task_id = LIVE[0]
+    ro = runs.rollout(run, model, task_id)
+    steps, bulletins = ro["steps"], ro["live"]["bulletins"]
+    server = serve(runs, twin.ensure(), 0)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        with record.recording(record.episode_url(server.server_port, run, model, task_id), record.find_chrome(None),
+                              1280, 720) as (page, _):
+            def at(k: int, hour: float) -> dict:
+                page.js(f"portsim.show({k})")
+                page.js(f"portsim.time({hour})")
+                return page.js(SHOWN)
+
+            def news(seen: dict, k: int) -> list[bool]:
+                return [b["text"].split("\n")[0] in seen["transcript"] for b in bulletins if b["step"] == k]
+
+            for k, step in enumerate(steps):
+                week = step["task"] if k < len(steps) - 1 else runs.pack.public(runs.pack.get(task_id))
+                seen = at(k, step["hour"])
+                assert seen["task"] == week and seen["scene"]
+                assert sorted(seen["afloat"]) == [s["id"] for s in week["ships"]]
+                assert sorted(seen["drawn"]) == sorted(p["ship"] for p in step["plan"])
+                assert (seen["winds"], seen["outages"]) == (len(week["rules"]["no_moves"]),
+                                                            len(week["rules"]["crane_outages"]))
+                assert all(news(seen, j) == [j <= k] * len(news(seen, j)) for j in range(len(steps)))
+                assert bool(re.search(r"Watch \d+ of", seen["panel"])) == (k == len(steps) - 1)
+                if step["tool"] == "advance" and k and step["hour"] > steps[k - 1]["hour"]:
+                    flying = at(k, (steps[k - 1]["hour"] + step["hour"]) / 2)
+                    assert flying["task"] == steps[k - 1]["task"] and f"Advancing to watch {step['watch']}…" in (
+                        flying["panel"])
+                    assert step["time"] not in flying["panel"] and not any(news(flying, k))
+    finally:
+        server.shutdown()
+        server.server_close()

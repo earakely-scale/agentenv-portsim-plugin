@@ -37,8 +37,11 @@ def ensure(echo=click.echo) -> Path:
         echo(f"Downloading the 3D twin into {root}. {ATTRIBUTION}")
         root.mkdir(parents=True, exist_ok=True)
     for name in missing:
-        with urllib.request.urlopen(BUCKET + name, timeout=120) as response:
-            body = response.read()
+        try:
+            with urllib.request.urlopen(BUCKET + name, timeout=120) as response:
+                body = response.read()
+        except OSError as e:
+            raise click.ClickException(f"could not download {BUCKET}{name}: {e}") from e
         if hashlib.sha256(body).hexdigest() != FILES[name][1]:
             raise click.ClickException(f"{BUCKET}{name} is not the file pinned at {COMMIT} (sha256 mismatch)")
         part = root / f"{name}.part"

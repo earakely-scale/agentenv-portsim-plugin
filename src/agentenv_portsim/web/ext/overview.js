@@ -1,3 +1,4 @@
+// The leaderboard and the episode table are adapted from PortSimEnv's overview.js (FineEnvs b0f4c2f, Apache-2.0).
 import { getRun, getRuns } from "../api.js";
 import { escapeHtml, fmtNum, fmtPct } from "../model.js";
 import { nameOf as upstreamName } from "../overview.js?v=upstream";
@@ -84,6 +85,7 @@ export async function overviewPage({ app, setCrumbs, isCurrent, sortableTable })
         <div class="sec-head"><h2>${escapeHtml(r.run)}</h2><span class="muted small">${escapeHtml(r.env)} · ${escapeHtml(ENVS[r.env] || "")} · ${r.episodes} episodes${r.k > 1 ? ` · rep ${r.rep} of ${r.k}` : ""} · cap $${r.episode_cap_usd} an episode</span></div>
         <table class="tbl click"><thead><tr><th>Model</th><th class="num">Episodes</th><th class="num">Mean</th><th class="num">${r.env === "portsim-live" ? "Reached done" : "Submitted"}</th><th class="num">Feasible</th><th class="num">Optimal</th></tr></thead>
         <tbody>${boards.get(r.run).map((b) => `<tr data-row="${escapeHtml(b.model)}" data-run="${escapeHtml(r.run)}" title="List ${escapeHtml(nameOf(b.model))}'s episodes"><td><span title="${escapeHtml(b.model)}">${escapeHtml(nameOf(b.model))}</span></td><td class="num">${b.n}</td><td class="num"><b>${fmtNum(b.mean, 3)}</b></td><td class="num">${fmtPct(b.submitted)}</td><td class="num">${fmtPct(b.feasible)}</td><td class="num">${b.optimal}/${b.n}</td></tr>`).join("")}</tbody></table>
+        ${r.failed.length ? `<ul class="viol">${r.failed.map((f) => `<li>${escapeHtml(nameOf(f.model))} on ${escapeHtml(f.task_id)} does not replay: ${escapeHtml(f.error)}</li>`).join("")}</ul>` : ""}
       </section>`).join("")
     : '<p class="muted">No runs.</p>';
 
@@ -109,5 +111,6 @@ export async function overviewPage({ app, setCrumbs, isCurrent, sortableTable })
     select(tr.dataset.run, tr.dataset.row);
     epsSec.scrollIntoView({ block: "start", behavior: "smooth" });
   });
-  if (runs.length) select(runs[0].run, boards.get(runs[0].run)[0].model);
+  const first = runs.find((r) => boards.get(r.run).length);
+  if (first) select(first.run, boards.get(first.run)[0].model);
 }

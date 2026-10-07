@@ -3,6 +3,7 @@ written."""
 
 import hashlib
 import io
+import urllib.error
 
 import click
 import pytest
@@ -59,6 +60,15 @@ def test_bytes_that_do_not_match_the_pin_raise_and_leave_nothing(cache, monkeypa
     with pytest.raises(click.ClickException, match="sha256"):
         twin.ensure(echo=lambda _: None)
     assert list(cache.iterdir()) == []
+
+
+def test_no_network_names_the_bucket(cache, monkeypatch):
+    def urlopen(url, timeout):
+        raise urllib.error.URLError("nodename nor servname provided")
+
+    monkeypatch.setattr(twin.urllib.request, "urlopen", urlopen)
+    with pytest.raises(click.ClickException, match=f"could not download {twin.BUCKET}twin.json.gz"):
+        twin.ensure(echo=lambda _: None)
 
 
 @pytest.mark.network

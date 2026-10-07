@@ -1,6 +1,7 @@
 // A live week's rollout: the transcript by watch with the bulletins as they arrived, a watch panel on the virtual
-// clock, and the dock chart marked with the freeze line and each window's status. The stage keeps the real week, so
-// the chart and the 3D quay show what happened; the status line and the panel show the week as the planner knew it.
+// clock, and the dock chart marked with the freeze line and each window's status. Up to the last step, the chart, the
+// 3D quay, the panel and the transcript show only what the planner knew; the last step plays out the real week.
+// The transcript loop is adapted from PortSimEnv's transcript.js (FineEnvs b0f4c2f, Apache-2.0).
 import { BerthChart } from "../chart.js";
 import { clockAt, escapeHtml, evaluatePlan, fmtNum } from "../model.js";
 import { checkSummary, planTable } from "../transcript.js?v=upstream";
@@ -23,6 +24,14 @@ const parsed = (s) => {
   }
 };
 const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+/** News that arrives with an advance's watch: known from step k once the clock reaches that watch. */
+function arriving(html, k) {
+  const d = document.createElement("div");
+  d.innerHTML = html;
+  Object.assign(d.dataset, { known: k, arrive: "" });
+  return d;
+}
 
 function virtualTime(task, t) {
   return new Date(Date.parse(task.week_start_utc) + Math.round(t * 60) * 60e3).toISOString().replace(".000Z", "Z");
@@ -139,9 +148,18 @@ export function renderLive(root, ro, task, { onStep, horizon }) {
   const charts = [];
   const state = { step: null, k: -1, t: 0, panel: "", key: null };
   const at = (via, k) => live.bulletins.filter((b) => b.via === via && (k == null || b.step === k));
+  const weeks = new Map();
+  /** The week as known at a step, one object for each set of bulletins, so the 3D quay rebuilds only on news. */
+  const known = (step) => {
+    const key = step.revealed.join(",");
+    if (!weeks.has(key)) weeks.set(key, step.task);
+    return weeks.get(key);
+  };
+  const watchLabel = (step) => `Watch ${step.watch}${step.last ? ` of ${last}` : ""}`;
 
   root.innerHTML = "";
   let turn = 0;
+  let next = 0;
   for (const m of ro.messages) {
     if (m.role === "system" || m.role === "user") {
       const d = document.createElement("details");
@@ -154,8 +172,12 @@ export function renderLive(root, ro, task, { onStep, horizon }) {
     if (++turn === 1) root.insertAdjacentHTML("beforeend", watchHeader(live.watches[0], at("load")));
     const d = document.createElement("div");
     d.className = "msg assistant";
+    const ks = (m.tool_calls || []).map((tc) => stepOf.get(tc.id)).filter((k) => k != null);
+    d.dataset.known = ks.length ? Math.min(...ks) : Math.min(next, steps.length - 1);
+    if (ks.length) next = Math.max(...ks) + 1;
     d.innerHTML = `<div class="who">Assistant <span class="muted">· turn ${turn}</span></div>${m.reasoning ? `<details class="reason"><summary>Reasoning <span class="muted">${escapeHtml(firstLine(m.reasoning, 70))}</span></summary><pre class="txt">${escapeHtml(m.reasoning)}</pre></details>` : ""}${m.content && String(m.content).trim() ? `<div class="txt say">${escapeHtml(m.content)}</div>` : ""}`;
     const opened = [];
+    let after = null;
     for (const tc of m.tool_calls || []) {
       const k = stepOf.get(tc.id);
       const step = steps[k];
@@ -172,14 +194,18 @@ export function renderLive(root, ro, task, { onStep, horizon }) {
         body += `<div class="mini-chart"></div><details class="plan-d"><summary>Plan table</summary>${tbl.html}</details>`;
       }
       if (step) {
-        call.dataset.step = k;
+        call.dataset.step = call.dataset.known = k;
         head += `<span class="step-no muted">step ${k + 1}</span>`;
-        body += `<div class="result">${resultHtml(task, step)}</div>`;
-        if (step.tool === "advance" && !step.result.done) opened.push(step.watch);
+        body += `<div class="result"${step.tool === "advance" ? ` data-known="${k}" data-arrive` : ""}>${resultHtml(task, step)}</div>`;
+        if (step.tool === "advance" && !step.result.done) opened.push([step.watch, k]);
       } else body += otherHtml(tc, out);
       call.innerHTML = `<div class="call-h">${head}</div>${body}`;
       d.appendChild(call);
-      if (!step) continue;
+      if (!step) {
+        if (after != null) Object.assign(call.dataset, { known: after, arrive: "" });
+        continue;
+      }
+      after = k;
       callEls.set(k, call);
       call.addEventListener("click", (e) => {
         if (e.target.closest("summary, table, details[open] .plan-tbl")) return;
@@ -189,16 +215,17 @@ export function renderLive(root, ro, task, { onStep, horizon }) {
       if (host) {
         const ch = new BerthChart(host, { mini: true, onPick: () => onStep(k) });
         keepOverlay(ch, () => [step, step.hour]);
-        ch.setData(task, evaluatePlan(task, step.plan), horizon);
+        ch.setData(known(step), evaluatePlan(known(step), step.plan), horizon);
         charts.push(ch);
       }
     }
     root.appendChild(d);
-    for (const w of opened) root.insertAdjacentHTML("beforeend", watchHeader(live.watches[w], at("trigger").filter((b) => b.watch === w)));
+    for (const [w, k] of opened) root.appendChild(arriving(watchHeader(live.watches[w], at("trigger").filter((b) => b.watch === w)), k));
   }
   if (live.end_reason === "end_week") {
-    root.insertAdjacentHTML("beforeend", `<div class="ps-watch-h">End of the week · the env ran the remaining watches on the confirmed windows</div>${bulletinsHtml(at("env"))}`);
+    root.appendChild(arriving(`<div class="ps-watch-h">End of the week · the env ran the remaining watches on the confirmed windows</div>${bulletinsHtml(at("env"))}`, steps.length - 1));
   }
+  const later = [...root.querySelectorAll("[data-known]")];
 
   const left = root.closest(".ro-left");
   gradeRows(left.querySelector("#grade"), ro);
@@ -207,7 +234,7 @@ export function renderLive(root, ro, task, { onStep, horizon }) {
   left.insertBefore(panel, root.closest("section"));
 
   /** While the clock runs to the watch an advance opens, the week shown is still the one before it. */
-  const shownAt = (t) => (state.k > 0 && state.step.tool === "advance" && t < state.step.hour - 1e-6 ? steps[state.k - 1] : state.step);
+  const shownAt = (t) => (state.k > 0 && state.step.tool === "advance" && !state.step.result.done && t < state.step.hour - 1e-6 ? steps[state.k - 1] : state.step);
 
   function renderPanel(t, shown) {
     const step = state.step;
@@ -220,10 +247,10 @@ export function renderLive(root, ro, task, { onStep, horizon }) {
     const final = state.k === steps.length - 1
       ? `<dl class="kv ps-final"><dt>Reward</dt><dd><b>${fmtNum(g.reward, 3)}</b></dd><dt>Cost</dt><dd>${g.feasible ? g.cost : '<i class="dot bad"></i>infeasible'}</dd><dt>Excused cost</dt><dd>${fmtNum(g.excused_cost)}</dd><dt>Regret</dt><dd>${fmtNum(g.regret)}</dd><dt>Rolling re-plan</dt><dd>${ref.rolling.cost} <span class="muted">(reward ${fmtNum(ref.rolling.reward, 3)})</span></dd><dt>Naive re-plan</dt><dd>${ref.naive.cost} <span class="muted">(reward ${fmtNum(ref.naive.reward, 3)})</span></dd><dt>Audit</dt><dd>${live.audit.ok ? '<i class="dot ok"></i>passed' : `<i class="dot bad"></i>${escapeHtml(live.audit.problems.join("; "))}`}</dd></dl>`
       : "";
-    const next = shown === step ? "" : `<div class="ps-line ps-next">Advancing to watch ${step.watch} · ${escapeHtml(step.time)} (h ${step.hour})</div>`;
-    const html = `<div class="sec-head"><h2>Watch ${shown.watch}/${last}</h2><span class="muted small">step ${state.k + 1} of ${steps.length} · ${escapeHtml(step.tool)}</span></div>
+    const next = shown === step ? "" : `<div class="ps-line ps-next">Advancing to watch ${step.watch}…</div>`;
+    const html = `<div class="sec-head"><h2>${watchLabel(shown)}</h2><span class="muted small">step ${state.k + 1} of ${steps.length} · ${escapeHtml(step.tool)}</span></div>
       <div class="ps-clock"><b>${c.day} ${c.date} · ${c.hm}</b> <span class="muted">${virtualTime(task, t)}</span></div>
-      <div class="ps-line">Watch ${shown.watch} of ${last} · ${escapeHtml(shown.time)} (h ${shown.hour}) · ${shown.watch ? `freeze line h ${shown.frozen_before}` : "every window open"}</div>${next}
+      <div class="ps-line">${escapeHtml(shown.time)} (h ${shown.hour}) · ${shown.watch ? `freeze line h ${shown.frozen_before}` : "every window open"}</div>${next}
       <div class="ps-counts">${["departed", "berthed", "frozen", "open"].map((s) => `<span class="ps-c ps-${s}"><b>${counts[s]}</b> ${s}</span>`).join("")}<span class="ps-c"><b>${shown.unconfirmed.length}</b> unconfirmed</span></div>
       <div class="ps-known">${knownHtml(shown.known)}</div>
       ${feed.length ? bulletinsHtml(feed, "ps-feed") : '<p class="muted small">No news yet.</p>'}
@@ -232,26 +259,53 @@ export function renderLive(root, ro, task, { onStep, horizon }) {
   }
 
   const stage = currentStage();
-  left.parentElement.querySelector(".ro-right .chart-sec h2").textContent = "Dock chart of the selected step, on the week as it turned out";
-  keepOverlay(stage.chart, () => [state.step && shownAt(state.t), state.t]);
+  const { scene, chart } = stage;
+  const title = left.parentElement.querySelector(".ro-right .chart-sec h2");
+  keepOverlay(chart, () => [state.step && shownAt(state.t), state.t]);
   const chip = stage.tl.appendChild(Object.assign(document.createElement("span"), { className: "ovbox ps-chip" }));
   chip.hidden = true;
 
+  /** The step viewer draws the selected plan on the real week; paint() draws the week shown instead. */
+  let week = task;
+  const setData = chart.setData.bind(chart);
+  chart.setData = (_, ev, H) => setData(week, ev, H);
+  const setEvaluation = stage.setEvaluation;
+  stage.setEvaluation = () => {};
+
+  function draw(shown) {
+    week = shown.last ? task : known(shown);
+    if (scene.task !== week) {
+      const keep = { anim: scene.anim, userMoved: scene.userMoved };
+      const [pos, target] = [scene.camera.position.clone(), scene.controls.target.clone()];
+      scene.setTask(week);
+      scene._goto(pos, target, false);
+      Object.assign(scene, keep);
+    }
+    setEvaluation(evaluatePlan(week, shown.plan));
+  }
+
   function paint(t) {
     const shown = shownAt(t);
-    const key = `${state.k}:${shown === state.step}`;
+    const flying = shown !== state.step;
+    const key = `${state.k}:${flying}`;
     if (key !== state.key) {
       state.key = key;
+      draw(shown);
+      for (const e of later) {
+        const k = Number(e.dataset.known);
+        e.classList.toggle("ps-future", k > state.k || (k === state.k && flying && "arrive" in e.dataset));
+      }
       chip.hidden = false;
-      chip.textContent = `${shown === state.step ? "Watch" : "Advancing to watch"} ${state.step.watch}/${last} · ${state.step.time}`;
+      chip.textContent = flying ? `Advancing to watch ${state.step.watch}…` : `${watchLabel(shown)} · ${shown.time}`;
+      title.textContent = shown.last ? "Dock chart of the final plan, on the week as it turned out" : "Dock chart of the selected step, on the week as the planner knew it";
       stage.tl.querySelector("#step-status").innerHTML = knownHtml(shown.known);
-      overlay(stage.chart, shown, t);
-    } else mark(stage.chart, shown, t);
+      overlay(chart, shown, t);
+    } else mark(chart, shown, t);
     renderPanel(t, shown);
   }
 
-  const setTime = stage.chart.setTime.bind(stage.chart);
-  stage.chart.setTime = (t) => {
+  const setTime = chart.setTime.bind(chart);
+  chart.setTime = (t) => {
     setTime(t);
     state.t = t;
     if (state.step) paint(t);

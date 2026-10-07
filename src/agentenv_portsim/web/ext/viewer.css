@@ -20,6 +20,7 @@ header.top .name { font-weight: 600; text-decoration: none; }
 .ps-feed li.new { border-left-color: var(--warn); background: #fbf1dc; }
 .ps-final { margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--line); }
 .ps-watch-h { margin: 12px 0 4px; padding: 4px 8px; border-left: 3px solid var(--warn); background: var(--hover); font-size: 12px; font-weight: 600; }
+.ps-future { opacity: 0.35; }
 
 .bchart .ship.ps-departed { opacity: 0.45; }
 .bchart .ship.ps-berthed .ship-r { fill: #a9bfd6; }
@@ -42,3 +43,4 @@ html.recording .traffic-title, html.recording .traffic-detail, html.recording .t
 html.recording .traffic-counts b { font-size: 12px; }
 html.recording .stage .ov-attr { font-size: 13px; color: #fff; background: rgba(13, 30, 40, 0.92); padding: 2px 8px; }
 html.recording .ps-watch { position: sticky; top: 0; z-index: 3; }
+html.recording .ps-future { display: none; }

@@ -28,6 +28,9 @@ licensed under the Apache License, Version 2.0. Derived from it:
   envs/berth_planning/openenv/berth_openenv/web/.
 - src/agentenv_portsim/web/ext/index.html: adapted from that viewer's index.html (its import map,
   title and header).
+- src/agentenv_portsim/web/ext/overview.js: adapted from that viewer's overview.js (the leaderboard and
+  the episode table).
+- src/agentenv_portsim/web/ext/live.js: the transcript loop is adapted from that viewer's transcript.js.
 - src/agentenv_portsim/view.py: the /api routes and their JSON follow
   envs/berth_planning/openenv/berth_openenv/api.py; src/agentenv_portsim/episodes.py: the episode
   summaries follow summarize() in eval/run_eval.py.

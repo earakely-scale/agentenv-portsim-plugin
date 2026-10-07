@@ -3,19 +3,23 @@ twin from the cache, loopback only."""
 
 import json
 import re
+import shutil
+import socket
 import threading
 import urllib.request
 from urllib.parse import quote
 
 import pytest
-from recorded import SONNET
+from click.testing import CliRunner
+from recorded import ROOT, SONNET
 
-from agentenv_portsim import twin
+from agentenv_portsim import twin, view
+from agentenv_portsim.episodes import Runs
 from agentenv_portsim.sweep import PUBLISHED
 from agentenv_portsim.view import EXT, UPSTREAM, route, serve
 
 TASK = {"task_id", "split", "quay", "terminal", "week", "difficulty", "ships", "disruptions"}
-RUN = {"run", "models", "episodes", "mean_reward", "env", "sweep", "rep", "k", "episode_cap_usd"}
+RUN = {"run", "models", "episodes", "mean_reward", "env", "sweep", "rep", "k", "episode_cap_usd", "failed"}
 BUSY = "dock-24B-w06x1-busy-0"
 
 
@@ -55,10 +59,46 @@ def test_runs_list_each_sweep_and_a_run_its_episodes(get, runs):
     assert all(set(r) == RUN for r in listed)
     assert listed[0] | {"mean_reward": None} == {"run": "g2", "models": [SONNET], "episodes": 3, "mean_reward": None,
                                                  "env": "portsim", "sweep": "g2", "rep": 1, "k": 1,
-                                                 "episode_cap_usd": 2.0}
+                                                 "episode_cap_usd": 2.0, "failed": []}
     assert body(get("/api/runs/live-sonnet")) == {"run": "live-sonnet", "episodes": runs.episodes("live-sonnet")}
     episode = f"/api/runs/live-sonnet/episode?model={quote(SONNET, safe='')}&task_id={BUSY}"
     assert body(get(episode)) == runs.rollout("live-sonnet", SONNET, BUSY)
+
+
+def test_an_episode_that_no_longer_replays_is_listed_with_its_error_and_the_rest_stay(tmp_path):
+    for run in ("g2", "live-sonnet"):
+        shutil.copytree(ROOT / run, tmp_path / run)
+    [path] = (tmp_path / "live-sonnet/transcripts").rglob("*.json")
+    record = json.loads(path.read_text())
+    tool = next(m for m in record["messages"] if m.get("name") == "check_plan")
+    tool["content"] = tool["content"].replace('"cost":15', '"cost":14')
+    path.write_text(json.dumps(record))
+    runs = Runs(tmp_path)
+    listed = body(route(runs, tmp_path, "/api/runs"))
+    assert [(r["run"], r["episodes"], r["mean_reward"]) for r in listed][1] == ("live-sonnet", 0, None)
+    [failed] = listed[1]["failed"]
+    assert (failed["model"], failed["task_id"]) == (SONNET, BUSY) and failed["error"].startswith("check_plan")
+    assert listed[0]["episodes"] == 3 and listed[0]["failed"] == []
+    status, headers, data = route(runs, tmp_path, f"/api/runs/live-sonnet/episode?model={SONNET}&task_id={BUSY}")
+    assert (status, headers["Content-Type"], json.loads(data)) == (500, "application/json", {"error": failed["error"]})
+
+
+def test_the_twin_is_served_from_a_cache_under_a_symlink(runs, tmp_path):
+    (tmp_path / "real").mkdir()
+    (tmp_path / "real/cover.png").write_bytes(b"png")
+    (tmp_path / "link").symlink_to(tmp_path / "real")
+    assert route(runs, tmp_path / "link", "/viewer/twin/cover.png")[:2] == (200, {"Content-Type": "image/png"})
+
+
+def test_a_port_in_use_is_a_usage_error(monkeypatch, tmp_path):
+    monkeypatch.setattr(view, "RUNS", ROOT)
+    monkeypatch.setattr(view.twin, "ensure", lambda: tmp_path)
+    with socket.socket() as busy:
+        busy.bind(("127.0.0.1", 0))
+        busy.listen()
+        port = busy.getsockname()[1]
+        result = CliRunner().invoke(view.view_command, ["g2", "--port", str(port)])
+    assert result.exit_code == 2 and f"can't serve on port {port}" in result.output
 
 
 def test_the_viewer_is_upstreams_behind_our_index_with_three_modules_swapped(get):

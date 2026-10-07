@@ -5,8 +5,20 @@ if (new URLSearchParams(location.search).get("record") === "1") {
   document.documentElement.classList.add("recording");
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const frames = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+  const deadline = performance.now() + 60e3;
   const until = async (ok) => {
-    while (!ok()) await wait(100);
+    while (!ok()) {
+      if (performance.now() > deadline) throw new Error(`the viewer did not load in 60 s: ${document.querySelector(".error")?.textContent ?? "no page error; is jsDelivr (three.js) reachable?"}`);
+      await wait(100);
+    }
+  };
+  /** The selected call in the middle of the transcript, so the news that arrives under it is on screen. */
+  const center = () => {
+    const call = document.querySelector("#transcript .call.sel");
+    if (!call) return;
+    const left = call.closest(".ro-left");
+    const cover = left.querySelector(".ps-watch")?.offsetHeight || 0;
+    left.scrollTop = call.offsetTop - left.offsetTop - cover - Math.max(0, (left.clientHeight - cover - call.offsetHeight) / 2);
   };
   window.portsim = {
     ready: (async () => {
@@ -23,17 +35,13 @@ if (new URLSearchParams(location.search).get("record") === "1") {
       await wait(1500);
     },
     async show(k) {
-      const call = document.querySelector(`#transcript .call[data-step="${k}"]`);
-      if (call) {
-        call.click();
-        const left = call.closest(".ro-left");
-        const cover = left.querySelector(".ps-watch")?.offsetHeight || 0;
-        left.scrollTop = call.offsetTop - left.offsetTop - cover - Math.max(0, (left.clientHeight - cover - call.offsetHeight) / 2);
-      }
+      document.querySelector(`#transcript .call[data-step="${k}"]`)?.click();
+      center();
       await frames();
     },
     async time(h) {
       currentStage().setTime(h);
+      center();
       await frames();
     },
   };

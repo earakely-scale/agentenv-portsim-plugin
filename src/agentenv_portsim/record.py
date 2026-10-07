@@ -11,6 +11,8 @@ import tempfile
 import threading
 import time
 import urllib.request
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import NamedTuple
 from urllib.parse import quote
@@ -26,6 +28,7 @@ from .view import serve
 CHROMES = ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", "google-chrome", "google-chrome-stable",
            "chromium", "chromium-browser"]
 VIEWS = ["overview", "harbour", "quayside", "overhead"]
+ANSWER_SECONDS = 120
 
 
 class Frame(NamedTuple):
@@ -103,8 +106,12 @@ class Page:
     def call(self, method: str, **params) -> dict:
         i = next(self.ids)
         self.ws.send(json.dumps({"id": i, "method": method, "params": params}))
-        while (message := json.loads(self.ws.recv())).get("id") != i:
-            pass
+        try:
+            while (message := json.loads(self.ws.recv(timeout=ANSWER_SECONDS))).get("id") != i:
+                pass
+        except TimeoutError as e:
+            raise click.ClickException(f"Chrome did not answer {method} in {ANSWER_SECONDS} s; did the page load? "
+                                       "The viewer loads three.js from jsDelivr.") from e
         if "error" in message:
             raise click.ClickException(f"{method}: {message['error']}")
         return message["result"]
@@ -112,7 +119,9 @@ class Page:
     def js(self, expression: str):
         result = self.call("Runtime.evaluate", expression=expression, awaitPromise=True, returnByValue=True)
         if "exceptionDetails" in result:
-            raise click.ClickException(f"{expression}: {result['exceptionDetails']}")
+            details = result["exceptionDetails"]
+            error = details.get("exception", {}).get("description", details["text"])
+            raise click.ClickException(f"{expression}: {error}")
         return result["result"].get("value")
 
 
@@ -128,9 +137,9 @@ def _devtools(profile: Path, chrome: subprocess.Popen) -> str:
         return next(t["webSocketDebuggerUrl"] for t in json.load(r) if t["type"] == "page")
 
 
-def record(url: str, rollout: dict, out: Path, *, chrome: str, ffmpeg: str, width: int, height: int, fps: int,
-           view: str, pace: dict) -> int:
-    """Films the rollout page at ``url``; returns the number of frames."""
+@contextmanager
+def recording(url: str, chrome: str, width: int, height: int) -> Iterator[tuple[Page, dict]]:
+    """The page at ``url`` in headless Chrome, once ``portsim.ready``, and what it reports."""
     with tempfile.TemporaryDirectory() as profile:
         browser = subprocess.Popen(chrome_args(chrome, Path(profile), width, height), stdout=subprocess.DEVNULL,
                                    stderr=subprocess.DEVNULL)
@@ -141,27 +150,38 @@ def record(url: str, rollout: dict, out: Path, *, chrome: str, ffmpeg: str, widt
                           mobile=False)
                 page.call("Page.navigate", url=url)
                 page.js("new Promise(r => { const f = () => window.portsim ? r() : setTimeout(f, 50); f(); })")
-                horizon = page.js("portsim.ready")["horizon"]
-                if view != "overview":
-                    page.js(f"portsim.view({json.dumps(view)})")
-                frames = timeline(rollout, horizon, fps=fps, **pace)
-                title = f"{rollout['model']} · {rollout['task_id']} · {rollout['run']}"
-                encoder = subprocess.Popen(ffmpeg_args(ffmpeg, out, fps, title), stdin=subprocess.PIPE)
-                shown = None
-                for frame in frames:
-                    if frame.step != shown:
-                        page.js(f"portsim.show({frame.step})")
-                        shown = frame.step
-                    page.js(f"portsim.time({frame.hour})")
-                    shot = page.call("Page.captureScreenshot", format="jpeg", quality=92)["data"]
-                    encoder.stdin.write(base64.b64decode(shot))
-                encoder.stdin.close()
-                if encoder.wait():
-                    raise click.ClickException(f"ffmpeg exited {encoder.returncode}")
+                yield page, page.js("portsim.ready")
         finally:
             browser.terminate()
             browser.wait()
+
+
+def record(url: str, rollout: dict, out: Path, *, chrome: str, ffmpeg: str, width: int, height: int, fps: int,
+           view: str, pace: dict) -> int:
+    """Films the rollout page at ``url``; returns the number of frames."""
+    with recording(url, chrome, width, height) as (page, ready):
+        if view != "overview":
+            page.js(f"portsim.view({json.dumps(view)})")
+        frames = timeline(rollout, ready["horizon"], fps=fps, **pace)
+        title = f"{rollout['model']} · {rollout['task_id']} · {rollout['run']}"
+        encoder = subprocess.Popen(ffmpeg_args(ffmpeg, out, fps, title), stdin=subprocess.PIPE)
+        shown = None
+        for frame in frames:
+            if frame.step != shown:
+                page.js(f"portsim.show({frame.step})")
+                shown = frame.step
+            page.js(f"portsim.time({frame.hour})")
+            shot = page.call("Page.captureScreenshot", format="jpeg", quality=92)["data"]
+            encoder.stdin.write(base64.b64decode(shot))
+        encoder.stdin.close()
+        if encoder.wait():
+            raise click.ClickException(f"ffmpeg exited {encoder.returncode}")
     return len(frames)
+
+
+def episode_url(port: int, run: str, model: str, task_id: str) -> str:
+    return (f"http://127.0.0.1:{port}/viewer/?embed=1&record=1"
+            f"#/run/{quote(run, safe='')}/{quote(model, safe='')}/{quote(task_id, safe='')}")
 
 
 @click.command("record")
@@ -193,8 +213,7 @@ def record_command(sweep_name, model, task_id, out, rep, size, fps, step_seconds
     chrome, ffmpeg = find_chrome(chrome), find_ffmpeg()
     server = serve(runs, twin.ensure(), 0)
     threading.Thread(target=server.serve_forever, daemon=True).start()
-    url = (f"http://127.0.0.1:{server.server_port}/viewer/?embed=1&record=1"
-           f"#/run/{quote(run, safe='')}/{quote(model, safe='')}/{quote(task_id, safe='')}")
+    url = episode_url(server.server_port, run, model, task_id)
     click.echo(twin.ATTRIBUTION)
     pace = {"step_seconds": step_seconds, "hours_per_second": hours_per_second, "intro_seconds": intro_seconds,
             "outro_seconds": outro_seconds}

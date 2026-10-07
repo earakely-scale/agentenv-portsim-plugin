@@ -12,6 +12,7 @@ from recorded import GPT, LIVE, ROOT, SONNET, scored, transcript
 from agentenv_portsim import tasks
 from agentenv_portsim.episodes import ReplayError, Runs
 from agentenv_portsim.schedule import TOOLS, virtual_time
+from agentenv_portsim.world import known
 from berth_core import Grade
 
 ROLLOUT = {"model", "task_id", "episode_id", "started", "run", "messages", "steps", "final", "reward", "usage", "turns",
@@ -92,6 +93,16 @@ def test_the_trigger_bulletins_are_the_messages_the_agent_got(runs, run, model, 
     advances = {k for k, s in enumerate(ro["steps"]) if s["tool"] == "advance"}
     assert all(b["step"] in advances and ro["steps"][b["step"]]["watch"] == b["watch"]
                for b in ro["live"]["bulletins"] if b["via"] == "trigger")
+
+
+@pytest.mark.parametrize(("run", "model", "task_id"), LIVE)
+def test_each_step_carries_the_week_as_the_planner_knew_it(runs, run, model, task_id):
+    ro, task = runs.rollout(run, model, task_id), runs.pack.get(task_id)
+    for step in ro["steps"]:
+        assert step["task"] == known(task, step["revealed"]).to_dict(public=True)
+        shown = sorted(int(event_id.rsplit("-", 1)[1]) for event_id in step["revealed"])
+        assert step["task"]["disruptions"] == [task.disruptions[i] for i in shown]
+    assert len(ro["steps"][0]["task"]["disruptions"]) < len(task.disruptions) == len(ro["steps"][-1]["revealed"])
 
 
 @pytest.mark.parametrize(("run", "model", "task_id"), LIVE)

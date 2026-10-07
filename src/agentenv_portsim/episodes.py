@@ -61,17 +61,29 @@ class Runs:
     def index(self) -> list[dict]:
         out = []
         for run_id, run in sorted(self.runs.items()):
-            if episodes := self.episodes(run_id):
-                out.append({"run": run_id, "models": sorted({e["model"] for e in episodes}),
+            episodes, failed = self.replayed(run_id)
+            if episodes or failed:
+                out.append({"run": run_id, "models": sorted({e["model"] for e in episodes + failed}),
                             "episodes": len(episodes),
-                            "mean_reward": round(sum(e["reward"] for e in episodes) / len(episodes), 4),
+                            "mean_reward": round(sum(e["reward"] for e in episodes) / len(episodes), 4)
+                            if episodes else None,
                             "env": LIVE_ENV if run.sweep.live else "portsim", "sweep": run.sweep.name, "rep": run.rep,
-                            "k": run.sweep.k, "episode_cap_usd": run.sweep.episode_cap_usd})
+                            "k": run.sweep.k, "episode_cap_usd": run.sweep.episode_cap_usd, "failed": failed})
         return out
 
     def episodes(self, run_id: str) -> list[dict]:
-        run = self.runs[run_id]
-        return [self.summary(run, run.rows[key]) for key in sorted(run.rows)]
+        return self.replayed(run_id)[0]
+
+    def replayed(self, run_id: str) -> tuple[list[dict], list[dict]]:
+        """The summaries of the run's episodes that replay, and the error of each that doesn't: a recording made
+        before the week changed."""
+        run, out, failed = self.runs[run_id], [], []
+        for model, task_id in sorted(run.rows):
+            try:
+                out.append(self.summary(run, run.rows[model, task_id]))
+            except ReplayError as e:
+                failed.append({"model": model, "task_id": task_id, "error": str(e)})
+        return out, failed
 
     def summary(self, run: Run, row: dict) -> dict:
         """upstream's summarize() (eval/run_eval.py), and the attempt's record; a live run's week too."""
@@ -217,6 +229,6 @@ def step(week: Week, turn: int, call: dict, entries, result: dict, plan: Plan) -
             "plan": plan_to_list(plan), "result": result, "watch": week.watch, "hour": week.hour,
             "time": label(week.hour), "virtual_time": virtual_time(week.task, week.hour),
             "frozen_before": week.before, "windows": week.windows(view), "unconfirmed": week.unconfirmed(view),
-            "revealed": list(week.revealed),
+            "revealed": list(week.revealed), "task": view.to_dict(public=True),
             "known": {"feasible": not problems, "problems": problems, "excused_cost": excused,
                       "cost": sum(r.cost for r, *_ in ships) - excused if not problems else None}}
