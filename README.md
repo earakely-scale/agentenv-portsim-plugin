@@ -507,7 +507,8 @@ and passed on retry.
 
 *GPT-6.1 Sol plays the live week `dock-24B-w07x1-busy-0` (sweep `live-pilot-gpt`, reward 1.0), replayed on
 PortSimEnv's viewer. Port of Barcelona twin © OpenStreetMap contributors (ODbL) · terrain: Terrain Tiles (AWS).
-Task text CC BY-SA 4.0.*
+Task text CC BY-SA 4.0.* Full-length films of this week and of a v1 week are in the release
+[replays-2026-10-07](https://github.com/earakely-scale/agentenv-portsim-plugin/releases/tag/replays-2026-10-07).
 
 Recorded runs replay on PortSimEnv's own viewer, by Adithya S Kolavi: the 3D twin of the quay, with ships, tugs and
 cranes acting out each plan, the dock chart, every plan the model checked, confirmed or submitted, the grade and the
