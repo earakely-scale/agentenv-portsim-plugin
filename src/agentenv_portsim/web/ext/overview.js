@@ -11,7 +11,7 @@ const LINKS = [
   ["Article", "https://huggingface.co/spaces/FineEnvs/simulation-rl-environments", "Simulation RL Environments, part 1"],
   ["agentenv-portsim", REPO, "PortSimEnv v1 and the live week as agent-env environments, the sweeps"],
 ];
-const ENVS = { portsim: "PortSimEnv v1: one plan, one graded submit", "portsim-live": "the live week: watch by watch on a virtual clock" };
+const ENVS = { portsim: "PortSimEnv v1: one plan, one graded submit", "portsim-live": "the live week: watch by watch on a virtual clock", "portsim-marine": "the live week with the port's pilots and tugs" };
 const enc = encodeURIComponent;
 const runHref = (run, model, task) => `#/run/${enc(run)}/${enc(model)}/${enc(task)}`;
 const optimal = (e) => (e.reward || 0) >= 0.999;
@@ -83,7 +83,7 @@ export async function overviewPage({ app, setCrumbs, isCurrent, sortableTable })
   app.querySelector("#ps-runs").innerHTML = runs.length
     ? runs.map((r) => `<section class="ps-run">
         <div class="sec-head"><h2>${escapeHtml(r.run)}</h2><span class="muted small">${escapeHtml(r.env)} · ${escapeHtml(ENVS[r.env] || "")} · ${r.episodes} episodes${r.k > 1 ? ` · rep ${r.rep} of ${r.k}` : ""} · cap $${r.episode_cap_usd} an episode</span></div>
-        <table class="tbl click"><thead><tr><th>Model</th><th class="num">Episodes</th><th class="num">Mean</th><th class="num">${r.env === "portsim-live" ? "Reached done" : "Submitted"}</th><th class="num">Feasible</th><th class="num">Optimal</th></tr></thead>
+        <table class="tbl click"><thead><tr><th>Model</th><th class="num">Episodes</th><th class="num">Mean</th><th class="num">${r.env !== "portsim" ? "Reached done" : "Submitted"}</th><th class="num">Feasible</th><th class="num">Optimal</th></tr></thead>
         <tbody>${boards.get(r.run).map((b) => `<tr data-row="${escapeHtml(b.model)}" data-run="${escapeHtml(r.run)}" title="List ${escapeHtml(nameOf(b.model))}'s episodes"><td><span title="${escapeHtml(b.model)}">${escapeHtml(nameOf(b.model))}</span></td><td class="num">${b.n}</td><td class="num"><b>${fmtNum(b.mean, 3)}</b></td><td class="num">${fmtPct(b.submitted)}</td><td class="num">${fmtPct(b.feasible)}</td><td class="num">${b.optimal}/${b.n}</td></tr>`).join("")}</tbody></table>
         ${r.failed.length ? `<ul class="viol">${r.failed.map((f) => `<li>${escapeHtml(nameOf(f.model))} on ${escapeHtml(f.task_id)} does not replay: ${escapeHtml(f.error)}</li>`).join("")}</ul>` : ""}
       </section>`).join("")
@@ -99,7 +99,7 @@ export async function overviewPage({ app, setCrumbs, isCurrent, sortableTable })
     app.querySelector("#ov-eps-note").textContent = `${model} · ${b.n} episodes · click one to replay it in 3D`;
     const rows = b.eps.map((e) => ({ ...e, run }));
     app.querySelector("#ov-eps").replaceChildren(document.createElement("thead"), document.createElement("tbody"));
-    sortableTable(app.querySelector("#ov-eps"), columns(r.env === "portsim-live"), rows, {
+    sortableTable(app.querySelector("#ov-eps"), columns(r.env !== "portsim"), rows, {
       initial: { key: "task_id", dir: 1 },
       rowAttrs: (e) => `data-row="${escapeHtml(e.task_id)}"`,
       onRow: (task) => (location.hash = runHref(run, model, task)),

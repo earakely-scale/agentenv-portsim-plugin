@@ -9,6 +9,7 @@ import { currentStage } from "./stage.js";
 
 const STATUSES = ["departed", "berthed", "frozen", "open", "draft"];
 const SVG = "http://www.w3.org/2000/svg";
+const INFEASIBLE = '<i class="dot bad"></i>infeasible';
 
 const shipName = (task, id) => (task.ships.find((s) => s.id === Number(id)) || {}).name || `ship ${id}`;
 const names = (task, ids) => ids.map((id) => escapeHtml(shipName(task, id))).join(", ") || "none";
@@ -91,6 +92,19 @@ function knownHtml(kn) {
     : `<i class="dot bad"></i>As known: infeasible · ${plural(kn.problems, "problem")}`;
 }
 
+/** The plan's pilots and tugs at hour t against those free for our ships, and the cuts in force. */
+function marineHtml(m, t) {
+  const h = Math.floor(t);
+  const [, pilots, tugs] = m.ours.find(([hour]) => hour === h) || [h, 0, 0];
+  const free = (pool) => (h < m.hours ? m[pool].free[h] : m[pool].pool);
+  const parts = [`h${h}`, `pilots: ours ${pilots}, free ${free("pilots")}`, `tugs: ours ${tugs}, free ${free("tugs")}`];
+  if (pilots > free("pilots") || tugs > free("tugs")) parts.push('<b class="ps-short">short</b>');
+  for (const c of m.cuts) if (c.start <= h && h < c.end) parts.push(`${escapeHtml(c.from)}: ${c.count} out h${c.start}–${c.end}`);
+  return `<div class="ps-line ps-marine">${parts.map((x) => `<span>${x}</span>`).join(" · ")}</div>`;
+}
+
+const replanHtml = (r) => `${r.feasible ? r.cost : INFEASIBLE} <span class="muted">(reward ${fmtNum(r.reward, 3)})</span>`;
+
 function bulletinsHtml(list, cls = "ps-msgs") {
   return list.length ? `<ul class="${cls}">${list.map((b) => `<li${b.new ? ' class="new"' : ""}>${b.time ? `<span class="muted">${escapeHtml(b.time)}</span> ` : ""}<b>${escapeHtml(b.from)}</b> ${escapeHtml(b.text)}</li>`).join("")}</ul>` : "";
 }
@@ -127,12 +141,13 @@ function gradeRows(gradeEl, ro) {
   const kv = gradeEl.querySelector(".kv");
   for (const dt of kv.querySelectorAll("dt")) {
     if (dt.textContent === "Tool calls") dt.nextElementSibling.textContent = `${plural(count("check_plan"), "check")} · ${plural(count("confirm_berths"), "confirm")} · ${plural(count("advance"), "advance")}`;
+    if (dt.textContent === "Naive re-plan") dt.nextElementSibling.innerHTML = ref.naive.feasible ? fmtNum(ref.naive.cost) : INFEASIBLE;
   }
   const audit = ro.live.audit;
   const rows = [
     ["Excused cost", fmtNum(g.excused_cost), "Cost that news brought to windows already frozen: not charged"],
     ["Regret", fmtNum(g.regret), "Cost above the optimum in hindsight"],
-    ["Rolling re-plan", `${ref.rolling.cost} <span class="muted">(reward ${fmtNum(ref.rolling.reward, 3)})</span>`, "A CP-SAT re-planner on the week as known, watch by watch"],
+    ["Rolling re-plan", replanHtml(ref.rolling), "A CP-SAT re-planner on the week as known, watch by watch"],
     ["Audit", audit.ok ? '<i class="dot ok"></i>passed' : `<i class="dot bad"></i>${escapeHtml(audit.problems.join("; "))}`, "Every bulletin arrived once, on time, at its watch"],
   ];
   kv.insertAdjacentHTML("beforeend", rows.map(([k, v, tip]) => `<dt title="${escapeHtml(tip)}">${escapeHtml(k)}</dt><dd>${v}</dd>`).join(""));
@@ -245,11 +260,11 @@ export function renderLive(root, ro, task, { onStep, horizon }) {
     const g = ro.final.grade;
     const ref = live.reference;
     const final = state.k === steps.length - 1
-      ? `<dl class="kv ps-final"><dt>Reward</dt><dd><b>${fmtNum(g.reward, 3)}</b></dd><dt>Cost</dt><dd>${g.feasible ? g.cost : '<i class="dot bad"></i>infeasible'}</dd><dt>Excused cost</dt><dd>${fmtNum(g.excused_cost)}</dd><dt>Regret</dt><dd>${fmtNum(g.regret)}</dd><dt>Rolling re-plan</dt><dd>${ref.rolling.cost} <span class="muted">(reward ${fmtNum(ref.rolling.reward, 3)})</span></dd><dt>Naive re-plan</dt><dd>${ref.naive.cost} <span class="muted">(reward ${fmtNum(ref.naive.reward, 3)})</span></dd><dt>Audit</dt><dd>${live.audit.ok ? '<i class="dot ok"></i>passed' : `<i class="dot bad"></i>${escapeHtml(live.audit.problems.join("; "))}`}</dd></dl>`
+      ? `<dl class="kv ps-final"><dt>Reward</dt><dd><b>${fmtNum(g.reward, 3)}</b></dd><dt>Cost</dt><dd>${g.feasible ? g.cost : INFEASIBLE}</dd><dt>Excused cost</dt><dd>${fmtNum(g.excused_cost)}</dd><dt>Regret</dt><dd>${fmtNum(g.regret)}</dd><dt>Rolling re-plan</dt><dd>${replanHtml(ref.rolling)}</dd><dt>Naive re-plan</dt><dd>${replanHtml(ref.naive)}</dd><dt>Audit</dt><dd>${live.audit.ok ? '<i class="dot ok"></i>passed' : `<i class="dot bad"></i>${escapeHtml(live.audit.problems.join("; "))}`}</dd></dl>`
       : "";
     const next = shown === step ? "" : `<div class="ps-line ps-next">Advancing to watch ${step.watch}…</div>`;
     const html = `<div class="sec-head"><h2>${watchLabel(shown)}</h2><span class="muted small">step ${state.k + 1} of ${steps.length} · ${escapeHtml(step.tool)}</span></div>
-      <div class="ps-clock"><b>${c.day} ${c.date} · ${c.hm}</b> <span class="muted">${virtualTime(task, t)}</span></div>
+      <div class="ps-clock"><b>${c.day} ${c.date} · ${c.hm}</b> <span class="muted">${virtualTime(task, t)}</span></div>${shown.marine ? marineHtml(shown.marine, t) : ""}
       <div class="ps-line">${escapeHtml(shown.time)} (h ${shown.hour}) · ${shown.watch ? `freeze line h ${shown.frozen_before}` : "every window open"}</div>${next}
       <div class="ps-counts">${["departed", "berthed", "frozen", "open"].map((s) => `<span class="ps-c ps-${s}"><b>${counts[s]}</b> ${s}</span>`).join("")}<span class="ps-c"><b>${shown.unconfirmed.length}</b> unconfirmed</span></div>
       <div class="ps-known">${knownHtml(shown.known)}</div>

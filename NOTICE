@@ -60,8 +60,8 @@ Data licensed under CC BY-SA 4.0 (data/LICENSE), not under the Apache License:
 - data/published/dock-eval50/index.json: the published dock-eval50 results, copied unchanged from
   results/rollouts/dock-eval50/index.json.
 - tests/viewer/runs/: episodes recorded on dock-v1 tasks; their transcripts hold the task text.
-- tests/viewer/marine_runs/: a week played on data/dock-v1-marine/; its transcript holds the task
-  text.
+- tests/viewer/marine_runs/: a week played on data/dock-v1-marine/ by two scripted policies; their
+  transcripts hold the task text.
 - assets/live-week.gif: a recorded live week on the viewer; it also shows the 3D twin (below).
 
 The viewer's 3D twin of the Port of Barcelona is not included: agent-env portsim view and record
