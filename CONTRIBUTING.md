@@ -58,7 +58,8 @@ spend (README, [Development](README.md#development)). For a change to the live p
 | A live task, the live verifier, the live sweep | `src/agentenv_portsim/tasks.py`, `bundles/portsim-live/`, `sweep.py` | `tests/live/tasks/` |
 | The live references | `scripts/live_references.py`, which writes `data/live/references.jsonl` | `tests/live/tasks/test_live_references.py` |
 | `portsim-llm`'s live mode | `agents/portsim-llm/agent.py` | `tests/agent/test_agent_live.py`; v1's requests must stay as `tests/golden/harness.json` has them |
-| PortSimEnv's core, task packs or published results | never here: `src/berth_core/`, `data/dock-v1-eval/`, `data/dock-v1-train/` and `data/published/` are copied unchanged from upstream ([VENDORED.md](VENDORED.md)) | a new upstream commit is vendored whole, and VENDORED.md names it |
+| Watching runs: `agent-env portsim view` and `record`, the live week's panel and chart marks, the twin download | `src/agentenv_portsim/episodes.py`, `view.py`, `record.py`, `twin.py`, `web/ext/` | `tests/viewer/`; the README's [Watch a run](README.md#watch-a-run) |
+| PortSimEnv's core, viewer, task packs or published results | never here: `src/berth_core/`, `src/agentenv_portsim/web/upstream/`, `data/dock-v1-eval/`, `data/dock-v1-train/` and `data/published/` are copied unchanged from upstream ([VENDORED.md](VENDORED.md)) | a new upstream commit is vendored whole, and VENDORED.md names it |
 
 ## Conventions
 
@@ -67,8 +68,11 @@ spend (README, [Development](README.md#development)). For a change to the live p
   taken here. The same goes for `portsim-llm`: its prompts, nudges, limits and requests match upstream's harness, and
   `tests/golden/harness.json` holds them to it. The live port is this repository's own and has no upstream to match;
   `tests/live/` holds its tools, prompts, schedule and grade instead.
-- **Vendored files stay unchanged.** `src/berth_core/`, `data/dock-v1-eval/`, `data/dock-v1-train/` and
-  `data/published/` match upstream byte for byte; the task packs' sha256 is checked when they load.
+- **Vendored files stay unchanged.** `src/berth_core/`, `src/agentenv_portsim/web/upstream/`,
+  `data/dock-v1-eval/`, `data/dock-v1-train/` and `data/published/` match upstream byte for byte; the task packs'
+  sha256 is checked when they load, and `tests/viewer/test_vendored.py` checks the viewer's. A change to the viewer
+  goes in `web/ext/`, through its index.html's import map. The viewer's 3D twin is OpenStreetMap data (ODbL): it is
+  never committed, and anything rendered from it carries the attribution.
   `data/live/references.jsonl` is computed here: rerun `uv run --with ortools==9.15.6755 python
   scripts/live_references.py` when the live week, its schedule or its grade changes, and commit the file. `ortools`
   is never a dependency; the tests replay the file without it.
@@ -78,7 +82,8 @@ spend (README, [Development](README.md#development)). For a change to the live p
 - **Code:** match the code around it. `ruff check .` must pass. Name things so the code reads without comments;
   write a short docstring only for why something is the way it is.
 - **Tests:** a fix comes with a test that fails without it. Tests set `BERTH_TASKS_DIR` themselves. They call no
-  model: `tests/fake_litellm.py` stands in for the model endpoint.
+  model: `tests/fake_litellm.py` stands in for the model endpoint. Tests marked `network` or `browser` (the twin
+  download, a film with Chrome and ffmpeg) are skipped by default; run them with `pytest -m 'network or browser'`.
 - **No secrets or private endpoints** in code, tests, docs or task files: model keys come from agent-env's secret
   store, and examples use placeholders such as `https://your-litellm-proxy`.
 - **Licensing:** code contributions are licensed under the Apache License 2.0, like the rest of the code. Anything

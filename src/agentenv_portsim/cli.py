@@ -1,5 +1,5 @@
-"""`agent-env portsim`: build and register the PortSim env and the portsim-llm agent, write the eval tasks, and
-sweep models over them."""
+"""`agent-env portsim`: build and register the PortSim env and the portsim-llm agent, write the eval tasks, sweep
+models over them, and watch the recorded runs."""
 
 import subprocess
 from pathlib import Path
@@ -9,9 +9,11 @@ from agent_env.a2a_agent import A2AAgent
 from agent_env.artifact import DockerImageArtifact
 from agent_env.env import MCPServerEnv
 
+from .record import record_command
 from .schedule import LIVE_ENV
 from .sweep import sweep_group
 from .tasks import tasks_group
+from .view import view_command
 
 ENV_ID = "portsim"
 IMAGE = "agentenv-portsim-env"
@@ -23,7 +25,8 @@ REPO = "https://github.com/earakely-scale/agentenv-portsim-plugin"
 
 @click.group()
 def portsim():
-    """PortSim: build and register the env and agent, write the eval tasks, and sweep models over them."""
+    """PortSim: build and register the env and agent, write the eval tasks, sweep models over them, and watch the
+    recorded runs."""
 
 
 def _checkout(source: Path | None) -> Path:
@@ -90,3 +93,5 @@ def setup(build_platform: str | None, source: Path | None, agent: bool):
 
 portsim.add_command(tasks_group)
 portsim.add_command(sweep_group)
+portsim.add_command(view_command)
+portsim.add_command(record_command)
