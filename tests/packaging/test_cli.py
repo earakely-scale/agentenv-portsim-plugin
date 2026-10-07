@@ -66,11 +66,11 @@ def test_setup_with_agent_also_builds_portsim_llm_for_the_same_platform_and_regi
     result = CliRunner().invoke(portsim, ["setup", "--source", str(ROOT), "--agent", *args])
     assert result.exit_code == 0, result.output
     assert builds(log) == [f"build --platform {platform} -t agentenv-portsim-env {ROOT}",
-                           f"build --platform {platform} -t agentenv-portsim-llm {ROOT / 'agents/portsim-llm'}"]
-    assert stored[1] == {"id": "agentenv-portsim-llm", "image_name": "agentenv-portsim-llm"}
+                           f"build --platform {platform} -t agentenv-portsim-agent {ROOT / 'agents/portsim-llm'}"]
+    assert stored[1] == {"id": "agentenv-portsim-agent", "image_name": "agentenv-portsim-agent"}
     agent = A2AAgent.get("portsim-llm")
     assert agent.metadata["default_model"] == "anthropic/claude-sonnet-5-5"
-    assert agent.docker_image_artifact.image_name == "localhost:5000/agentenv-portsim-llm:v1"
+    assert agent.docker_image_artifact.image_name == "localhost:5000/agentenv-portsim-agent:v1"
     assert "Registered A2A agent 'portsim-llm' version 1" in result.output
 
 
