@@ -57,8 +57,9 @@ async def test_the_card_and_routes(env, http):
 
 
 async def test_the_agents_tools_come_first_and_port_notice_last(tools):
-    assert [t.name for t in await tools.client.list_tools()] == [
-        "get_situation", "check_plan", "confirm_berths", "advance", "port_notice"]
+    listed = await tools.client.list_tools()
+    assert [t.name for t in listed] == ["get_situation", "check_plan", "confirm_berths", "advance", "port_notice"]
+    assert all("\n" not in t.description for t in listed)
 
 
 async def test_no_week_loaded(tools, http):

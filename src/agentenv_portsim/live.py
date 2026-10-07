@@ -62,34 +62,31 @@ class PortSimLiveEnv(AgentEnvEnvironment):
     def create_app(self) -> FastMCP:
         return self.mount(FastMCP(LIVE_ENV, middleware=[LiveEpisode(self)]))
 
-    @tool()
+    @tool(description="The current watch: the hour, the week as the port knows it now, your confirmed berth windows "
+                      "(departed, berthed, frozen or open), the ships still without a window, and new messages.")
     def get_situation(self) -> str:
-        """The current watch: the hour, the week as the port knows it now, your confirmed berth windows (departed,
-        berthed, frozen or open), the ships still without a window, and new messages."""
         week = self._week()
         return _reply(week, week.situation())
 
-    @tool()
+    @tool(description="Check berth windows without confirming them: your entries over your confirmed windows, on the "
+                      "week as known now. Lists the ships with a rule problem or a cost, the plan's cost, and the "
+                      "entries confirm_berths would refuse. Uses one of this watch's 3 planning calls.")
     def check_plan(self, plan: WindowsArg) -> str:
-        """Check berth windows without confirming them: your entries over your confirmed windows, on the week as
-        known now. Lists the ships with a rule problem or a cost, the plan's cost, and the entries confirm_berths would
-        refuse. Uses one of this watch's 3 planning calls."""
         week = self._week(open_only=True)
         return _reply(week, week.check(_raw(plan)))
 
-    @tool()
+    @tool(description="Confirm berth windows with the ships: each entry sets or changes one ship's window; ships left "
+                      "out keep theirs. From watch 1 on, windows starting before the freeze line (6 hours from now) "
+                      "are frozen, and new ones must start at or after it. Uses one of this watch's 3 planning calls.")
     def confirm_berths(self, plan: WindowsArg) -> str:
-        """Confirm berth windows with the ships: each entry sets or changes one ship's window; ships left out keep
-        theirs. From watch 1 on, windows starting before the freeze line (6 hours from now) are frozen, and new ones
-        must start at or after it. Uses one of this watch's 3 planning calls."""
         week = self._week(open_only=True)
         return _reply(week, week.confirm(_raw(plan)))
 
-    @tool()
+    @tool(description="End this watch: the port moves to the next bulletin, ships berth and sail on their confirmed "
+                      "windows, and windows starting before the new freeze line freeze. The bulletin's messages arrive "
+                      "with your next tool result. After the last watch, the rest of the week runs on your windows and "
+                      "is graded.")
     async def advance(self) -> str:
-        """End this watch: the port moves to the next bulletin, ships berth and sail on their confirmed windows, and
-        windows starting before the new freeze line freeze. The bulletin's messages arrive with your next tool result.
-        After the last watch, the rest of the week runs on your windows and is graded."""
         week = self._week(open_only=True)
         if week.last:
             return _reply(week, week.finish("done"))
@@ -102,10 +99,9 @@ class PortSimLiveEnv(AgentEnvEnvironment):
             response.raise_for_status()
         return _reply(week, week.open())
 
-    @tool()
+    @tool(description="Deliver one party's notice for this watch: the port applies the news and queues the message. "
+                      "Called by the env's triggers.")
     def port_notice(self, event_id: str, name: str, text: str) -> str:
-        """Deliver one party's notice for this watch: the port applies the news and queues the message. Called by the
-        env's triggers."""
         return _json(self._week(open_only=True).notice(event_id, name, text, "trigger"))
 
     @extension(LIVE_LOAD_URI, description="Start a live week on the one-week task with this id.")
