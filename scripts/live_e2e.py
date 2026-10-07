@@ -3,7 +3,8 @@ portsim-marine) on the gateway and portsim-llm on local Docker, and tests/fake_l
 agent with a reference policy's turns (the naive online policy, or the stored plans of the rolling re-planner), at one
 turn per watch. It fails unless each watch's trigger fired once, the agent never saw port_notice, every bulletin came
 with the first tool result after its advance and no other, get_time read the watch's hour and held still between turns,
-and the week scored the policy's stored reward.
+data/get held the week as played in process, and the week scored the policy's stored reward. On portsim-marine the
+opening and every get_situation must also carry the pilots and tugs as the port knows them at that watch.
 
 Run it from the checkout after `agent-env portsim setup --agent`, with the dev extra installed:
 
@@ -48,16 +49,17 @@ class PausingFake(FakeLiteLLM):
         return paused
 
 
-def policy_rows(task, policy: world.Policy, week: type[world.Week]) -> list[list[dict]]:
-    """The windows the policy confirms at each watch, as world.play confirms them."""
+def policy_rows(task, policy: world.Policy, week: type[world.Week]) -> tuple[list[list[dict]], world.Week]:
+    """The windows the policy confirms at each watch, as world.play confirms them, and the week it plays."""
     rows = []
 
     def recorded(w):
         target = policy(w)
         rows.append([r for r in plan_to_list(target) if w.plan.get(r["ship"]) != target[r["ship"]]])
         return target
-    assert world.play(task, recorded, week=week).refusals == []
-    return rows
+    played = world.play(task, recorded, week=week)
+    assert played.refusals == []
+    return rows, played
 
 
 def script(rows: list[list[dict]], double: int | None) -> list[dict]:
@@ -84,7 +86,17 @@ def exchanges(record: dict) -> list[tuple[str, dict]]:
     return [(m["name"], json.loads(m["content"])) for m in record["messages"] if m["role"] == "tool"]
 
 
-def check(task, fake: FakeLiteLLM, ctx: dict, env: str, expected: dict) -> dict:
+def pilots_and_tugs(task, watches: list, k: int) -> str:
+    return marine.section(world.known(task, [n.event_id for w in watches[:k + 1] for n in w.notices]))
+
+
+def held(data: dict) -> dict:
+    """data/get's week but the call counts, which only the env's middleware makes."""
+    return {"plan": data["plan"], "notices": [{k: v for k, v in n.items() if k != "call"} for n in data["notices"]],
+            "excused": data["excused"], "refusals": data["refusals"], "grade": data["grade"]}
+
+
+def check(task, fake: FakeLiteLLM, ctx: dict, env: str, expected: dict, played: world.Week) -> dict:
     watches = schedule(task)
     m = ctx["metadata"]
     v = m["verifications"]["portsim"]
@@ -114,12 +126,21 @@ def check(task, fake: FakeLiteLLM, ctx: dict, env: str, expected: dict) -> dict:
         problems.append(f"the agent was offered {NOTICE_TOOL}: {seen}")
     breakpoints = [json.dumps(body).count('"cache_control"') for _, _, body in fake.requests]
 
-    calls = exchanges(json.loads(trajectory(response["agent_trajectory_s3_uri"])))
+    if held(week) != held(json.loads(json.dumps(played.data()))):
+        problems.append("data/get differs from the week played in process")
+    record = json.loads(trajectory(response["agent_trajectory_s3_uri"]))
+    calls = exchanges(record)
+    opening = next(m["content"] for m in record["messages"] if m["role"] == "user")
+    if env == MARINE_ENV and pilots_and_tugs(task, watches, 0) not in opening:
+        problems.append("the opening lacks the pilots and tugs")
     watch, times, delivered, due = 0, {}, [], []
     for name, result in calls:
         if name == "get_time":
             times.setdefault(watch, []).append(result["current_time"])
             continue
+        if (name == "get_situation" and env == MARINE_ENV
+                and not result["situation"].endswith("\n\n" + pilots_and_tugs(task, watches, watch))):
+            problems.append(f"get_situation in watch {watch} lacks the pilots and tugs as known then")
         if result["messages"] != due:
             problems.append(f"{name} in watch {watch} carried {result['messages']}, not {due}")
         if due:
@@ -172,7 +193,8 @@ def main() -> None:
     reference = next(r for r in references if r["task_id"] == task.task_id)
     plans = reference["rolling"]["plans"]
     policy = world.naive if args.policy == "naive" else lambda w: plan_from_list(plans[w.watch])
-    turns = script(policy_rows(task, policy, week), args.double_advance)
+    rows, played = policy_rows(task, policy, week)
+    turns = script(rows, args.double_advance)
     expected = {k: v for k, v in reference[args.policy].items() if k != "plans"}
     with tempfile.TemporaryDirectory() as tmp:
         bundle, name = args.env, "week"
@@ -190,7 +212,7 @@ def main() -> None:
     if not instance:
         sys.exit("the run stored no instance")
     ctx = context(instance[-1])
-    report = check(task, fake, ctx, args.env, expected)
+    report = check(task, fake, ctx, args.env, expected, played)
     if args.out:
         args.out.write_text(json.dumps(ctx["metadata"]["verifications"]["portsim"]["results"][0]["episode"],
                                        indent=2, sort_keys=True) + "\n")
