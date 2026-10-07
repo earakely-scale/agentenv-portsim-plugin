@@ -33,6 +33,7 @@ PortSimEnv = "https://github.com/adithya-s-k/FineEnvs/tree/main/07-simulation-en
 
 [project.entry-points."agent_env.bundles"]
 portsim = "agentenv_portsim.bundles"
+portsim-live = "agentenv_portsim.bundles"
 
 [project.entry-points."agent_env.cli_plugins"]
 portsim = "agentenv_portsim.cli:portsim"
