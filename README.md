@@ -486,6 +486,20 @@ PYTHONPATH=tests .venv/bin/python scripts/live_e2e.py                      # one
 PYTHONPATH=tests .venv/bin/python scripts/live_e2e.py --double-advance 2   # skips watch 2 with two advances in a row
 ```
 
+### The first live results
+
+GPT-6.1 Sol and Claude Sonnet 5.5 played all 15 live weeks once each on local Docker, in sweeps `live-pilot-*` and
+`live-*`, for $6.80 in all ([`results/live.md`](results/live.md)):
+
+| Model | Mean reward (95% CI) | Rolling reference | Naive reference | Optimal weeks | Median turns | Cost per episode |
+|---|---|---:|---:|---:|---:|---:|
+| GPT-6.1 Sol | 0.957 (0.916 to 0.991) | 1.000 | 0.202 | 10 of 15 | 13 | $0.06 |
+| Claude Sonnet 5.5 | 0.904 (0.854 to 0.945) | 1.000 | 0.202 | 2 of 15 | 8 | $0.32 |
+
+Every run reached the end of its week with a feasible plan and passed the validity audit, and none needed an excuse.
+Two attempts failed for reasons outside the episode (two local deploys racing for a host port, and a provider timeout)
+and passed on retry.
+
 ## Built on the AgentEnv Framework
 
 This plugin is built on the [AgentEnv Framework](https://www.agentenvframework.com)

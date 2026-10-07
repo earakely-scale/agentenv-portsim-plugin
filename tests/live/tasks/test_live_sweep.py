@@ -209,7 +209,7 @@ Spend: $5.90 known; 1 attempts with no spend recorded, $6.00 at the cap. Attempt
 
 ### anthropic/claude-sonnet-5-5
 
-| Task | Tier | Ships | Watches | Rolling (cost, reward) | Naive (cost, reward) | r1 | r2 | Mean |
+| Task | Tier | Ships | Watches | Rolling (cost, reward) | Naive (cost, reward) | live-pilot r1 | live-more r1 | Mean |
 |---|---|---:|---:|---|---|---:|---:|---:|
 | dock-24B-w07x1-busy-0 | busy | 17 | 7 | 226 (1.000) | 693 (0.202) | 0.812 | – | 0.812 |
 | dock-36A-w35x1-standard-0 | standard | 19 | 5 | 10 (1.000) | 274 (0.207) | 1.000 | 0.900 | 0.950 |

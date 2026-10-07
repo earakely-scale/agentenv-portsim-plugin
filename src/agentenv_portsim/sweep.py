@@ -453,7 +453,7 @@ class Pooled:
         reps = [(s.name, rep) for s in mine for rep in range(1, s.k + 1)]
         lines = ["", f"### {model}", "",
                  "| Task | Tier | Ships | Published (reward, end, turns) | "
-                 + " | ".join(f"r{i}" for i in range(1, len(reps) + 1)) + " | Ours mean | Diff |",
+                 + " | ".join(_rep_labels(reps)) + " | Ours mean | Diff |",
                  "|---|---|---:|---|" + "---:|" * (len(reps) + 2)]
         for t in [t for t in self.pack if any(t in s.tasks for s in mine)]:
             e = self.published.get((spec, t))
@@ -492,6 +492,12 @@ class Pooled:
             f"| {key[0]} | {key[1]} | {key[2]} | {key[3]} | "
             f"{'–' if row['agent_reward'] is None else format(row['agent_reward'], '.3f')} | {row['reward']:.3f} |"
             for key, row in found]
+
+
+def _rep_labels(reps: list[tuple[str, int]]) -> list[str]:
+    if len({name for name, _ in reps}) == 1:
+        return [f"r{rep}" for _, rep in reps]
+    return [f"{name} r{rep}" for name, rep in reps]
 
 
 def report(sweeps: list[Sweep]) -> str:
@@ -550,7 +556,7 @@ class Live(Pooled):
         reps = [(s.name, rep) for s in mine for rep in range(1, s.k + 1)]
         lines = ["", f"### {model}", "",
                  "| Task | Tier | Ships | Watches | Rolling (cost, reward) | Naive (cost, reward) | "
-                 + " | ".join(f"r{i}" for i in range(1, len(reps) + 1)) + " | Mean |",
+                 + " | ".join(_rep_labels(reps)) + " | Mean |",
                  "|---|---|---:|---:|---|---|" + "---:|" * (len(reps) + 1)]
         for t in [t for t in self.pack if any(t in s.tasks for s in mine)]:
             ref = self.refs[t]
