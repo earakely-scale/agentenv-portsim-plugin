@@ -1,5 +1,6 @@
 """`agent-env portsim sweep`: dock-v1-eval tasks over models and reps under a spend cap, one `agent-env run` process
-per attempt, retried and resumed from results.jsonl; and the report against the published dock-eval50 run.
+per attempt, retried and resumed from results.jsonl; and the report against the published dock-eval50 run. With --live,
+the live weeks on portsim-live, reported against the stored rolling and naive references.
 
 G2_TASKS is fixed from the pack alone: the tiers share ten slots by largest remainder, and each tier gives the midpoints
 of equal slices of its tasks ordered by ship count."""
@@ -56,6 +57,7 @@ class Sweep:
     tasks: list[str]
     k: int
     episode_cap_usd: float
+    live: bool = False
 
     @property
     def out(self) -> Path:
@@ -116,15 +118,20 @@ def trajectory(uri: str) -> bytes:
         return get_config().get_object_store_at(uri).get(uri)
 
 
-def task_ids(spec: str) -> list[str]:
-    known = [t.task_id for t in tasks.pack_tasks(EVAL_PACK)]
+def task_ids(spec: str, live: bool = False) -> list[str]:
+    """Live, ``all`` is the G2 weeks first, then the fewest watches, so a spend stop drops the costliest weeks."""
+    if live:
+        watches = {r["task_id"]: len(r["watch_hours"]) for r in tasks.live_references() if r["qualifies"]}
+        known = sorted(watches, key=lambda t: (t not in G2_TASKS, watches[t], t))
+    else:
+        known = [t.task_id for t in tasks.pack_tasks(EVAL_PACK)]
     if spec == "all":
         return known
     if spec == "g2":
-        return G2_TASKS
+        return [t for t in G2_TASKS if t in known]
     ids = spec.split(",")
     if unknown := [i for i in ids if i not in known]:
-        raise click.UsageError(f"not {EVAL_PACK} task ids: {', '.join(unknown)}")
+        raise click.UsageError(f"not {'live ' if live else ''}{EVAL_PACK} task ids: {', '.join(unknown)}")
     return ids
 
 
@@ -134,12 +141,14 @@ def prepare(sweep: Sweep) -> None:
         raise click.UsageError("a sweep's name is 1 to 41 lowercase letters, digits and dashes, starting with no dash")
     path = sweep.out / "sweep.json"
     if path.is_file():
-        if json.loads(path.read_text()) != asdict(sweep):
+        if {"live": False, **json.loads(path.read_text())} != asdict(sweep):
             raise click.UsageError(f"{path} is another sweep; run it with its own models, tasks, k and episode cap: "
                                    f"{path.read_text().strip()}")
         return
-    tasks.generate(EVAL_PACK, sweep.out / "bundle", task_ids=sweep.tasks, episode_cap_usd=sweep.episode_cap_usd)
-    path.write_text(json.dumps(asdict(sweep), indent=2) + "\n")
+    tasks.generate(EVAL_PACK, sweep.out / "bundle", task_ids=sweep.tasks, episode_cap_usd=sweep.episode_cap_usd,
+                   live=sweep.live)
+    spec = {key: value for key, value in asdict(sweep).items() if key != "live" or value}
+    path.write_text(json.dumps(spec, indent=2) + "\n")
 
 
 def preflight(sweep: Sweep, task: str) -> str | None:
@@ -207,6 +216,10 @@ def outcome(sweep: Sweep, attempt: Attempt, earlier: list[dict], interrupted: bo
            **{key: s.get(key) for key in ("end_reason", "turns", "tool_calls", "input_tokens", "output_tokens",
                                           "cached_tokens", "cache_write_tokens")},
            "cost_usd": spent, "agent_reward": s.get("reward"), "transcript": transcript}
+    if sweep.live:
+        row |= {"submitted": episode["end_reason"] == "done" if scored else None,
+                "checks": sum(episode["planning_calls"]) if scored else None, "watches": episode.get("watches"),
+                "excused_cost": grade.get("excused_cost"), "regret": grade.get("regret")}
     row["retryable"] = not final([*earlier, row])
     return row
 
@@ -381,16 +394,15 @@ class Pooled:
     def attempts(self, model: str | None = None) -> list[tuple[str, dict]]:
         return [(key[0], r) for key, rs in self.runs.items() for r in rs if model in (None, key[1])]
 
-    def header(self) -> list[str]:
+    def header(self, title: str, harness: str) -> list[str]:
         known, unknown, at_cap = self.spend(self.attempts())
         attempts = len(self.attempts())
         unscored = sum(row is None for row in self.scored.values())
         return [
-            "# PortSim parity: portsim-llm against the published dock-eval50 run", "",
+            title, "",
             "Sweeps: " + "; ".join(f"`{s.name}` ({', '.join(s.models)}; {len(s.tasks)} tasks, k={s.k}, episode cap "
                                    f"${s.episode_cap_usd:g})" for s in self.sweeps) + ".",
-            f"Harness: portsim-llm. Published: {self.index['run']} @ b0f4c2f, {len(self.index['episodes'])} episodes.",
-            "",
+            harness, "",
             f"Spend: ${known:.2f} known; {unknown} attempts with no spend recorded, ${at_cap:.2f} at the cap. "
             f"Attempts: {attempts}, retries: {attempts - sum(bool(rs) for rs in self.runs.values())}. "
             f"Unscored runs: {unscored} of {len(self.runs)}.",
@@ -441,7 +453,7 @@ class Pooled:
         reps = [(s.name, rep) for s in mine for rep in range(1, s.k + 1)]
         lines = ["", f"### {model}", "",
                  "| Task | Tier | Ships | Published (reward, end, turns) | "
-                 + " | ".join(f"r{i}" for i in range(1, len(reps) + 1)) + " | Ours mean | Diff |",
+                 + " | ".join(_rep_labels(reps)) + " | Ours mean | Diff |",
                  "|---|---|---:|---|" + "---:|" * (len(reps) + 2)]
         for t in [t for t in self.pack if any(t in s.tasks for s in mine)]:
             e = self.published.get((spec, t))
@@ -469,9 +481,11 @@ class Pooled:
             lines.append(f"| {key[0]} | {key[1]} | {key[2]} | {key[3]} | {len(rs)} | {last} | ${spent:.2f} |")
         return lines
 
-    def differs(self) -> list[str]:
+    def differs(self, live: bool = False) -> list[str]:
+        """Live, only the runs whose agent saw the week end: an agent that stopped early has no reward of its own."""
         found = [(key, row) for key, row in self.scored.items()
-                 if row is not None and (row["agent_reward"] or 0.0) != row["reward"]]
+                 if row is not None and (not live or row["end_reason"] == "done")
+                 and (row["agent_reward"] or 0.0) != row["reward"]]
         if not found:
             return ["None."]
         return ["| Sweep | Model | Task | Rep | Agent reward | Verifier reward |", "|---|---|---|---:|---:|---:|"] + [
@@ -480,11 +494,19 @@ class Pooled:
             for key, row in found]
 
 
+def _rep_labels(reps: list[tuple[str, int]]) -> list[str]:
+    if len({name for name, _ in reps}) == 1:
+        return [f"r{rep}" for _, rep in reps]
+    return [f"{name} r{rep}" for name, rep in reps]
+
+
 def report(sweeps: list[Sweep]) -> str:
     """results/parity.md: each model's scored runs against the published dock-eval50 episodes of the same tasks. A
     task's value is the mean of its scored reps across the sweeps; the CIs bootstrap over tasks, as upstream's do."""
     pooled = Pooled(sweeps)
-    lines = [*pooled.header(), "", "## Per model", "",
+    lines = [*pooled.header("# PortSim parity: portsim-llm against the published dock-eval50 run",
+                            f"Harness: portsim-llm. Published: {pooled.index['run']} @ b0f4c2f, "
+                            f"{len(pooled.index['episodes'])} episodes."), "", "## Per model", "",
              "| Model | Published as | Tasks | Runs scored/planned | Ours mean (95% CI) "
              "| Published mean on these tasks (95% CI) | Mean diff ours−published (95% CI) "
              "| Submitted per rep / published | Feasible | Optimal | Median turns ours/published "
@@ -500,15 +522,86 @@ def report(sweeps: list[Sweep]) -> str:
     return "\n".join(lines) + "\n"
 
 
+class Live(Pooled):
+    """Live sweeps pooled per model and week, next to the stored rolling and naive references of the same weeks."""
+
+    def __init__(self, sweeps: list[Sweep]):
+        super().__init__(sweeps)
+        self.refs = {r["task_id"]: r for r in tasks.live_references()}
+
+    def model_line(self, model: str) -> str:
+        by_task = self.by_task(model)
+        ours = {t: statistics.mean(r["reward"] for r in rs) for t, rs in by_task.items()}
+        rows = [r for rs in by_task.values() for r in rs]
+        turns = [r["turns"] for r in rows if r["turns"] is not None]
+        cached = [r["cached_tokens"] for r in rows if r["cached_tokens"] is not None]
+        costs = [r["cost_usd"] for r in rows if r["cost_usd"] is not None]
+        known, unknown, _ = self.spend(self.attempts(model))
+        return "| " + " | ".join([
+            model, str(len(ours)), f"{len(rows)}/{sum(key[1] == model for key in self.runs)}",
+            _with_ci(list(ours.values())), _mean([self.refs[t]["rolling"]["reward"] for t in ours]),
+            _mean([self.refs[t]["naive"]["reward"] for t in ours]),
+            _count(_per_rep(by_task, lambda r: r["submitted"])), _count(_per_rep(by_task, lambda r: r["feasible"])),
+            _count(_per_rep(by_task, lambda r: r["feasible"] and r["plan_cost"] <= r["optimal_cost"])),
+            _mean([r["regret"] for r in rows if r["regret"] is not None]),
+            _mean([r["excused_cost"] for r in rows]),
+            f"{statistics.median(turns):g}" if turns else "–", _tokens(rows),
+            f"{statistics.mean(cached) / 1000:.1f}k" if cached else "–",
+            f"${statistics.mean(costs):.4f}" if costs else "–",
+            f"${known:.2f}" + (f" + {unknown} unknown" if unknown else ""),
+        ]) + " |"
+
+    def weeks(self, model: str) -> list[str]:
+        mine = [s for s in self.sweeps if model in s.models]
+        reps = [(s.name, rep) for s in mine for rep in range(1, s.k + 1)]
+        lines = ["", f"### {model}", "",
+                 "| Task | Tier | Ships | Watches | Rolling (cost, reward) | Naive (cost, reward) | "
+                 + " | ".join(_rep_labels(reps)) + " | Mean |",
+                 "|---|---|---:|---:|---|---|" + "---:|" * (len(reps) + 1)]
+        for t in [t for t in self.pack if any(t in s.tasks for s in mine)]:
+            ref = self.refs[t]
+            values = [self.scored.get((name, model, t, rep)) for name, rep in reps]
+            rewards = [v["reward"] for v in values if v]
+            lines.append(" | ".join([
+                f"| {t}", self.pack[t].difficulty, str(len(self.pack[t].ships)), str(len(ref["watch_hours"])),
+                f"{ref['rolling']['cost']} ({ref['rolling']['reward']:.3f})",
+                f"{ref['naive']['cost']} ({ref['naive']['reward']:.3f})",
+                *(f"{v['reward']:.3f}" if v else "–" for v in values),
+                f"{statistics.mean(rewards):.3f}" if rewards else "–",
+            ]) + " |")
+        return lines
+
+
+def live_report(sweeps: list[Sweep]) -> str:
+    """results/live.md: each model's scored live weeks next to the rolling and naive references of the same weeks. A
+    week's value is the mean of its scored reps across the sweeps; the CIs bootstrap over weeks."""
+    pooled = Live(sweeps)
+    lines = [*pooled.header("# PortSim live: portsim-llm on the live weeks",
+                            "Harness: portsim-llm. References: the rolling CP-SAT re-planner and the naive online "
+                            "policy, played on the same weeks (data/live/references.jsonl)."),
+             "", "## Per model", "",
+             "| Model | Tasks | Runs scored/planned | Mean reward (95% CI) | Rolling reference | Naive reference "
+             "| Reached done per rep | Feasible | Optimal | Mean regret | Mean excused cost | Median turns "
+             "| Tokens in/out per episode | Cached tokens per episode | Cost per episode | Spend |",
+             "|---|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---|---:|---:|---:|",
+             *(pooled.model_line(m) for m in pooled.models),
+             "", "## Week by week", *(line for m in pooled.models for line in pooled.weeks(m)),
+             "", "## Unscored runs", "", *pooled.unscored(),
+             "", "## Runs whose agent reward differs from the verifier's", "",
+             "Only runs whose agent saw the week end.", "", *pooled.differs(live=True)]
+    return "\n".join(lines) + "\n"
+
+
 @click.group("sweep")
 def sweep_group():
-    """Sweeps: dock-v1-eval tasks over models and reps under a spend cap, and the parity report."""
+    """Sweeps: dock-v1-eval tasks, or the live weeks, over models and reps under a spend cap, and their reports."""
 
 
 @sweep_group.command("run")
 @click.option("--name", required=True, help="The sweep's name: its results go to results/runs/<name>/.")
 @click.option("--models", required=True, help="Comma-separated LiteLLM model ids, e.g. anthropic/claude-sonnet-5-5.")
-@click.option("--tasks", "task_spec", required=True, help="all, g2, or comma-separated dock-v1-eval task ids.")
+@click.option("--tasks", "task_spec", required=True,
+              help="all, g2, or comma-separated dock-v1-eval task ids; with --live, of the live weeks.")
 @click.option("--cap-usd", type=float, required=True,
               help="The model spend the sweep stays within: no attempt starts that could take it past this at the "
                    "episode cap.")
@@ -516,25 +609,33 @@ def sweep_group():
 @click.option("--episode-cap-usd", type=float, default=5.0, show_default=True,
               help="An episode's cost cap, passed to the agent as PORTSIM_MAX_COST_USD.")
 @click.option("--parallel", type=click.IntRange(min=1), default=4, show_default=True, help="Attempts at a time.")
+@click.option("--live", is_flag=True, help="Play the live weeks on portsim-live.")
 def run_command(name: str, models: str, task_spec: str, cap_usd: float, k: int, episode_cap_usd: float,
-                parallel: int):
+                parallel: int, live: bool):
     """Play each model on each task k times, one `agent-env run` per attempt, logged under results/runs/<name>/logs.
     Each attempt is a line of results.jsonl; a failed one is retried up to twice, and running the sweep again plays
     the runs that aren't final yet. Ctrl-C tears the running attempts down."""
     if "" in models.split(","):
         raise click.UsageError("--models takes comma-separated model ids, none empty")
-    sweep = Sweep(name, models.split(","), task_ids(task_spec), k, episode_cap_usd)
+    sweep = Sweep(name, models.split(","), task_ids(task_spec, live), k, episode_cap_usd, live)
     prepare(sweep)
     raise SystemExit(run(sweep, cap_usd, parallel))
 
 
 @sweep_group.command("report")
 @click.argument("names", nargs=-1, required=True)
-@click.option("--out", type=click.Path(dir_okay=False, path_type=Path), default=Path("results/parity.md"),
-              show_default=True, help="The Markdown file to write.")
-def report_command(names: tuple[str, ...], out: Path):
-    """Compare the sweeps NAMES with the published dock-eval50 run, per model, tier and week."""
-    text = report([load(name) for name in names])
+@click.option("--live", is_flag=True, help="Report live sweeps against the rolling and naive references.")
+@click.option("--out", type=click.Path(dir_okay=False, path_type=Path),
+              help="The Markdown file to write. Default: results/parity.md, or results/live.md with --live.")
+def report_command(names: tuple[str, ...], live: bool, out: Path | None):
+    """Compare the sweeps NAMES with the published dock-eval50 run, per model, tier and week; with --live, the live
+    sweeps with the rolling and naive references, per model and week."""
+    sweeps = [load(name) for name in names]
+    if other := [s.name for s in sweeps if s.live != live]:
+        raise click.UsageError(f"{'not ' if live else ''}live sweeps: {', '.join(other)}; report them "
+                               f"{'without' if live else 'with'} --live")
+    text = (live_report if live else report)(sweeps)
+    out = out or Path("results/live.md" if live else "results/parity.md")
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(text)
     click.echo(f"Wrote {out}")
