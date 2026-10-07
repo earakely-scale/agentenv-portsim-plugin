@@ -3,8 +3,9 @@ the naive online policy, both through agentenv_portsim.world and graded as the l
 
 At every watch the re-planner solves the week as known, with the frozen windows pinned and every other ship berthing at
 or after the freeze line. It runs under four solver configurations (1 or 8 workers, with or without an earliest-finish
-tie-break) on a deterministic time limit; the first one's plans are stored. A week qualifies for the live tasks when at
-least 3 of the 4 reach the hindsight optimum. The tests replay the stored plans without ortools.
+tie-break) on a deterministic time limit, the 8 workers interleaved because CP-SAT's parallel portfolio doesn't
+reproduce otherwise; the first one's plans are stored. A week qualifies for the live tasks when at least 3 of the 4
+reach the hindsight optimum. The tests replay the stored plans without ortools.
 
     uv run --with ortools==9.15.6755 python scripts/live_references.py [--tasks id,...] [--out PATH]
 """
@@ -119,6 +120,7 @@ def solve(view: Task, fixed: Plan, before: int, hint: Plan, workers: int, tiebre
     solver = cp_model.CpSolver()
     solver.parameters.num_workers = workers
     solver.parameters.max_deterministic_time = DETERMINISTIC_SECONDS
+    solver.parameters.interleave_search = workers > 1
     status = solver.StatusName(solver.Solve(md))
     if status not in ("OPTIMAL", "FEASIBLE"):
         raise RuntimeError(f"{view.task_id}: the re-solve at the freeze line {before} is {status}")
