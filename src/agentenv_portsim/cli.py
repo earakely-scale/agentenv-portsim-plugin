@@ -15,7 +15,7 @@ from .tasks import tasks_group
 ENV_ID = "portsim"
 IMAGE = "agentenv-portsim-env"
 AGENT_ID = "portsim-llm"
-AGENT_IMAGE = "agentenv-portsim-llm"
+AGENT_IMAGE = "agentenv-portsim-agent"
 AGENT_MODEL = "anthropic/claude-sonnet-5-5"
 REPO = "https://github.com/earakely-scale/agentenv-portsim-plugin"
 
