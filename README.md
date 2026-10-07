@@ -4,6 +4,11 @@
 [![License: Apache-2.0, data CC BY-SA 4.0](https://img.shields.io/badge/license-Apache--2.0%20%C2%B7%20data%20CC%20BY--SA%204.0-blue)](NOTICE)
 [![Built on the AgentEnv Framework](https://img.shields.io/badge/built%20on-AgentEnv%20Framework-6f42c1)](https://www.agentenvframework.com)
 
+<p align="center">
+  <a href="https://github.com/earakely-scale/agentenv-portsim-plugin/releases/tag/replays-2026-10-07"><img src="assets/live-port.webp" width="100%" alt="GPT-6.1 Sol plays a live week at the Port of Barcelona on AgentEnv: the virtual clock runs, bulletins arrive, and the agent re-plans watch by watch on PortSimEnv's 3D quay"></a>
+</p>
+<p align="center"><sub><b>The live port:</b> GPT-6.1 Sol runs a week at APM Terminals Barcelona as it unfolds on AgentEnv's virtual clock. A closure, an emergency, late ships, a crane outage, a gale and bunched arrivals come in as bulletins; it re-plans each watch and ends at the hindsight optimum (reward 1.0). Replayed on PortSimEnv's 3D viewer; <a href="https://github.com/earakely-scale/agentenv-portsim-plugin/releases/tag/replays-2026-10-07">full films</a>. Twin © OpenStreetMap contributors (ODbL).</sub></p>
+
 An agent gets one container quay at the Port of Barcelona, the ships that really called there in a week of 2024, and a
 week that has just gone wrong: late and bunched ships, closed quay sections, crane breakdowns, gales, emergencies. It
 decides when, where and with how many cranes every ship docks, and its plan is graded once, deterministically,
@@ -538,7 +543,9 @@ agent-env portsim record --sweep live-pilot-gpt --model openai/gpt-6.1-sol --tas
   held for `--step-seconds`. An advance first runs the clock to the watch it opens, at `--hours-per-second`, while
   the panel reads "Advancing to watch N…"; when the clock gets there, the watch's bulletins arrive in the transcript,
   the panel and the chart. After the last step the week plays out. `--gif` also writes an 800 px GIF; the one above
-  is a take with `--size 1280x720 --step-seconds 1 --hours-per-second 16`. It needs Chrome or Chromium and ffmpeg; a
+  is a take with `--size 1280x720 --step-seconds 1 --hours-per-second 16`. `--layout scene` films the 3D quay alone,
+  with the watch panel over it; the animation at the top of this page is a take with `--layout scene --view quayside
+  --size 1024x576 --step-seconds 0.9 --hours-per-second 15`, encoded as WebP. It needs Chrome or Chromium and ffmpeg; a
   minute of 1080p at 30 fps takes about 4 minutes to film.
 - First use downloads the 3D twin, 4.2 MB of OpenStreetMap data (ODbL 1.0) that isn't stored here, from
   PortSimEnv's public bucket into `~/.cache/agentenv-portsim/` (`$XDG_CACHE_HOME/agentenv-portsim/` if that is set),
