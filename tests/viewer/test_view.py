@@ -133,6 +133,14 @@ def test_anything_else_is_not_found(get, path):
     assert get(path)[0] == 404
 
 
+def test_the_server_binds_the_host_it_is_given(runs, tmp_path):
+    server = serve(runs, tmp_path, 0, "0.0.0.0")
+    try:
+        assert server.server_address[0] == "0.0.0.0"
+    finally:
+        server.server_close()
+
+
 def test_the_server_answers_on_loopback(runs, tmp_path):
     server = serve(runs, tmp_path, 0)
     threading.Thread(target=server.serve_forever, daemon=True).start()

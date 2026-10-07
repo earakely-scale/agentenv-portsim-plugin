@@ -547,14 +547,14 @@ departed, berthed, frozen or open. Replays read the run records only and call no
 
 ```bash
 agent-env portsim view                  # every sweep under results/runs, at http://127.0.0.1:8237/viewer/
-agent-env portsim view g2 live-sonnet   # just these; --port to serve elsewhere
+agent-env portsim view g2 live-sonnet   # just these; --port and --host to serve elsewhere
 agent-env portsim record --sweep live-pilot-gpt --model openai/gpt-6.1-sol --task dock-24B-w07x1-busy-0 \
     --out live-week.mp4 --gif live-week.gif
 ```
 
-- `view` serves the viewer on loopback, read-only, with upstream's `/api` routes over the run records. A v1 run is
-  regraded from its final plan. A live run is replayed through its week from the recorded tool calls, and every
-  output must come out as recorded; an episode that doesn't is listed on the overview with the call that differs.
+- `view` serves the viewer read-only, on loopback unless `--host` says otherwise (`0.0.0.0` in a container), with
+  upstream's `/api` routes over the run records. A v1 run is regraded from its final plan. A live run is replayed
+  through its week from the recorded tool calls, and every output must come out as recorded; an episode that doesn't is listed on the overview with the call that differs.
 - The viewer is copied unchanged into `src/agentenv_portsim/web/upstream/` ([VENDORED.md](VENDORED.md)).
   `web/ext/` adds an overview of the sweeps, the live week's watch panel and chart marks, and the hooks `record`
   drives.
