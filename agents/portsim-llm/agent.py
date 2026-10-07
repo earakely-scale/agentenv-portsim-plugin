@@ -41,6 +41,12 @@ PRICES = {  # USD per 1M tokens: input, output, cache read. LiteLLM public price
     "anthropic/claude-sonnet-5-5": (2.00, 10.00, 0.20),
     "openai/gpt-6.1-sol": (2.00, 10.00, 0.10),
     "fireworks_ai/glm-5p3-flash": (0.15, 0.50, 0.03),
+    # The open models upstream evaluated, through the Hugging Face router (https://router.huggingface.co/v1): its
+    # /v1/models prices for each provider, 2026-10-07, with cache reads charged as input.
+    "Qwen/Qwen3.8-2.4T-A95B:together": (2.00, 6.00, 2.00),
+    "Qwen/Qwen3.8-27B:ovhcloud": (0.47, 3.19, 0.47),
+    "zai-org/GLM-5.3-Flash:baseten": (0.15, 0.50, 0.15),
+    "zai-org/GLM-5.3:together": (1.40, 4.40, 1.40),
 }
 
 
