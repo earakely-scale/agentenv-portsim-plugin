@@ -24,6 +24,8 @@ licensed under the Apache License, Version 2.0. Derived from it:
 - scripts/live_references.py: the CP-SAT model in solve() is adapted from optimal_plan in
   envs/berth_planning/core/berth_core/solve.py, with frozen windows pinned and the rest held at or
   after the freeze line.
+- src/agentenv_portsim/web/upstream/: PortSimEnv's viewer, copied unchanged from
+  envs/berth_planning/openenv/berth_openenv/web/.
 
 Data licensed under CC BY-SA 4.0 (data/LICENSE), not under the Apache License:
 
