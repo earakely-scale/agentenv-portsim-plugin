@@ -109,9 +109,14 @@ def test_a_sweep_resumes_its_runs_that_are_not_final_and_refuses_other_settings(
     assert [a[a.index("--task") + 1] for a in fake.runs()] == [T1, T2]
     for other in (["--models", GPT, "--tasks", f"{T1},{T2}", "--episode-cap-usd", "0.5"],
                   ["--models", SONNET, "--tasks", T1, "--episode-cap-usd", "0.5"],
-                  [*args, "--k", "2"], ["--models", SONNET, "--tasks", f"{T1},{T2}"]):
+                  [*args, "--k", "2"], ["--models", SONNET, "--tasks", f"{T1},{T2}"],
+                  [*args, "--hf-bill-to", "ScaleAI"]):
         refused = sweep_run(*other, "--cap-usd", "5")
         assert refused.exit_code == 2 and "is another sweep" in refused.output
+    billed = sweep_run(*args, "--cap-usd", "5", "--hf-bill-to", "ScaleAI", name="b")
+    assert billed.exit_code == 0, billed.output
+    assert json.loads((sweep.RUNS / "b/sweep.json").read_text())["hf_bill_to"] == "ScaleAI"
+    assert json.loads((sweep.RUNS / f"b/bundle/tasks/{T1}.json").read_text())[2]["env_vars"]["HF_BILL_TO"] == "ScaleAI"
 
 
 def test_failures_are_retried_twice_a_capped_episode_is_final_and_a_deploy_failure_costs_nothing(fake):
@@ -137,6 +142,14 @@ def test_failures_are_retried_twice_a_capped_episode_is_final_and_a_deploy_failu
     assert f"failed {SONNET} {T2} r1 a1: cost_cap final ($0.4900)" in result.output
     assert f"failed {SONNET} {T1} r1 a3: provider_error final ($0.0500)" in result.output
     assert f"{SONNET}: 1 scored, 2 unscored, 0 not final, of 3 runs; $0.86 spent" in result.output
+
+
+def test_a_run_the_provider_refused_is_final(fake):
+    fake.script({"*": [{"context": agent_failed(T1, SONNET, "provider_refused", cost=0), "exit": 1}]})
+    result = sweep_run("--models", SONNET, "--tasks", T1, "--cap-usd", "1", "--episode-cap-usd", "0.5")
+    assert result.exit_code == 0, result.output
+    assert [brief(r) for r in rows()] == [(T1, 1, "failed", "provider_refused", 0.0, False)]
+    assert f"failed {SONNET} {T1} r1 a1: provider_refused final ($0.0000)" in result.output
 
 
 @pytest.mark.parametrize(("context", "code"), [(None, "no_instance"), (timed_out(), "TimeoutError"),

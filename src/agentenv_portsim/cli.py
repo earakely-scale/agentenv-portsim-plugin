@@ -1,7 +1,9 @@
 """`agent-env portsim`: build and register the PortSim env and the portsim-llm agent, write the eval tasks, sweep
 models over them, and watch the recorded runs."""
 
+import json
 import subprocess
+from importlib.metadata import PackageNotFoundError, distribution
 from pathlib import Path
 
 import click
@@ -29,14 +31,30 @@ def portsim():
     recorded runs."""
 
 
-def _checkout(source: Path | None) -> Path:
-    """The checkout of this repo to build from: ``source``, else the one an editable install runs from, else the cwd."""
+def _installed_commit() -> str | None:
+    """The git commit a `pip install git+...` or uv git source installed this package from (PEP 610), if it did."""
+    try:
+        direct = json.loads(distribution("agentenv-portsim").read_text("direct_url.json") or "{}")
+    except PackageNotFoundError:
+        return None
+    return direct.get("vcs_info", {}).get("commit_id")
+
+
+def _checkout(source: Path | None) -> str:
+    """What to build from: ``source``, else the checkout an editable install runs from, else the cwd, else the commit
+    of this repo a git install came from, which Docker fetches itself as a git build context."""
     for root in [source] if source else [Path(__file__).resolve().parents[2], Path.cwd()]:
         if (root / "Dockerfile").is_file() and (root / "src/agentenv_portsim").is_dir():
-            return root
+            return str(root)
     if source:
         raise click.UsageError(f"{source} is not a checkout of agentenv-portsim-plugin (no Dockerfile and src/)")
+    if commit := _installed_commit():
+        return f"{REPO}.git#{commit}"
     raise click.UsageError(f"no checkout of agentenv-portsim-plugin found; clone {REPO} and pass --source")
+
+
+def _context(root: str, subdir: str) -> str:
+    return f"{root}:{subdir}" if "#" in root else str(Path(root) / subdir)
 
 
 def _docker_platform() -> str:
@@ -51,9 +69,9 @@ def _docker_platform() -> str:
     return out.stdout.strip()
 
 
-def _register_agent(root: Path, build_platform: str) -> None:
+def _register_agent(root: str, build_platform: str) -> None:
     click.echo(f"Building {AGENT_IMAGE} for {build_platform}")
-    build = ["docker", "build", "--platform", build_platform, "-t", AGENT_IMAGE, str(root / "agents" / AGENT_ID)]
+    build = ["docker", "build", "--platform", build_platform, "-t", AGENT_IMAGE, _context(root, f"agents/{AGENT_ID}")]
     if subprocess.run(build).returncode:
         raise click.ClickException("docker build of the portsim-llm agent failed")
     artifact = DockerImageArtifact.put(id=AGENT_IMAGE, image_name=AGENT_IMAGE,
@@ -67,7 +85,8 @@ def _register_agent(root: Path, build_platform: str) -> None:
               help="Platform to build for. Default: the Docker host's (linux/arm64 on Apple Silicon); "
                    "remote sandboxes need linux/amd64.")
 @click.option("--source", type=click.Path(exists=True, file_okay=False, path_type=Path),
-              help="Checkout of this repo to build. Default: the one an editable install runs from, or the cwd.")
+              help="Checkout of this repo to build. Default: the one an editable install runs from, the cwd, or the "
+                   "GitHub commit a git install came from.")
 @click.option("--agent", is_flag=True, help="Also build the portsim-llm agent for the same platform and register it.")
 def setup(build_platform: str | None, source: Path | None, agent: bool):
     """Build the env image and register it as the MCP server env `portsim` on the `server` provider and as
@@ -75,7 +94,7 @@ def setup(build_platform: str | None, source: Path | None, agent: bool):
     root = _checkout(source)
     build_platform = build_platform or _docker_platform()
     click.echo(f"Building {IMAGE} for {build_platform} from {root}")
-    if subprocess.run(["docker", "build", "--platform", build_platform, "-t", IMAGE, str(root)]).returncode:
+    if subprocess.run(["docker", "build", "--platform", build_platform, "-t", IMAGE, root]).returncode:
         raise click.ClickException("docker build failed")
     click.echo("Storing the image (docker save, can take a minute)")
     artifact = DockerImageArtifact.put(id=IMAGE, image_name=IMAGE,

@@ -117,6 +117,10 @@ The run prints `tasks/smoke.json v1: passed` with the score (1), the time and th
 are stored under `~/.local/state/agent-env`. Run `agent-env` from inside the checkout, so it reads
 `.agentenv/config.toml`.
 
+Without a clone, `uv tool install agentenv-framework --with "agentenv-portsim @
+git+https://github.com/earakely-scale/agentenv-portsim-plugin"` installs the plugin from GitHub, and `setup` then has
+Docker build the images from the commit it was installed from.
+
 `setup` builds for the Docker host's own platform (`linux/arm64` on Apple Silicon). For Modal, switch
 `.agentenv/config.toml` to the `modal_vm` profile it describes, set its `repository_prefix` to your own GHCR
 namespace, and run `agent-env portsim setup --platform linux/amd64`, which pushes the image to
@@ -181,6 +185,20 @@ base_url = "https://your-litellm-proxy"
 api_key  = "secret:PORTSIM_MODEL_KEY"   # read through [stores.secret]; the local store takes it from the env var
 ```
 
+Or skip the proxy and use the [Hugging Face router](https://huggingface.co/docs/inference-providers) with a Hugging Face
+token, as upstream does for its open models:
+
+```toml
+[model]
+base_url = "https://router.huggingface.co/v1"
+api_key  = "env:HF_TOKEN"
+```
+
+with one of the open models upstream evaluated: `Qwen/Qwen3.8-2.4T-A95B:together`, `Qwen/Qwen3.8-27B:ovhcloud`,
+`zai-org/GLM-5.3-Flash:baseten` or `zai-org/GLM-5.3:together` (chat completions, streamed). To bill an organization
+instead of the token's own account, pass `--hf-bill-to <org>` to `tasks generate` or `sweep run`; the agent sends it as
+`X-HF-Bill-To`.
+
 Then build both images, write the eval tasks and play one:
 
 ```bash
@@ -198,10 +216,11 @@ What differs from upstream's harness:
   `"submitted": true` or after the 24th call.
 - **One endpoint.** Upstream's chains of fallback providers are gone; every model goes through the proxy.
 - **Cost.** Each turn's token usage is priced from a table pinned in the agent, which holds
-  `anthropic/claude-sonnet-5-5`, `openai/gpt-6.1-sol` and `fireworks_ai/glm-5p3-flash`; any other model fails before
-  its first request. A request whose usage never arrives (it failed, or the harness cut its stream) is charged the most
-  it could have cost. The episode stops before a request that could take its spend past `PORTSIM_MAX_COST_USD` ($5 in
-  the generated tasks).
+  `anthropic/claude-sonnet-5-5`, `openai/gpt-6.1-sol`, `fireworks_ai/glm-5p3-flash` and the four open models on the
+  Hugging Face router; any other model fails before its first request. A request whose usage never arrives (it failed,
+  or the harness cut its stream) is charged the most it could have cost, except one the provider refused (401, 402 or
+  403: the key or the account), which costs nothing and ends the run as `provider_refused`. The episode stops before a
+  request that could take its spend past `PORTSIM_MAX_COST_USD` ($5 in the generated tasks).
 - **Failures.** A model error after the SDK's retries, an env error, a turn that would start after the task's two
   hours, or the cost cap fails the run as an infrastructure error, with the episode so far, instead of scoring it.
 
@@ -219,7 +238,7 @@ agent-env portsim sweep report pilot   # results/parity.md
   [the comparison](#the-comparison-with-the-published-eval).
 - An attempt starts only if the spend so far plus the episode cap (`--episode-cap-usd`, default $5) of every attempt
   running, the new one included, stays within `--cap-usd`. An attempt whose spend isn't known counts at its cap.
-- A failed attempt is retried up to twice; an episode stopped at its cost cap is not. Running the same sweep again
+- A failed attempt is retried up to twice; an episode stopped at its cost cap, or refused by the provider, is not. Running the same sweep again
   resumes it. Ctrl-C, or an error in the sweep itself, tears the running attempts down and records them.
 - `report` compares each model with its episodes in the published dock-eval50 run (`data/published/`) on the same
   tasks: means with upstream's bootstrap CIs, the difference per task, per tier and week by week, with submitted,
