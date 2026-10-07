@@ -1,0 +1,161 @@
+"""PortSim live: one week at one quay, played in watches on the gateway's virtual clock.
+
+urn:portsim:live-load/v1 starts a week; each advance re-arms the clock at the next bulletin, and the gateway's
+triggers deliver the parties' notices through the hidden port_notice tool. data/get never reports reference plans."""
+
+import json
+import os
+from importlib.resources import files
+from typing import Annotated, Any
+
+import httpx
+from agentenv_protocol import AgentEnvEnvironment, DataPart, environment_card, extension, get_data, reset_data, tool
+from fastmcp import FastMCP
+from fastmcp.server.middleware import Middleware
+from pydantic import BaseModel, Field
+
+from berth_core import load_pack
+from berth_core.pack import DEFAULT_PACKS
+
+from .schedule import CLOCK_URI, END_WEEK_URI, LIVE_ENV, LIVE_LOAD_URI, NOTICE_TOOL, TOOLS, virtual_time
+from .world import Week
+
+PACKS = files("agentenv_portsim") / "data"
+EMPTY = {"task_id": None, "watches": None, "watch": None, "hour": None, "done": False, "end_reason": None,
+         "calls_used": 0, "planning_calls": [], "plan": [], "notices": [], "frozen": [], "refusals": [],
+         "excused": {"problems": [], "cost": []}, "audit": None, "grade": None, "reward": None}
+
+
+class Window(BaseModel):
+    ship: int = Field(description="ship id from the table")
+    berth_hour: int = Field(description="hour the ship berths (>= its arrival; from watch 1 on, >= the freeze line)")
+    section: int = Field(description="first (lowest-numbered) section the ship occupies")
+    cranes: int | None = Field(default=None, description="quay cranes working the ship (default: its planned cranes)")
+
+
+WindowsArg = Annotated[list[Window] | str, Field(
+    description='berth windows: [{"ship": 7, "berth_hour": 95, "section": 4, "cranes": 2}, ...]; '
+                'ships left out keep their confirmed windows')]
+
+
+def _json(obj: Any) -> str:
+    return json.dumps(obj, ensure_ascii=False, separators=(",", ":"))
+
+
+def _raw(plan):
+    if isinstance(plan, list):
+        return [p.model_dump(exclude_none=True) if isinstance(p, BaseModel) else p for p in plan]
+    return plan
+
+
+def _reply(week: Week, result: dict) -> str:
+    return _json({**result, "messages": week.drain()})
+
+
+@environment_card(name=LIVE_ENV)
+class PortSimLiveEnv(AgentEnvEnvironment):
+    def __init__(self):
+        self.pack = load_pack(None if os.environ.get("BERTH_TASKS_DIR") else [PACKS / p for p in DEFAULT_PACKS])
+        self.set_time_url: str | None = None
+        self.reset()
+
+    def create_app(self) -> FastMCP:
+        return self.mount(FastMCP(LIVE_ENV, middleware=[LiveEpisode(self)]))
+
+    @tool()
+    def get_situation(self) -> str:
+        """The current watch: the hour, the week as the port knows it now, your confirmed berth windows (departed,
+        berthed, frozen or open), the ships still without a window, and new messages."""
+        week = self._week()
+        return _reply(week, week.situation())
+
+    @tool()
+    def check_plan(self, plan: WindowsArg) -> str:
+        """Check berth windows without confirming them: your entries over your confirmed windows, on the week as
+        known now. Lists the ships with a rule problem or a cost, the plan's cost, and the entries confirm_berths would
+        refuse. Uses one of this watch's 3 planning calls."""
+        week = self._week(open_only=True)
+        return _reply(week, week.check(_raw(plan)))
+
+    @tool()
+    def confirm_berths(self, plan: WindowsArg) -> str:
+        """Confirm berth windows with the ships: each entry sets or changes one ship's window; ships left out keep
+        theirs. From watch 1 on, windows starting before the freeze line (6 hours from now) are frozen, and new ones
+        must start at or after it. Uses one of this watch's 3 planning calls."""
+        week = self._week(open_only=True)
+        return _reply(week, week.confirm(_raw(plan)))
+
+    @tool()
+    async def advance(self) -> str:
+        """End this watch: the port moves to the next bulletin, ships berth and sail on their confirmed windows, and
+        windows starting before the new freeze line freeze. The bulletin's messages arrive with your next tool result.
+        After the last watch, the rest of the week runs on your windows and is graded."""
+        week = self._week(open_only=True)
+        if week.last:
+            return _reply(week, week.finish("done"))
+        if self.set_time_url is None:
+            raise ValueError(f"the gateway clock is not synced: call {CLOCK_URI} sync_time first")
+        async with httpx.AsyncClient() as http:
+            response = await http.put(self.set_time_url, timeout=10, json={
+                "virtual_time": virtual_time(week.task, week.watches[week.watch + 1].hour),
+                "virtual_seconds_per_real_second": 0})
+            response.raise_for_status()
+        return _reply(week, week.open())
+
+    @tool()
+    def port_notice(self, event_id: str, name: str, text: str) -> str:
+        """Deliver one party's notice for this watch: the port applies the news and queues the message. Called by the
+        env's triggers."""
+        return _json(self._week(open_only=True).notice(event_id, name, text, "trigger"))
+
+    @extension(LIVE_LOAD_URI, description="Start a live week on the one-week task with this id.")
+    def live_load(self, task_id: str) -> dict:
+        try:
+            task = self.pack.get(task_id)
+        except KeyError:
+            raise ValueError(f"unknown task id {task_id!r}") from None
+        self.reset()
+        self.week = Week(task)
+        return {"task_id": task_id, "watches": len(self.week.watches)}
+
+    @extension(END_WEEK_URI, description="Run the rest of the week on the confirmed windows, grade it and audit it.")
+    def end_week(self) -> dict:
+        return self._week().end()
+
+    @extension(CLOCK_URI, description="Follow the gateway's virtual clock; advance re-arms it at each bulletin.")
+    async def sync_time(self, env_get_time_url: str) -> dict:
+        self.set_time_url = env_get_time_url.removesuffix("/clock/time") + "/clock/set-time"
+        async with httpx.AsyncClient() as http:
+            response = await http.get(env_get_time_url, timeout=10)
+            response.raise_for_status()
+        return {"env_get_time_url": env_get_time_url, "virtual_time": response.json()["virtual_time"]}
+
+    @reset_data
+    def reset(self) -> None:
+        self.week: Week | None = None
+
+    @get_data
+    def get(self) -> list[DataPart]:
+        return [DataPart(data=self.week.data() if self.week else EMPTY)]
+
+    def _week(self, open_only: bool = False) -> Week:
+        if self.week is None:
+            raise ValueError(f"no week loaded: load one with {LIVE_LOAD_URI}")
+        if open_only and self.week.done:
+            raise ValueError("the week is over")
+        return self.week
+
+
+class LiveEpisode(Middleware):
+    """Counts the agent's tools/calls, failed ones included; port_notice calls are the triggers', not the agent's."""
+
+    def __init__(self, env: PortSimLiveEnv):
+        self.env = env
+
+    async def on_call_tool(self, context, call_next):
+        if context.message.name != NOTICE_TOOL and self.env.week is not None:
+            self.env.week.calls += 1
+        return await call_next(context)
+
+    async def on_list_tools(self, context, call_next):
+        return sorted(await call_next(context), key=lambda t: [*TOOLS, NOTICE_TOOL].index(t.name))

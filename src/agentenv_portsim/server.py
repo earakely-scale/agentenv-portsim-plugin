@@ -17,6 +17,9 @@ from berth_core import Task, evaluate, grade, load_pack, parse_plan, plan_to_lis
 from berth_core.model import PlanError
 from berth_core.pack import DEFAULT_PACKS
 
+from .live import PortSimLiveEnv
+from .schedule import LIVE_ENV
+
 PACKS = files("agentenv_portsim") / "data"
 MAX_CHECKS = 10
 MAX_TOOL_CALLS = 24
@@ -176,8 +179,9 @@ class Episode(Middleware):
 
 
 def main() -> None:
-    PortSimEnv().create_app().run(transport="http", host=os.environ.get("MCP_HOST", "0.0.0.0"),
-                                  port=int(os.environ.get("MCP_PORT", "18765")), show_banner=False)
+    env = PortSimLiveEnv() if os.environ.get("ENVIRONMENT_NAME") == LIVE_ENV else PortSimEnv()
+    env.create_app().run(transport="http", host=os.environ.get("MCP_HOST", "0.0.0.0"),
+                         port=int(os.environ.get("MCP_PORT", "18765")), show_banner=False)
 
 
 if __name__ == "__main__":

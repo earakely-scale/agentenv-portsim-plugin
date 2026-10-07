@@ -1,0 +1,104 @@
+"""When each party's news reaches the planner in a live week, and the gateway triggers that deliver it.
+
+A one-week task's disruptions are revealed a fixed lead before the hour they are about, grouped into 6-hour bulletins
+(watches); closures are planned works, known at hour 0."""
+
+import re
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+
+from berth_core import Task
+from berth_core.prompts import _when
+
+LIVE_ENV = "portsim-live"
+LIVE_LOAD_URI = "urn:portsim:live-load/v1"
+END_WEEK_URI = "urn:portsim:end-week/v1"
+CLOCK_URI = "urn:agentenv:clock/v1"
+TOOLS = ("get_situation", "check_plan", "confirm_berths", "advance")
+NOTICE_TOOL = "port_notice"
+FREEZE_HOURS = 6
+BULLETIN_HOURS = 6
+PLANNING_CALLS = 3
+TURNS_PER_WATCH = 5
+BARRIER_SECONDS = 60
+LEADS = {"late": 24, "bunching": 24, "extra": 24, "priority": 24, "emergency": 12, "crane_outage": 24, "gale": 24}
+SPEAKERS = {"bunching": "Ship agents", "gale": "Harbour master", "emergency": "Harbour master",
+            "closure": "Terminal ops", "crane_outage": "Terminal ops", "priority": "Line desk"}
+HARBOUR_MASTER = "Harbour master"
+ONE_WEEK = re.compile(r"dock-\w+-w\d{2}x1-")
+TIME_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
+
+
+@dataclass(frozen=True)
+class Notice:
+    event_id: str
+    index: int
+    kind: str
+    name: str
+    hour: int
+    event_hour: int
+    text: str
+    event: dict
+
+
+@dataclass(frozen=True)
+class Watch:
+    index: int
+    hour: int
+    notices: tuple[Notice, ...]
+
+
+def _event_hour(task: Task, e: dict) -> int:
+    kind = e["type"]
+    if kind == "late":
+        return task.ships[e["ship"]].arrival - e["hours"]
+    if kind == "bunching":
+        return min(task.ships[s].planned_hour for s in e["ships"])
+    if kind in ("extra", "priority", "emergency"):
+        return task.ships[e["ship"]].arrival
+    return e["start"]
+
+
+def _own_ships(e: dict) -> list[int]:
+    return [e["ship"]] if e["type"] in ("late", "extra") else e["ships"] if e["type"] == "bunching" else []
+
+
+def schedule(task: Task) -> list[Watch]:
+    if not ONE_WEEK.match(task.task_id):
+        raise ValueError(f"{task.task_id} is not a one-week task: live weeks are one week")
+    events = task.disruptions
+    hours = [0 if e["type"] == "closure" else max(0, _event_hour(task, e) - LEADS[e["type"]]) for e in events]
+    own: dict[int, int] = {}
+    for e, h in zip(events, hours, strict=True):
+        for s in _own_ships(e):
+            own[s] = max(own.get(s, 0), h)
+    hours = [max(h, own.get(e["ship"], 0)) if e["type"] in ("priority", "emergency") else h
+             for e, h in zip(events, hours, strict=True)]
+    notices = [Notice(f"{e['type']}-{i}", i, e["type"],
+                      task.ships[e["ship"]].name if e["type"] in ("late", "extra") else SPEAKERS[e["type"]],
+                      hours[i], _event_hour(task, e), task.notices[i], e)
+               for i, e in enumerate(events)]
+    bulletins = sorted({h // BULLETIN_HOURS * BULLETIN_HOURS for h in hours} | {0})
+    return [Watch(k, b, tuple(n for n in notices if n.hour // BULLETIN_HOURS * BULLETIN_HOURS == b))
+            for k, b in enumerate(bulletins)]
+
+
+def triggers(watches: list[Watch]) -> list[dict]:
+    return [{"id": f"watch-{w.index}",
+             "when": {"type": "action", "tool": "advance", "where": {"result.watch": {"equals": w.index}}},
+             "barrier": {"at": "provoking_call", "timeout_seconds": BARRIER_SECONDS},
+             "actions": [{"type": "tool", "tool": NOTICE_TOOL,
+                          "args": {"event_id": n.event_id, "name": n.name, "text": n.text}} for n in w.notices]}
+            for w in watches[1:]]
+
+
+def max_turns(watches: int) -> int:
+    return TURNS_PER_WATCH * watches + 2
+
+
+def label(hour: int) -> str:
+    return _when(hour)
+
+
+def virtual_time(task: Task, hour: int) -> str:
+    return (datetime.strptime(task.week_start_utc, TIME_FORMAT) + timedelta(hours=hour)).strftime(TIME_FORMAT)
