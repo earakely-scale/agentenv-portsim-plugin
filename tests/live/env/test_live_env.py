@@ -72,14 +72,25 @@ async def test_no_week_loaded(tools, http):
 
 
 async def test_live_load_starts_a_one_week_task(env, http, pack, example):
-    assert (await invoke(http, LIVE_LOAD_URI, task_id=example.task_id)).json() == {"task_id": example.task_id,
-                                                                                    "watches": 7}
-    assert env.week.task is example and env.week.watch == 0
     unknown = await invoke(http, LIVE_LOAD_URI, task_id="no-such-task")
     assert (unknown.status_code, unknown.json()["error"]["message"]) == (500, "unknown task id 'no-such-task'")
     multi = next(t.task_id for t in pack.tasks if "x2-" in t.task_id)
     refused = await invoke(http, LIVE_LOAD_URI, task_id=multi)
     assert refused.json()["error"]["message"] == f"{multi} is not a one-week task: live weeks are one week"
+    assert env.week is None
+    assert (await invoke(http, LIVE_LOAD_URI, task_id=example.task_id)).json() == {"task_id": example.task_id,
+                                                                                    "watches": 7}
+    assert env.week.task is example and env.week.watch == 0
+
+
+async def test_an_env_plays_one_week_even_after_a_reset(env, live, http):
+    """A second load would replay the week with its news already seen, and the new week's audit couldn't tell."""
+    again = "a week was already loaded in this env: each live week needs a new deploy"
+    reload = await invoke(http, LIVE_LOAD_URI, task_id="dock-36A-w10x1-standard-0")
+    assert (reload.status_code, reload.json()["error"]["message"]) == (500, again)
+    assert env.week is live
+    await http.post("/agentenv", json={"jsonrpc": "2.0", "id": 1, "method": "data/reset"})
+    assert (await invoke(http, LIVE_LOAD_URI, task_id=live.task.task_id)).json()["error"]["message"] == again
     assert env.week is None
 
 

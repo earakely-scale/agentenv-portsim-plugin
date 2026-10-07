@@ -57,6 +57,7 @@ class PortSimLiveEnv(AgentEnvEnvironment):
     def __init__(self):
         self.pack = load_pack(None if os.environ.get("BERTH_TASKS_DIR") else [PACKS / p for p in DEFAULT_PACKS])
         self.set_time_url: str | None = None
+        self.loaded = False
         self.reset()
 
     def create_app(self) -> FastMCP:
@@ -104,14 +105,18 @@ class PortSimLiveEnv(AgentEnvEnvironment):
     def port_notice(self, event_id: str, name: str, text: str) -> str:
         return _json(self._week(open_only=True).notice(event_id, name, text, "trigger"))
 
-    @extension(LIVE_LOAD_URI, description="Start a live week on the one-week task with this id.")
+    @extension(LIVE_LOAD_URI, description="Start a live week on the one-week task with this id; an env plays one week.")
     def live_load(self, task_id: str) -> dict:
+        """Loading again would replay the week with its news already seen, unseen by the audit."""
+        if self.loaded:
+            raise ValueError("a week was already loaded in this env: each live week needs a new deploy")
         try:
             task = self.pack.get(task_id)
         except KeyError:
             raise ValueError(f"unknown task id {task_id!r}") from None
         self.reset()
         self.week = Week(task)
+        self.loaded = True
         return {"task_id": task_id, "watches": len(self.week.watches)}
 
     @extension(END_WEEK_URI, description="Run the rest of the week on the confirmed windows, grade it and audit it.")
