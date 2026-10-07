@@ -1,4 +1,5 @@
-"""PortSim live: one week at one quay, played in watches on the gateway's virtual clock.
+"""PortSim live: one week at one quay, played in watches on the gateway's virtual clock; PortSim marine: the same
+week with the port's pilots and tugs.
 
 urn:portsim:live-load/v1 starts a week; each advance re-arms the clock at the next bulletin, and the gateway's
 triggers deliver the parties' notices through the hidden port_notice tool. data/get never reports reference plans."""
@@ -10,13 +11,15 @@ from typing import Annotated, Any
 
 import httpx
 from agentenv_protocol import AgentEnvEnvironment, DataPart, environment_card, extension, get_data, reset_data, tool
-from berth_core import load_pack
+from berth_core import TaskPack, load_pack
 from berth_core.pack import DEFAULT_PACKS
 from fastmcp import FastMCP
 from fastmcp.server.middleware import Middleware
 from pydantic import BaseModel, Field
 
-from .schedule import CLOCK_URI, END_WEEK_URI, LIVE_ENV, LIVE_LOAD_URI, NOTICE_TOOL, TOOLS, virtual_time
+from . import marine
+from .marine import MarineWeek
+from .schedule import CLOCK_URI, END_WEEK_URI, LIVE_ENV, LIVE_LOAD_URI, MARINE_ENV, NOTICE_TOOL, TOOLS, virtual_time
 from .world import Week
 
 PACKS = files("agentenv_portsim") / "data"
@@ -53,14 +56,21 @@ def _reply(week: Week, result: dict) -> str:
 
 @environment_card(name=LIVE_ENV)
 class PortSimLiveEnv(AgentEnvEnvironment):
+    ENV = LIVE_ENV
+    WEEK = Week
+
     def __init__(self):
-        self.pack = load_pack(None if os.environ.get("BERTH_TASKS_DIR") else [PACKS / p for p in DEFAULT_PACKS])
+        self.pack = self.task_pack()
         self.set_time_url: str | None = None
         self.loaded = False
         self.reset()
 
+    @staticmethod
+    def task_pack() -> TaskPack:
+        return load_pack(None if os.environ.get("BERTH_TASKS_DIR") else [PACKS / p for p in DEFAULT_PACKS])
+
     def create_app(self) -> FastMCP:
-        return self.mount(FastMCP(LIVE_ENV, middleware=[LiveEpisode(self)]))
+        return self.mount(FastMCP(self.ENV, middleware=[LiveEpisode(self)]))
 
     @tool(description="The current watch: the hour, the week as the port knows it now, your confirmed berth windows "
                       "(departed, berthed, frozen or open), the ships still without a window, and new messages.")
@@ -115,7 +125,7 @@ class PortSimLiveEnv(AgentEnvEnvironment):
         except KeyError:
             raise ValueError(f"unknown task id {task_id!r}") from None
         self.reset()
-        self.week = Week(task)
+        self.week = self.WEEK(task)
         self.loaded = True
         return {"task_id": task_id, "watches": len(self.week.watches)}
 
@@ -145,6 +155,13 @@ class PortSimLiveEnv(AgentEnvEnvironment):
         if open_only and self.week.done:
             raise ValueError("the week is over")
         return self.week
+
+
+@environment_card(name=MARINE_ENV)
+class PortSimMarineEnv(PortSimLiveEnv):
+    ENV = MARINE_ENV
+    WEEK = MarineWeek
+    task_pack = staticmethod(marine.pack)
 
 
 class LiveEpisode(Middleware):

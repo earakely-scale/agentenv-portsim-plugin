@@ -1,6 +1,7 @@
 """`agent-env portsim tasks`: a task pack as a folder bundle, one task per PortSim task, each played by portsim-llm with
 upstream's prompts and limits and graded by portsim-verifier; with --live, the qualifying one-week eval weeks played
-live on portsim-live and graded by portsim-live-verifier."""
+live on portsim-live and graded by portsim-live-verifier; with --marine, the qualifying marine weeks played on
+portsim-marine with the port's pilots and tugs."""
 
 import json
 from importlib.resources import files
@@ -9,7 +10,18 @@ from pathlib import Path
 import click
 from berth_core import Task, TaskPack, rules, situation
 
-from .schedule import END_WEEK_URI, LIVE_ENV, LIVE_LOAD_URI, MAX_TURNS, NOTICE_TOOL, PLANNING_CALLS, schedule, triggers
+from . import marine as marine_weeks
+from .schedule import (
+    END_WEEK_URI,
+    LIVE_ENV,
+    LIVE_LOAD_URI,
+    MARINE_ENV,
+    MAX_TURNS,
+    NOTICE_TOOL,
+    PLANNING_CALLS,
+    schedule,
+    triggers,
+)
 from .world import Week
 
 PACKS = files("agentenv_portsim") / "data"
@@ -76,26 +88,26 @@ def live_rules(task: Task) -> str:
     return rules(task, PLANNING_CALLS).split("\n\nTools:\n")[0] + "\n\n" + LIVE_RULES
 
 
-def live_steps(task: Task, episode_cap_usd: float) -> list[dict]:
+def live_steps(task: Task, episode_cap_usd: float, env: str = LIVE_ENV, week: type[Week] = Week) -> list[dict]:
     watches = schedule(task)
     return [
-        {"id": "deploy", "type": "deploy_env", "env_id": LIVE_ENV},
-        {"id": "load-task", "type": "apply_server_config", "env_id": LIVE_ENV,
-         "directives": [{"service": LIVE_ENV, "uri": LIVE_LOAD_URI, "args": {"task_id": task.task_id}}]},
-        {"id": "hide-port-notice", "type": "modify_env_tool_access", "env_id": LIVE_ENV, "action": "disable",
+        {"id": "deploy", "type": "deploy_env", "env_id": env},
+        {"id": "load-task", "type": "apply_server_config", "env_id": env,
+         "directives": [{"service": env, "uri": LIVE_LOAD_URI, "args": {"task_id": task.task_id}}]},
+        {"id": "hide-port-notice", "type": "modify_env_tool_access", "env_id": env, "action": "disable",
          "role": "default", "tools": [NOTICE_TOOL]},
-        {"id": "watches", "type": "register_env_triggers", "env_id": LIVE_ENV, "watch_roles": ["default"],
+        {"id": "watches", "type": "register_env_triggers", "env_id": env, "watch_roles": ["default"],
          "triggers": triggers(watches)},
-        {"id": "deploy-agent", "type": "deploy_agent", "a2a_agent_id": "portsim-llm", "env_ids": [LIVE_ENV],
+        {"id": "deploy-agent", "type": "deploy_agent", "a2a_agent_id": "portsim-llm", "env_ids": [env],
          "env_vars": {"PORTSIM_MAX_COST_USD": format(episode_cap_usd, "g")}},
-        {"id": "clock", "type": "sync_env_clock", "env_id": LIVE_ENV, "virtual_time": task.week_start_utc,
+        {"id": "clock", "type": "sync_env_clock", "env_id": env, "virtual_time": task.week_start_utc,
          "virtual_seconds_per_real_second": 0, "tolerate_missing_sync_time": False},
         {"id": "play", "type": "prompt_agent", "prompt_id": task.task_id, "system_prompt": live_rules(task),
-         "prompt": LIVE_OPENING.format(situation=situation(Week(task).view)), "max_turns": MAX_TURNS,
+         "prompt": LIVE_OPENING.format(situation=week(task).situation()["situation"]), "max_turns": MAX_TURNS,
          "model_params": {"max_tokens": 32000}, "timeout_seconds": 7200},
-        {"id": "end-week", "type": "apply_server_config", "env_id": LIVE_ENV,
-         "directives": [{"service": LIVE_ENV, "uri": END_WEEK_URI, "args": {}}]},
-        {"id": "grade", "type": "env_outcome_verifier", "env_id": LIVE_ENV, "file_artifact_id": "portsim-live-verifier",
+        {"id": "end-week", "type": "apply_server_config", "env_id": env,
+         "directives": [{"service": env, "uri": END_WEEK_URI, "args": {}}]},
+        {"id": "grade", "type": "env_outcome_verifier", "env_id": env, "file_artifact_id": "portsim-live-verifier",
          "verifier_id": "portsim", "score_aggregator": "weighted_average"},
     ]
 
@@ -115,24 +127,34 @@ def _write(path: Path, data: bytes) -> None:
 
 
 def generate(pack: str, out: Path, *, task_ids: list[str] | None = None, episode_cap_usd: float = 5.0,
-             live: bool = False) -> list[str]:
+             live: bool = False, marine: bool = False) -> list[str]:
     """Writes the bundle into ``out``: README.md, the verifier and tasks/<task_id>.json, for ``task_ids`` or the whole
-    pack (live: the qualifying weeks), in the pack's order."""
+    pack (live: the qualifying weeks; marine: the qualifying marine weeks, played live), in the pack's order."""
+    live = live or marine
     if live and task_ids is None:
-        task_ids = live_task_ids()
-    chosen = [t for t in pack_tasks(pack) if task_ids is None or t.task_id in task_ids]
-    if live:
+        task_ids = marine_weeks.task_ids() if marine else live_task_ids()
+    chosen = [t for t in (marine_weeks.pack().tasks if marine else pack_tasks(pack))
+              if task_ids is None or t.task_id in task_ids]
+    if marine:
+        _write(out / "README.md", f"PortSim marine {pack}: {len(chosen)} weeks, each played in watches by the "
+                                  f"portsim-llm agent on portsim-marine, with the port's pilots and tugs, and graded "
+                                  f"by portsim-live-verifier.\n\n{LICENCE}\n".encode())
+    elif live:
         _write(out / "README.md", f"PortSim live {pack}: {len(chosen)} weeks, each played in watches by the "
                                   f"portsim-llm agent on portsim-live and graded by portsim-live-verifier.\n\n"
                                   f"{LICENCE}\n".encode())
-        _write(out / "artifacts/portsim-live-verifier/verify.py", LIVE_VERIFIER.read_bytes())
     else:
         _write(out / "README.md", f"PortSim {pack}: {len(chosen)} tasks, each played by the portsim-llm agent and "
                                   f"graded by portsim-verifier.\n\n{LICENCE}\n".encode())
+    if live:
+        _write(out / "artifacts/portsim-live-verifier/verify.py", LIVE_VERIFIER.read_bytes())
+    else:
         _write(out / "artifacts/portsim-verifier/verify.py", VERIFIER.read_bytes())
     for task in chosen:
-        text = json.dumps((live_steps if live else steps)(task, episode_cap_usd), indent=2, ensure_ascii=False) + "\n"
-        _write(out / "tasks" / f"{task.task_id}.json", text.encode())
+        task_steps = (live_steps(task, episode_cap_usd, MARINE_ENV, marine_weeks.MarineWeek) if marine
+                      else live_steps(task, episode_cap_usd) if live else steps(task, episode_cap_usd))
+        _write(out / "tasks" / f"{task.task_id}.json",
+               (json.dumps(task_steps, indent=2, ensure_ascii=False) + "\n").encode())
     return [t.task_id for t in chosen]
 
 
@@ -144,15 +166,20 @@ def tasks_group():
 @tasks_group.command("generate")
 @click.option("--pack", type=click.Choice(PACK_NAMES), required=True, help="The task pack.")
 @click.option("--live", is_flag=True, help=f"Live weeks on portsim-live: the qualifying one-week {LIVE_PACK} weeks.")
+@click.option("--marine", is_flag=True,
+              help=f"Marine weeks on portsim-marine: the qualifying one-week {LIVE_PACK} weeks with the port's pilots "
+                   "and tugs.")
 @click.option("--out", type=click.Path(file_okay=False, path_type=Path),
-              help="The bundle folder to write. Default: results/bundles/<pack>, or <pack>-live with --live.")
-def generate_command(pack: str, live: bool, out: Path | None):
+              help="The bundle folder to write. Default: results/bundles/<pack>, or <pack>-live with --live, or "
+                   "<pack>-marine with --marine.")
+def generate_command(pack: str, live: bool, marine: bool, out: Path | None):
     """Write a bundle with one task per task in the pack: deploy the env, load the task, play it with portsim-llm on
     upstream's prompts and limits, and grade it with portsim-verifier. With --live, one task per qualifying week: load
-    it into portsim-live, play it in watches, end the week and grade it with portsim-live-verifier."""
-    if live and pack != LIVE_PACK:
-        raise click.UsageError(f"--live plays the one-week {LIVE_PACK} weeks, not {pack}")
-    out = out or Path("results/bundles") / (f"{pack}-live" if live else pack)
-    names = generate(pack, out, live=live)
+    it into portsim-live, play it in watches, end the week and grade it with portsim-live-verifier. With --marine, the
+    same on portsim-marine, with the port's pilots and tugs."""
+    if (live or marine) and pack != LIVE_PACK:
+        raise click.UsageError(f"{'--marine' if marine else '--live'} plays the one-week {LIVE_PACK} weeks, not {pack}")
+    out = out or Path("results/bundles") / (f"{pack}-marine" if marine else f"{pack}-live" if live else pack)
+    names = generate(pack, out, live=live, marine=marine)
     click.echo(f"Wrote {len(names)} tasks into {out}; play one with: agent-env run {out} --task {names[0]} "
                "--model <litellm model id>")
