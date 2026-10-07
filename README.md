@@ -9,6 +9,28 @@
 </p>
 <p align="center"><sub><b>The live port:</b> GPT-6.1 Sol runs a week at APM Terminals Barcelona as it unfolds on AgentEnv's virtual clock. A closure, an emergency, late ships, a crane outage, a gale and bunched arrivals come in as bulletins; it re-plans each watch and ends at the hindsight optimum (reward 1.0). Replayed on PortSimEnv's 3D viewer; <a href="https://github.com/earakely-scale/agentenv-portsim-plugin/releases/tag/replays-2026-10-07">full films</a>. Twin © OpenStreetMap contributors (ODbL).</sub></p>
 
+<details open>
+<summary><b>How a live task is built</b>: the task's steps, and the watch loop inside <code>play</code> (details in <a href="#the-live-port">The live port</a>)</summary>
+
+```mermaid
+flowchart TD
+  subgraph setup["1 · Set up the week"]
+    direction LR
+    deploy["<b>deploy_env</b><br/>portsim-live behind<br/>the AgentEnv gateway"] --> load["<b>apply_server_config</b><br/>live-load: the week<br/>as known at hour 0"] --> hide["<b>modify_env_tool_access</b><br/>hide port_notice<br/>from the agent"] --> watches["<b>register_env_triggers</b><br/>one trigger per watch"] --> agent["<b>deploy_agent</b><br/>portsim-llm"] --> clock["<b>sync_env_clock</b><br/>Mon 00:00, rate 0"]
+  end
+  subgraph play["2 · prompt_agent play: one conversation, watch by watch"]
+    direction LR
+    plan["get_situation<br/>check_plan · confirm_berths<br/>3 planning calls a watch,<br/>6-hour freeze"] --> advance["<b>advance</b><br/>the clock jumps to the<br/>next bulletin; ships berth<br/>and sail on their windows"] --> trigger{{"trigger watch-k<br/>calls port_notice:<br/>ships, harbour master,<br/>terminal ops, line desk"}} -->|"news arrives with<br/>the next tool result"| plan
+  end
+  subgraph finish["3 · Grade the week"]
+    direction LR
+    endweek["<b>apply_server_config</b><br/>end-week: the rest of the week<br/>runs on the confirmed windows"] --> grade["<b>env_outcome_verifier</b><br/>reward vs the hindsight optimum;<br/>audit: every bulletin on time"]
+  end
+  setup --> play -->|"after the last watch: done"| finish
+```
+
+</details>
+
 An agent gets one container quay at the Port of Barcelona, the ships that really called there in a week of 2024, and a
 week that has just gone wrong: late and bunched ships, closed quay sections, crane breakdowns, gales, emergencies. It
 decides when, where and with how many cranes every ship docks, and its plan is graded once, deterministically,

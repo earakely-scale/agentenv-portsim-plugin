@@ -95,7 +95,6 @@ def triggers(watches: list[Watch]) -> list[dict]:
             for w in watches[1:]]
 
 
-
 def label(hour: int) -> str:
     return _when(hour)
 
