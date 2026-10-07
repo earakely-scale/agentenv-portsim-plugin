@@ -1,12 +1,16 @@
-"""Play the portsim-live bundle's week through `agent-env run` with no model spend: the task deploys the env on the
-gateway and portsim-llm on local Docker, and tests/fake_litellm.py, on this machine, answers the agent with the naive
-online policy's turns, at one turn per watch. It fails unless each watch's trigger fired once, the agent never saw
-port_notice, every bulletin came with the first tool result after its advance and no other, get_time read the watch's
-hour and held still between turns, and the week scored the stored naive reward.
+"""Play a live week through `agent-env run` with no model spend: the task deploys the env (portsim-live, or
+portsim-marine) on the gateway and portsim-llm on local Docker, and tests/fake_litellm.py, on this machine, answers the
+agent with a reference policy's turns (the naive online policy, or the stored plans of the rolling re-planner), at one
+turn per watch. It fails unless each watch's trigger fired once, the agent never saw port_notice, every bulletin came
+with the first tool result after its advance and no other, get_time read the watch's hour and held still between turns,
+and the week scored the policy's stored reward.
 
 Run it from the checkout after `agent-env portsim setup --agent`, with the dev extra installed:
 
-    PYTHONPATH=tests python scripts/live_e2e.py [--double-advance WATCH] [--out week.json]
+    PYTHONPATH=tests python scripts/live_e2e.py [--env portsim-marine] [--task ID] [--policy rolling]
+        [--double-advance WATCH] [--out week.json]
+
+The bundle's `week` task plays the default week; another week is written as a one-task bundle in a temporary folder.
 """
 
 import argparse
@@ -17,13 +21,14 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
-from berth_core import plan_to_list
+from berth_core import plan_from_list, plan_to_list
 from fake_litellm import FakeLiteLLM
 
-from agentenv_portsim import tasks, world
-from agentenv_portsim.schedule import LIVE_ENV, NOTICE_TOOL, schedule, virtual_time
+from agentenv_portsim import marine, tasks, world
+from agentenv_portsim.schedule import LIVE_ENV, MARINE_ENV, NOTICE_TOOL, schedule, virtual_time
 from agentenv_portsim.sweep import context, trajectory
 
 TASK = "dock-24B-w07x1-busy-0"
@@ -43,26 +48,26 @@ class PausingFake(FakeLiteLLM):
         return paused
 
 
-def naive_rows(task) -> list[list[dict]]:
-    """The windows the naive policy confirms at each watch, as world.play confirms them."""
+def policy_rows(task, policy: world.Policy, week: type[world.Week]) -> list[list[dict]]:
+    """The windows the policy confirms at each watch, as world.play confirms them."""
     rows = []
 
-    def policy(week):
-        target = world.naive(week)
-        rows.append([r for r in plan_to_list(target) if week.plan.get(r["ship"]) != target[r["ship"]]])
+    def recorded(w):
+        target = policy(w)
+        rows.append([r for r in plan_to_list(target) if w.plan.get(r["ship"]) != target[r["ship"]]])
         return target
-    assert world.play(task, policy).refusals == []
+    assert world.play(task, recorded, week=week).refusals == []
     return rows
 
 
 def script(rows: list[list[dict]], double: int | None) -> list[dict]:
-    """One turn per watch: read the clock, confirm naive's changes, advance, then read the bulletin and the clock.
-    With ``double``, the turn before that watch advances twice, skipping a watch where naive changes nothing."""
+    """One turn per watch: read the clock, confirm the policy's changes, advance, then read the bulletin and the clock.
+    With ``double``, the turn before that watch advances twice, skipping a watch where the policy changes nothing."""
     turns, k = [], 0
     while k < len(rows):
         calls = [("get_time", {})] + ([("confirm_berths", {"plan": rows[k]})] if rows[k] else []) + [("advance", {})]
         if k + 1 == double:
-            assert not rows[double], f"naive changes windows at watch {double}"
+            assert not rows[double], f"the policy changes windows at watch {double}"
             calls.append(("advance", {}))
             k += 1
         if k < len(rows) - 1:
@@ -79,15 +84,14 @@ def exchanges(record: dict) -> list[tuple[str, dict]]:
     return [(m["name"], json.loads(m["content"])) for m in record["messages"] if m["role"] == "tool"]
 
 
-def check(task, fake: FakeLiteLLM, ctx: dict) -> dict:
+def check(task, fake: FakeLiteLLM, ctx: dict, env: str, expected: dict) -> dict:
     watches = schedule(task)
-    naive = next(r for r in tasks.live_references() if r["task_id"] == task.task_id)["naive"]
     m = ctx["metadata"]
     v = m["verifications"]["portsim"]
     week = v["results"][0]["episode"]
     response = next(p for p in ctx["prompt_responses"] if p.get("step_id") == "play")
     play = response["structured_output"]
-    entry = m["env_trigger_state"][LIVE_ENV]
+    entry = m["env_trigger_state"][env]
     capture = json.loads(trajectory(entry["object_url"]))
     problems = []
 
@@ -124,8 +128,8 @@ def check(task, fake: FakeLiteLLM, ctx: dict) -> dict:
         if name == "advance" and "watch" in result:
             watch = result["watch"]
             due = [{"hour": watches[watch].hour, "from": n.name, "text": n.text} for n in watches[watch].notices]
-    if calls[-1] != ("advance", {"done": True, "feasible": naive["feasible"], "cost": naive["cost"],
-                                 "reward": naive["reward"], "messages": []}):
+    if calls[-1] != ("advance", {"done": True, "feasible": expected["feasible"], "cost": expected["cost"],
+                                 "reward": expected["reward"], "messages": []}):
         problems.append(f"the episode ended on {calls[-1]}")
     for k, read in times.items():
         if set(read) != {virtual_time(task, watches[k].hour)}:
@@ -134,14 +138,15 @@ def check(task, fake: FakeLiteLLM, ctx: dict) -> dict:
     if clock.get("virtual_seconds_per_real_second") != 0 or clock.get("t0") != virtual_time(task, watches[-1].hour):
         problems.append(f"the clock at the end: {clock}")
 
-    if v["score"] != naive["reward"] or week["grade"]["cost"] != naive["cost"] or play["reward"] != naive["reward"]:
+    if (v["score"] != expected["reward"] or week["grade"]["cost"] != expected["cost"]
+            or play["reward"] != expected["reward"]):
         problems.append(f"scored {v['score']} (cost {week['grade']['cost']}, agent {play['reward']}); "
-                        f"naive {naive['reward']} (cost {naive['cost']})")
+                        f"expected {expected['reward']} (cost {expected['cost']})")
     if not week["audit"]["ok"] or week["end_reason"] != "done" or play["end_reason"] != "done":
         problems.append(f"audit {week['audit']}, env {week['end_reason']}, agent {play['end_reason']}")
     if len(fake.requests) != play["turns"]:
         problems.append(f"{len(fake.requests)} requests for {play['turns']} turns")
-    return {"problems": problems, "score": v["score"], "naive": naive, "fired": fired, "actions": actions,
+    return {"problems": problems, "score": v["score"], "expected": expected, "fired": fired, "actions": actions,
             "tools": seen, "cache_breakpoints": breakpoints, "bulletins": delivered, "get_time": times,
             "clock": clock, "turns": play["turns"],
             "tool_calls": play["tool_calls"], "cost_usd": play["cost_usd"], "calls_used": week["calls_used"],
@@ -152,24 +157,40 @@ def check(task, fake: FakeLiteLLM, ctx: dict) -> dict:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.partition("\n\n")[0])
+    parser.add_argument("--env", choices=[LIVE_ENV, MARINE_ENV], default=LIVE_ENV, help="the env to play on")
+    parser.add_argument("--task", default=TASK, help="the one-week task to play")
+    parser.add_argument("--policy", choices=["naive", "rolling"], default="naive",
+                        help="the reference policy the stand-in model plays")
     parser.add_argument("--double-advance", type=int, metavar="WATCH",
-                        help="skip this watch with a double advance; naive must change nothing there")
+                        help="skip this watch with a double advance; the policy must change nothing there")
     parser.add_argument("--out", type=Path, help="write the week's data/get here")
     args = parser.parse_args()
-    [task] = [t for t in tasks.pack_tasks("dock-v1-eval") if t.task_id == TASK]
-    turns = script(naive_rows(task), args.double_advance)
-    with PausingFake(turns, host="0.0.0.0") as fake:
-        port = fake.url.rpartition(":")[2]
-        run = subprocess.run([sys.executable, "-m", "agent_env.cli", "run", LIVE_ENV, "--task", "week",
-                              "--model", MODEL], capture_output=True, text=True,
-                             env={**os.environ, "LITELLM_BASE_URL": f"http://host.docker.internal:{port}",
-                                  "LITELLM_API_KEY": "sk-fake-live"})
+    on_marine = args.env == MARINE_ENV
+    pack, references, week = ((marine.pack().tasks, marine.references(), marine.MarineWeek) if on_marine
+                              else (tasks.pack_tasks("dock-v1-eval"), tasks.live_references(), world.Week))
+    [task] = [t for t in pack if t.task_id == args.task]
+    reference = next(r for r in references if r["task_id"] == task.task_id)
+    plans = reference["rolling"]["plans"]
+    policy = world.naive if args.policy == "naive" else lambda w: plan_from_list(plans[w.watch])
+    turns = script(policy_rows(task, policy, week), args.double_advance)
+    expected = {k: v for k, v in reference[args.policy].items() if k != "plans"}
+    with tempfile.TemporaryDirectory() as tmp:
+        bundle, name = args.env, "week"
+        if task.task_id != TASK:
+            tasks.generate("dock-v1-eval", Path(tmp), task_ids=[task.task_id], live=True, marine=on_marine)
+            bundle, name = tmp, task.task_id
+        with PausingFake(turns, host="0.0.0.0") as fake:
+            port = fake.url.rpartition(":")[2]
+            run = subprocess.run([sys.executable, "-m", "agent_env.cli", "run", bundle, "--task", name,
+                                  "--model", MODEL], capture_output=True, text=True,
+                                 env={**os.environ, "LITELLM_BASE_URL": f"http://host.docker.internal:{port}",
+                                      "LITELLM_API_KEY": "sk-fake-live"})
     print(run.stdout + run.stderr)
     instance = re.findall(r"instance (\S+)", run.stdout)
     if not instance:
         sys.exit("the run stored no instance")
     ctx = context(instance[-1])
-    report = check(task, fake, ctx)
+    report = check(task, fake, ctx, args.env, expected)
     if args.out:
         args.out.write_text(json.dumps(ctx["metadata"]["verifications"]["portsim"]["results"][0]["episode"],
                                        indent=2, sort_keys=True) + "\n")
