@@ -8,7 +8,8 @@ This product includes PortSimEnv v1 by Adithya S Kolavi, part of FineEnvs
 (https://github.com/adithya-s-k/FineEnvs, 07-simulation-environments/portsim-v1, commit b0f4c2f),
 licensed under the Apache License, Version 2.0. Derived from it:
 
-- src/berth_core/: copied unchanged from envs/berth_planning/core/berth_core/.
+- berth_core (envs/berth_planning/core/): not copied; the package depends on it at that commit and the
+  env image installs it from there.
 - src/agentenv_portsim/server.py: the MCP tools get_situation, check_plan and submit_plan (names,
   descriptions, input schemas, output and error text, limits) are ported from
   envs/berth_planning/openenv/berth_openenv/environment.py.

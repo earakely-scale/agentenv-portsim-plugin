@@ -19,12 +19,12 @@ import subprocess
 import sys
 from pathlib import Path
 
+from berth_core import plan_to_list
 from fake_litellm import FakeLiteLLM
 
 from agentenv_portsim import tasks, world
 from agentenv_portsim.schedule import LIVE_ENV, NOTICE_TOOL, schedule, virtual_time
 from agentenv_portsim.sweep import context, trajectory
-from berth_core import plan_to_list
 
 TASK = "dock-24B-w07x1-busy-0"
 MODEL = "anthropic/claude-sonnet-5-5"

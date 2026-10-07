@@ -2,10 +2,10 @@
 their stored grades through the live week, the watches are the schedule's, and a week qualifies by the 3-of-4 rule."""
 
 import pytest
-
-from agentenv_portsim import schedule, tasks, world
 from berth_core import plan_from_list
 from berth_core.check import unavoidable_cost
+
+from agentenv_portsim import schedule, tasks, world
 
 REFERENCES = tasks.live_references()
 PACK = {t.task_id: t for t in tasks.pack_tasks("dock-v1-eval")}

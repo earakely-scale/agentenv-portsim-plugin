@@ -7,13 +7,13 @@ from dataclasses import fields
 
 import click
 import pytest
+from berth_core import Grade
 from recorded import GPT, LIVE, ROOT, SONNET, scored, transcript
 
 from agentenv_portsim import tasks
 from agentenv_portsim.episodes import ReplayError, Runs
 from agentenv_portsim.schedule import TOOLS, virtual_time
 from agentenv_portsim.world import known
-from berth_core import Grade
 
 ROLLOUT = {"model", "task_id", "episode_id", "started", "run", "messages", "steps", "final", "reward", "usage", "turns",
            "end_reason", "errors", "seconds"}

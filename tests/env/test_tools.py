@@ -1,7 +1,6 @@
 import json
 
 import pytest
-
 from berth_core import situation
 
 pytestmark = pytest.mark.anyio

@@ -66,7 +66,7 @@ for the same plan:
   and 24 tool calls an episode.
 - **The same tasks.** The dock-v1-eval (50) and dock-v1-train (1,050) task packs, byte for byte; any of the 1,100
   loads by id.
-- **The same reward for the same plan.** The grader is upstream's `berth_core`, copied unchanged.
+- **The same reward for the same plan.** The grader is upstream's `berth_core`, installed from FineEnvs at the pinned commit.
 
 The tests check this without calling any model:
 
@@ -604,7 +604,6 @@ src/agentenv_portsim/   the env (server.py), the agent-env portsim commands (cli
   web/upstream/         PortSimEnv's viewer, copied unchanged (VENDORED.md); web/ext/, our additions to it
   bundles/portsim/      the wiring tasks and portsim-verifier
   bundles/portsim-live/ the live tasks week and wiring-noplay, and portsim-live-verifier
-src/berth_core/         PortSimEnv's core: tasks, checker, reward, prompts; copied unchanged (VENDORED.md)
 agents/portsim-llm/     the portsim-llm agent and its image
 data/                   the dock-v1-eval and dock-v1-train task packs, and the published dock-eval50 results in
                         published/, copied unchanged; live/references.jsonl, computed here (all CC BY-SA 4.0)
@@ -647,7 +646,7 @@ The wheel and the env image carry both, so the package's licence is `Apache-2.0 
 
 - **[PortSimEnv v1](https://github.com/adithya-s-k/FineEnvs/tree/b0f4c2f9526e3c45d608b4f92f6ec6c71fecc152/07-simulation-environments/portsim-v1)**
   is by Adithya S Kolavi, part of [FineEnvs](https://github.com/adithya-s-k/FineEnvs), under the Apache License
-  2.0. `src/berth_core/` is copied from it unchanged at commit `b0f4c2f` ([VENDORED.md](VENDORED.md)), the env's
+  2.0. `berth_core` is installed from it at commit `b0f4c2f` ([VENDORED.md](VENDORED.md)), the env's
   tools are ported from its OpenEnv server, and `portsim-llm` is ported from its agent harness.
 - **The task packs** in `data/` were built by Adithya S Kolavi from the Port of Barcelona's 2024 container calls and
   are licensed under CC BY-SA 4.0 ([data/LICENSE](data/LICENSE)). Contains data from the Port de Barcelona open data

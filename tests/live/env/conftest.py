@@ -6,6 +6,7 @@ import time
 import httpx
 import pytest
 import uvicorn
+from berth_core import load_pack
 from fastmcp import Client
 from starlette.applications import Starlette
 from starlette.responses import JSONResponse
@@ -13,7 +14,6 @@ from starlette.routing import Route
 
 from agentenv_portsim.live import PortSimLiveEnv
 from agentenv_portsim.schedule import ONE_WEEK
-from berth_core import load_pack
 
 EXAMPLE = "dock-24B-w07x1-busy-0"
 

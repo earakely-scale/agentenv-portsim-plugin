@@ -32,10 +32,10 @@ def portsim():
 def _checkout(source: Path | None) -> Path:
     """The checkout of this repo to build from: ``source``, else the one an editable install runs from, else the cwd."""
     for root in [source] if source else [Path(__file__).resolve().parents[2], Path.cwd()]:
-        if (root / "Dockerfile").is_file() and (root / "src/berth_core").is_dir():
+        if (root / "Dockerfile").is_file() and (root / "src/agentenv_portsim").is_dir():
             return root
     if source:
-        raise click.UsageError(f"{source} is not a checkout of agentenv-portsim-plugin (no Dockerfile and berth_core)")
+        raise click.UsageError(f"{source} is not a checkout of agentenv-portsim-plugin (no Dockerfile and src/)")
     raise click.UsageError(f"no checkout of agentenv-portsim-plugin found; clone {REPO} and pass --source")
 
 
