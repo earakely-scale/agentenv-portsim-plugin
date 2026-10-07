@@ -25,7 +25,8 @@ virtual clock, scripted parties deliver it through the gateway's triggers, and t
 
 **Contents:** [Parity](#parity-with-portsimenv) · [Run it yourself](#run-it-yourself) · [Tasks](#tasks) ·
 [Play a model](#play-a-model) · [The environment](#the-environment) · [Grading](#grading) ·
-[The live port](#the-live-port) · [Built on the AgentEnv Framework](#built-on-the-agentenv-framework) ·
+[The live port](#the-live-port) · [Watch a run](#watch-a-run) ·
+[Built on the AgentEnv Framework](#built-on-the-agentenv-framework) ·
 [Layout](#repository-layout) · [Development](#development) · [Licence and credits](#licence-and-credits)
 
 ## Parity with PortSimEnv
@@ -500,6 +501,50 @@ Every run reached the end of its week with a feasible plan and passed the validi
 Two attempts failed for reasons outside the episode (two local deploys racing for a host port, and a provider timeout)
 and passed on retry.
 
+## Watch a run
+
+![GPT-6.1 Sol plays a live week on the 3D quay, the dock chart and the watch panel](assets/live-week.gif)
+
+*GPT-6.1 Sol plays the live week `dock-24B-w07x1-busy-0` (sweep `live-pilot-gpt`, reward 1.0), replayed on
+PortSimEnv's viewer. Port of Barcelona twin © OpenStreetMap contributors (ODbL) · terrain: Terrain Tiles (AWS).
+Task text CC BY-SA 4.0.*
+
+Recorded runs replay on PortSimEnv's own viewer, by Adithya S Kolavi: the 3D twin of the quay, with ships, tugs and
+cranes acting out each plan, the dock chart, every plan the model checked, confirmed or submitted, the grade and the
+transcript. A v1 run steps through the plans the model checked, then plays the week out on the plan it submitted. A
+live week replays watch by watch on the virtual clock: the bulletins as they arrived, the freeze line, and each window
+departed, berthed, frozen or open. Replays read the run records only and call no model.
+
+```bash
+agent-env portsim view                  # every sweep under results/runs, at http://127.0.0.1:8237/viewer/
+agent-env portsim view g2 live-sonnet   # just these; --port to serve elsewhere
+agent-env portsim record --sweep live-pilot-gpt --model openai/gpt-6.1-sol --task dock-24B-w07x1-busy-0 \
+    --out live-week.mp4 --gif live-week.gif
+```
+
+- `view` serves the viewer on loopback, read-only, with upstream's `/api` routes over the run records. A v1 run is
+  regraded from its final plan. A live run is replayed through its week from the recorded tool calls, and every
+  output must come out as recorded; an episode that doesn't is listed on the overview with the call that differs.
+- The viewer is copied unchanged into `src/agentenv_portsim/web/upstream/` ([VENDORED.md](VENDORED.md)).
+  `web/ext/` adds an overview of the sweeps, the live week's watch panel and chart marks, and the hooks `record`
+  drives.
+- A live week shows each step as the planner knew it. The dock chart and the 3D quay draw the week as known at that
+  step, so a gale, an outage or an unscheduled call appears only once its bulletin has arrived, and a red outline is
+  a rule broken on that week. The panel names the watch but not how many are left, and the transcript ends at the
+  selected call: later turns are dimmed in `view` and left out of a film. The last step plays out the week as it
+  really happened.
+- `record` films one episode in headless Chrome over the DevTools protocol and encodes it with ffmpeg. Each step is
+  held for `--step-seconds`. An advance first runs the clock to the watch it opens, at `--hours-per-second`, while
+  the panel reads "Advancing to watch N…"; when the clock gets there, the watch's bulletins arrive in the transcript,
+  the panel and the chart. After the last step the week plays out. `--gif` also writes an 800 px GIF; the one above
+  is a take with `--size 1280x720 --step-seconds 1 --hours-per-second 16`. It needs Chrome or Chromium and ffmpeg; a
+  minute of 1080p at 30 fps takes about 4 minutes to film.
+- First use downloads the 3D twin, 4.2 MB of OpenStreetMap data (ODbL 1.0) that isn't stored here, from
+  PortSimEnv's public bucket into `~/.cache/agentenv-portsim/` (`$XDG_CACHE_HOME/agentenv-portsim/` if that is set),
+  and checks each file against upstream's. The page loads three.js from jsDelivr, so watching needs the internet.
+- Every frame shows the attribution "© OpenStreetMap contributors (ODbL)", and the MP4 also carries it in its
+  metadata. Keep it on anything you publish from a film; the task text a film shows is CC BY-SA 4.0.
+
 ## Built on the AgentEnv Framework
 
 This plugin is built on the [AgentEnv Framework](https://www.agentenvframework.com)
@@ -524,14 +569,18 @@ heavy lifting; this repository adds PortSimEnv. Each piece maps to a framework c
 src/agentenv_portsim/   the env (server.py), the agent-env portsim commands (cli.py), the eval and live tasks
                         (tasks.py) and the sweep and its reports (sweep.py)
                         the live env (live.py), the live week (world.py) and its reveal schedule (schedule.py)
+                        the run records as the viewer reads them (episodes.py), view.py, record.py, and the
+                        twin download (twin.py)
+  web/upstream/         PortSimEnv's viewer, copied unchanged (VENDORED.md); web/ext/, our additions to it
   bundles/portsim/      the wiring tasks and portsim-verifier
   bundles/portsim-live/ the live tasks week and wiring-noplay, and portsim-live-verifier
 src/berth_core/         PortSimEnv's core: tasks, checker, reward, prompts; copied unchanged (VENDORED.md)
 agents/portsim-llm/     the portsim-llm agent and its image
 data/                   the dock-v1-eval and dock-v1-train task packs, and the published dock-eval50 results in
                         published/, copied unchanged; live/references.jsonl, computed here (all CC BY-SA 4.0)
-tests/                  env, agent, packaging, replay, golden and sweep tests, and the live port's in live/;
-                        fake_litellm.py stands in for the model endpoint
+tests/                  env, agent, packaging, replay, golden and sweep tests, the live port's in live/, and the
+                        viewer's in viewer/; fake_litellm.py stands in for the model endpoint
+assets/                 live-week.gif, a recorded live week
 scripts/                record_goldens.py, record_harness.py, replay_episode.py; live_references.py, live_e2e.py
 Dockerfile              the env image
 ```
@@ -542,6 +591,7 @@ Dockerfile              the env image
 uv venv && uv pip install -e '.[dev]'
 .venv/bin/pytest                         # sets BERTH_TASKS_DIR itself; calls no model
 .venv/bin/ruff check .
+.venv/bin/pytest -m 'network or browser'   # the twin download, and a one-second film with Chrome and ffmpeg
 docker build -t agentenv-portsim-env .   # the env image, for this machine's platform
 .venv/bin/python -m agentenv_portsim.server   # on :18765, with the packs in data/
 ```
@@ -577,6 +627,12 @@ The wheel and the env image carry both, so the package's licence is `Apache-2.0 
   [PortSimEnv dataset](https://huggingface.co/datasets/FineEnvs/PortSimEnv) (CC BY-SA 4.0), fetched at a pinned
   revision and never stored here. The published dock-eval50 results that `sweep report` compares with,
   `data/published/dock-eval50/index.json`, are copied unchanged from upstream's repository, under the same licence.
+- **The viewer** in `src/agentenv_portsim/web/upstream/` is PortSimEnv's, by Adithya S Kolavi, under the Apache
+  License 2.0, copied unchanged at `b0f4c2f`. Its 3D twin of the Port of Barcelona is © OpenStreetMap contributors
+  ([ODbL 1.0](https://www.openstreetmap.org/copyright)), with terrain from Terrain Tiles on AWS; it is downloaded
+  from PortSimEnv's public bucket, never stored here, and every image and video rendered from it,
+  `assets/live-week.gif` included, carries the attribution. `tests/viewer/runs/` and `assets/live-week.gif` show task
+  text, under CC BY-SA 4.0.
 - **[AgentEnv Framework](https://www.agentenvframework.com)**
   ([scaleapi/agentenv-framework](https://github.com/scaleapi/agentenv-framework)) runs the tasks and the registry this
   plugin plugs into.
