@@ -31,75 +31,49 @@ flowchart TD
 
 </details>
 
-An agent gets one container quay at the Port of Barcelona, the ships that really called there in a week of 2024, and a
-week that has just gone wrong: late and bunched ships, closed quay sections, crane breakdowns, gales, emergencies. It
-decides when, where and with how many cranes every ship docks, and its plan is graded once, deterministically,
-against a plan CP-SAT proved optimal.
+An agent runs one container quay at the Port of Barcelona for a week of 2024 that has just gone wrong: late and
+bunched ships, closed quay sections, crane breakdowns, gales, emergencies. It decides when, where along the quay and
+with how many cranes every ship docks, and the week is graded deterministically against a plan CP-SAT proved optimal.
+The ships and their calls, the quays' crane fleets and the port's berth and wind rules are real; the workloads and the
+disruptions are simulated.
 
-**PortSimEnv is Adithya S Kolavi's environment, from [FineEnvs](https://github.com/adithya-s-k/FineEnvs).** Read
-the article, [Simulation RL Environments, part 1](https://huggingface.co/spaces/FineEnvs/simulation-rl-environments);
-play an episode in the [PortSimEnv Space](https://huggingface.co/spaces/FineEnvs/PortSimEnv); watch the published
-eval rollouts in 3D in the [eval Space](https://huggingface.co/spaces/FineEnvs/PortSimEnv-Eval); get the tasks and
-rollouts from the [dataset](https://huggingface.co/datasets/FineEnvs/PortSimEnv); and read the
-[code](https://github.com/adithya-s-k/FineEnvs/tree/b0f4c2f9526e3c45d608b4f92f6ec6c71fecc152/07-simulation-environments/portsim-v1).
+This repository is an environment plugin for the [AgentEnv Framework](https://www.agentenvframework.com), Scale AI's
+open-source framework for building RL environments. It is built on **PortSimEnv**, Adithya S Kolavi's environment in
+[FineEnvs](https://github.com/adithya-s-k/FineEnvs), called *upstream* below: the quay model, the task packs, the
+grader and the 3D viewer come from it, and a week planned in one go plays here exactly as it does there. Read about it
+in the article [Simulation RL Environments, part 1](https://huggingface.co/spaces/FineEnvs/simulation-rl-environments),
+or play an episode by hand in the [PortSimEnv Space](https://huggingface.co/spaces/FineEnvs/PortSimEnv). The live
+week is new here.
 
-This repository is an environment plugin that runs PortSimEnv v1 in the
-[AgentEnv Framework](https://www.agentenvframework.com), Scale AI's open-source framework for building RL
-environments, at parity with upstream: the same tools, the same tasks and the same reward for the same plan. Upstream's
-agent harness comes along as the A2A agent `portsim-llm`, so a model plays the 50 eval tasks as it did in the
-published eval. [The live port](#the-live-port), v2, plays a week as it unfolds: the news arrives over AgentEnv's
-virtual clock, scripted parties deliver it through the gateway's triggers, and the agent re-plans under a freeze.
-
-**Contents:** [Parity](#parity-with-portsimenv) · [Run it yourself](#run-it-yourself) · [Tasks](#tasks) ·
+**Contents:** [What's in it](#whats-in-it) · [Run it yourself](#run-it-yourself) · [Tasks](#tasks) ·
 [Play a model](#play-a-model) · [The environment](#the-environment) · [Grading](#grading) ·
 [The live port](#the-live-port) · [Watch a run](#watch-a-run) ·
 [Built on the AgentEnv Framework](#built-on-the-agentenv-framework) ·
 [Layout](#repository-layout) · [Development](#development) · [Licence and credits](#licence-and-credits)
 
-## Parity with PortSimEnv
+## What's in it
 
-The goal is the same environment, not a look-alike. An agent sees what it would see upstream and gets the same reward
-for the same plan:
-
-- **The same tools.** `get_situation`, `check_plan(plan)` and `submit_plan(plan)` keep upstream's names,
-  descriptions and input schemas, return the same text, fail with the same errors and keep the same limits: 10 checks
-  and 24 tool calls an episode.
-- **The same tasks.** The dock-v1-eval (50) and dock-v1-train (1,050) task packs, byte for byte; any of the 1,100
-  loads by id.
-- **The same reward for the same plan.** The grader is upstream's `berth_core`, installed from FineEnvs at the pinned
-  commit.
-
-The tests check this without calling any model:
-
-1. **Regrade.** The 202 final plans submitted in the published eval grade to their published reward, and every
-   task's stored optimal plan grades to 1.0.
-2. **Replay.** The 830 tool calls of the 300 published episodes, from the
-   [dataset](https://huggingface.co/datasets/FineEnvs/PortSimEnv) at a pinned revision, go through this env's MCP
-   tools in order, and each output must equal the recorded one byte for byte; one recorded output that differs is
-   allow-listed.
-3. **Goldens.** What the episodes never reach (the tool list, the 11th check, the 24-call limit, calls after a
-   submit) is compared the same way against outputs recorded from upstream's env (`scripts/record_goldens.py`).
-4. **Wiring.** The three [tasks](#tasks) run through `agent-env` and score as expected; CI runs them on every change.
-5. **Harness.** `portsim-llm` plays five published episodes, on all three model APIs, against a stand-in model
-   server that answers with the recorded turns. The messages and steps it records must equal the published ones,
-   its requests must equal those upstream's harness sends for the same turns (`scripts/record_harness.py`), and each
-   episode must end with its published reward.
-
-Whether a model scores here as it did upstream is a separate question, answered week by week rather than by a pass
-test: see [The comparison with the published eval](#the-comparison-with-the-published-eval).
-
-What differs is how the env is served, not what the agent sees:
-
-- **Transport.** Upstream serves its tools through OpenEnv, where an episode runs over a WebSocket session. Here an
-  AgentEnv env server serves them over MCP (streamable HTTP at `/mcp`), one episode per container.
-- **Choosing a task.** Upstream's `reset(task_id=...)` is the extension `urn:portsim:load-task/v1`, which a task
-  applies with `apply_server_config`.
-- **Reading the grade.** The env grades the plan once, at submit, and keeps the reward `submit_plan` returns, for the
-  plan as validated against the tool's input schema (a ship id sent as `3.0` is ship 3); the task's verifier reads it
-  from `data/get`.
-- **Not here:** upstream's web UI and task API; play an episode by hand in the
-  [PortSimEnv Space](https://huggingface.co/spaces/FineEnvs/PortSimEnv). Recorded runs replay on upstream's 3D viewer
-  through `agent-env portsim view` ([Watch a run](#watch-a-run)).
+- **Two environments, in one image.**
+  - `portsim` plans a week in one go: the agent reads the situation, checks drafts (10 checks) and submits one plan,
+    within 24 tool calls ([The environment](#the-environment)).
+  - `portsim-live` plays the same week as it unfolds, on AgentEnv's gateway. A virtual clock runs the week watch by
+    watch, the ships, the harbour master, terminal ops and the line desk send their news through triggers, and
+    windows about to start are frozen. The agent confirms berths as it goes ([The live port](#the-live-port)).
+- **1,100 weeks to play.** They come from the port's 2024 container calls at two quays, 24B (APM Terminals
+  Barcelona) and 36A (Terminal Catalunya, BEST), in four tiers from standard to extreme: 50 eval weeks and 1,050
+  train weeks, with no week in both. 15 of the eval weeks are live weeks ([Tasks](#tasks)).
+- **A deterministic grade, with no judge.** A valid plan scores 0.2 + 0.8·e^(−gap/0.5) against the optimum, so the
+  optimum scores 1.0. A plan that breaks a rule scores under 0.2, and no plan scores 0. A live week is graded on the
+  windows the agent confirmed, against the week as it really happened ([Grading](#grading)).
+- **An agent.** `portsim-llm` plays a week with a model through agent-env's endpoint: the Hugging Face router for
+  open models, or a LiteLLM proxy ([Play a model](#play-a-model)).
+- **Commands.**
+  - `agent-env portsim setup` builds the images and registers the envs and the agent.
+  - `tasks generate`, `sweep run` and `sweep report` play models over the weeks under a spend cap.
+  - `view` and `record` replay runs on a 3D twin of the quay and film them ([Watch a run](#watch-a-run)).
+- **Results.** GPT-6.1 Sol and Claude Sonnet 5.5 on ten weeks planned in one go
+  ([the comparison with upstream's eval](#the-comparison-with-the-published-eval)) and on all 15 live weeks
+  ([the first live results](#the-first-live-results)).
 
 ## Run it yourself
 
@@ -652,6 +626,21 @@ uv venv && uv pip install -e '.[dev]'     # berth-core comes from FineEnvs at th
 docker build -t agentenv-portsim-env .   # the env image, for this machine's platform
 .venv/bin/python -m agentenv_portsim.server   # on :18765, with the packs in data/
 ```
+
+Besides the env, agent, sweep, live and viewer tests, the tests hold `portsim` to upstream's env, without calling a
+model:
+
+1. **Regrade.** The 202 plans submitted in upstream's published eval grade to their published reward, and every
+   task's stored optimal plan grades to 1.0.
+2. **Replay.** The 830 tool calls of the 300 published episodes, from the
+   [dataset](https://huggingface.co/datasets/FineEnvs/PortSimEnv) at a pinned revision, go through this env's tools in
+   order, and each output must equal the recorded one byte for byte; one recorded output that differs is
+   allow-listed.
+3. **Goldens.** What the episodes never reach (the tool list, the 11th check, the 24-call limit, calls after a
+   submit) is compared the same way against outputs recorded from upstream's env (`scripts/record_goldens.py`).
+4. **Harness.** `portsim-llm` plays five published episodes, on all three model APIs, against a stand-in model
+   server that answers with the recorded turns. Its messages, steps and requests must equal those of upstream's
+   harness (`scripts/record_harness.py`), and each episode must end with its published reward.
 
 `scripts/replay_episode.py` plays a published episode through `agent-env run` on local Docker with no model spend:
 the stand-in model server answers `portsim-llm` with the recorded turns, and the task must score the published reward.
