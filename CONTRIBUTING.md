@@ -37,13 +37,16 @@ agent-env run portsim --task smoke --task wiring-infeasible --task wiring-nosubm
 
 For a change to `portsim-llm`, the eval tasks or the sweep, `setup --agent` builds the agent too, and
 `scripts/replay_episode.py` plays a published episode through `agent-env run` with a stand-in model server, at no model
-spend (README, [Development](README.md#development)).
+spend (README, [Development](README.md#development)). For a change to the live port,
+`agent-env run portsim-live --task wiring-noplay` runs a live week through the gateway without a model, and
+`scripts/live_e2e.py` plays one with `portsim-llm` against the stand-in model server (README,
+[The live port](README.md#the-live-port)). CI doesn't run either yet.
 
 ## Where things go
 
 | Change | Code | Tests and docs |
 |---|---|---|
-| The env: its tools, extensions or data plane | `src/agentenv_portsim/server.py` | `tests/env/`; the README's tool table |
+| The v1 env, `portsim`: its tools, extensions or data plane | `src/agentenv_portsim/server.py` | `tests/env/`; the README's tool table |
 | A task | `src/agentenv_portsim/bundles/portsim/tasks/` | `tests/packaging/`; the bundle's README and the README's task table |
 | The verifier | `src/agentenv_portsim/bundles/portsim/artifacts/portsim-verifier/verify.py` | `tests/packaging/` |
 | `agent-env portsim setup` | `src/agentenv_portsim/cli.py` | `tests/packaging/` |
@@ -51,18 +54,27 @@ spend (README, [Development](README.md#development)).
 | The `portsim-llm` agent and its image | `agents/portsim-llm/` | `tests/agent/`, `tests/replay/test_harness.py`; the README's [Play a model](README.md#play-a-model) |
 | The eval tasks | `src/agentenv_portsim/tasks.py` | `tests/packaging/test_tasks.py`, `tests/replay/test_prompts.py` |
 | The sweep and its report | `src/agentenv_portsim/sweep.py` | `tests/sweep/` |
-| PortSimEnv's core, task packs or published results | never here: `src/berth_core/` and `data/` are copied unchanged from upstream ([VENDORED.md](VENDORED.md)) | a new upstream commit is vendored whole, and VENDORED.md names it |
+| The live env, `portsim-live`: its tools, extensions and data plane, the week as known, the freeze, excuses, audit and grade, the reveal schedule | `src/agentenv_portsim/live.py`, `world.py`, `schedule.py` | `tests/live/env/`; the README's [The live port](README.md#the-live-port) |
+| A live task, the live verifier, the live sweep | `src/agentenv_portsim/tasks.py`, `bundles/portsim-live/`, `sweep.py` | `tests/live/tasks/` |
+| The live references | `scripts/live_references.py`, which writes `data/live/references.jsonl` | `tests/live/tasks/test_live_references.py` |
+| `portsim-llm`'s live mode | `agents/portsim-llm/agent.py` | `tests/agent/test_agent_live.py`; v1's requests must stay as `tests/golden/harness.json` has them |
+| PortSimEnv's core, task packs or published results | never here: `src/berth_core/`, `data/dock-v1-eval/`, `data/dock-v1-train/` and `data/published/` are copied unchanged from upstream ([VENDORED.md](VENDORED.md)) | a new upstream commit is vendored whole, and VENDORED.md names it |
 
 ## Conventions
 
 - **Parity comes first.** The tools' names, descriptions, input schemas, output and error text and limits match
   PortSimEnv's exactly, and the replay and golden tests hold them to it, so a change to what an agent sees isn't
   taken here. The same goes for `portsim-llm`: its prompts, nudges, limits and requests match upstream's harness, and
-  `tests/golden/harness.json` holds them to it.
-- **Vendored files stay unchanged.** `src/berth_core/` and `data/` match upstream byte for byte; the task packs'
-  sha256 is checked when they load.
-- **The answer key stays in the image.** No tool, extension, route or `data/get` field returns a task's reference
-  plans; `data/get`'s grade, there only after a submit, includes the optimal and naive costs.
+  `tests/golden/harness.json` holds them to it. The live port is this repository's own and has no upstream to match;
+  `tests/live/` holds its tools, prompts, schedule and grade instead.
+- **Vendored files stay unchanged.** `src/berth_core/`, `data/dock-v1-eval/`, `data/dock-v1-train/` and
+  `data/published/` match upstream byte for byte; the task packs' sha256 is checked when they load.
+  `data/live/references.jsonl` is computed here: rerun `uv run --with ortools==9.15.6755 python
+  scripts/live_references.py` when the live week, its schedule or its grade changes, and commit the file. `ortools`
+  is never a dependency; the tests replay the file without it.
+- **The answer key stays in the image.** No tool, extension, route or `data/get` field of either env returns a task's
+  reference plans; `portsim`'s grade in `data/get`, there only after a submit, includes the optimal and naive costs,
+  and `portsim-live`'s, there only once the week ends, the optimal cost.
 - **Code:** match the code around it. `ruff check .` must pass. Name things so the code reads without comments;
   write a short docstring only for why something is the way it is.
 - **Tests:** a fix comes with a test that fails without it. Tests set `BERTH_TASKS_DIR` themselves. They call no

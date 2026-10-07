@@ -18,6 +18,12 @@ licensed under the Apache License, Version 2.0. Derived from it:
 - src/agentenv_portsim/tasks.py: the opening message is copied from
   envs/berth_planning/openenv/berth_openenv/agent.py; src/agentenv_portsim/sweep.py: ci() is copied
   from eval/report.py.
+- src/agentenv_portsim/world.py: naive() adapts naive_replan's greedy search from
+  envs/berth_planning/core/berth_core/solve.py to keep frozen windows and start the rest at or after
+  the freeze line.
+- scripts/live_references.py: the CP-SAT model in solve() is adapted from optimal_plan in
+  envs/berth_planning/core/berth_core/solve.py, with frozen windows pinned and the rest held at or
+  after the freeze line.
 
 Data licensed under CC BY-SA 4.0 (data/LICENSE), not under the Apache License:
 

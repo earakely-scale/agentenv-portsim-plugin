@@ -20,12 +20,13 @@ This repository is an environment plugin that runs PortSimEnv v1 in the
 [AgentEnv Framework](https://www.agentenvframework.com), Scale AI's open-source framework for building RL
 environments, at parity with upstream: the same tools, the same tasks and the same reward for the same plan. Upstream's
 agent harness comes along as the A2A agent `portsim-llm`, so a model plays the 50 eval tasks as it did in the
-published eval. A live port is next.
+published eval. [The live port](#the-live-port), v2, plays a week as it unfolds: the news arrives over AgentEnv's
+virtual clock, scripted parties deliver it through the gateway's triggers, and the agent re-plans under a freeze.
 
 **Contents:** [Parity](#parity-with-portsimenv) · [Run it yourself](#run-it-yourself) · [Tasks](#tasks) ·
 [Play a model](#play-a-model) · [The environment](#the-environment) · [Grading](#grading) ·
-[Built on the AgentEnv Framework](#built-on-the-agentenv-framework) · [Layout](#repository-layout) ·
-[Development](#development) · [Licence and credits](#licence-and-credits)
+[The live port](#the-live-port) · [Built on the AgentEnv Framework](#built-on-the-agentenv-framework) ·
+[Layout](#repository-layout) · [Development](#development) · [Licence and credits](#licence-and-credits)
 
 ## Parity with PortSimEnv
 
@@ -80,7 +81,7 @@ uv tool install agentenv-framework --with-editable ./agentenv-portsim-plugin
 cd agentenv-portsim-plugin
 
 cp .agentenv/config.example.toml .agentenv/config.toml   # the local profile
-agent-env portsim setup              # build the env image for this machine and register it as the env "portsim"
+agent-env portsim setup              # build the env image for this machine; register the envs "portsim" and "portsim-live"
 agent-env run portsim --task smoke   # load a task, submit its optimal plan, grade it
 ```
 
@@ -101,7 +102,7 @@ namespace, and run `agent-env portsim setup --platform linux/amd64`, which pushe
   `uv tool update-shell` and open a new terminal.
 - **A step fails because something holds port 5000:** agent-env keeps its images in a local registry on
   `127.0.0.1:5000`. On macOS, AirPlay Receiver often holds that port; turn it off in System Settings.
-- **The run says there is no env `portsim`:** run `agent-env portsim setup` first, with the same config.
+- **The run says there is no env `portsim` or `portsim-live`:** run `agent-env portsim setup` first, with the same config.
 </details>
 
 ## Tasks
@@ -269,6 +270,222 @@ Rewards are rounded to six decimals, and the same plan always gets the same rewa
 itself. If the env can't answer `data/get`, the verifier raises and the run fails rather than scoring 0.
 `agent-env run` prints `passed` only for a score of 1; any other reward prints `scored below 1` with the score.
 
+## The live port
+
+The live port is v2: the same quay and the same weeks, played as they unfold. The env `portsim-live`
+(`src/agentenv_portsim/live.py`) starts a one-week task at Monday 00:00 with only what the port knows then. The rest
+reaches the agent during the week: ships report delays and unscheduled calls, the harbour master issues gale warnings
+and emergencies, terminal ops announce crane outages, and the line desk flags priority cargo. The agent confirms
+berth windows as it goes. The week is graded once, on the windows it confirmed, against the week as it really
+happened. The live port runs on the AgentEnv gateway: the gateway's virtual clock is the port's clock, its triggers
+deliver the news, and a per-role rule hides the tool they deliver it through. The `portsim` env and its tasks are
+unchanged.
+
+No model has played the live weeks yet.
+
+### How a live week runs
+
+- **Watches.** A week is played in watches: watch 0 at hour 0, then one per news bulletin, 2 to 9 watches in all.
+  At watch 0 the agent sees the week as known at hour 0: the published arrivals, the closures, which are planned
+  works, and no unscheduled calls.
+- **`advance`.** Time passes only when the agent calls `advance`. The port moves to the next bulletin, ships berth
+  and sail on their confirmed windows, and the bulletin's messages arrive with the next tool result. No time passes
+  while the model thinks.
+- **The freeze.** From watch 1 on, a window that starts before the freeze line, 6 hours after the current hour, is
+  frozen: the harbour master refuses to change it, and new or changed windows must start at or after the line.
+- **Planning calls.** `check_plan` and `confirm_berths` share 3 calls a watch.
+- **The end.** After the last watch, `advance` returns `done` with the week's reward. An agent that stops early is
+  graded on what it confirmed: the task's next step runs the remaining watches with no changes, then grades the week.
+
+The example week `dock-24B-w07x1-busy-0` has 17 ships and a hindsight optimum of 226. The agent gets the task's own
+notices, verbatim; in short:
+
+| Watch | Time (hour) | From | News |
+|---:|---|---|---|
+| 0 | Mon 00:00 (0) | Terminal ops | Sections 10-18 closed from hour 0 to 39 |
+| 1 | Tue 06:00 (30) | MAERSK NUBA | Unscheduled call: arrives at hour 58, asks to sail by 74 |
+| 2 | Tue 18:00 (42) | Harbour master | Emergency: ZIM CHINA must dock by hour 64; each hour later costs 60 |
+| 3 | Wed 06:00 (54) | CARLOTA B | Delayed: arrives at hour 93 (planned slot 78) |
+| 4 | Thu 12:00 (84) | MAERSK NARMADA; Terminal ops | Delayed: arrives at hour 129 (slot 112); 2 of 9 cranes out from hour 108 to 155 |
+| 5 | Thu 18:00 (90) | Harbour master | Gale: no ship of 300 m or more berths or leaves from hour 115 to 144, and no ship at all from 117 to 126 |
+| 6 | Sat 00:00 (120) | Ship agents | Ships 12, 13 and 14 now arrive together between hours 156 and 168 |
+
+Each kind of news is revealed a fixed time before the hour it is about (`src/agentenv_portsim/schedule.py`):
+
+| News | Revealed |
+|---|---|
+| Closure | at hour 0 |
+| Late ship, bunched ships | 24 hours before the original arrival |
+| Unscheduled call, priority cargo | 24 hours before the arrival |
+| Emergency | 12 hours before the arrival |
+| Crane outage, gale | 24 hours before it starts |
+
+Reveal times are floored at hour 0 and rounded down to a 6-hour bulletin. A ship's priority or emergency notice
+never comes before its own delay or call. On every one-week task, each notice after hour 0 comes at least 12 hours
+before the hour it is about, more than the 6-hour freeze. So a ship's own news never concerns a frozen window; an
+outage or a gale still can, and the [excuses](#the-live-grade) cover that.
+
+### The live env
+
+`PortSimLiveEnv` serves four tools to the agent. Every result is one JSON object that ends with the messages not yet
+read. A plan is a list of windows, `[{"ship": 7, "berth_hour": 95, "section": 4, "cranes": 2}, ...]`; ships left out
+keep their confirmed windows.
+
+| Tool | What it does |
+|---|---|
+| `get_situation()` | The watch and its time, the week as known now in upstream's Markdown, the confirmed windows (departed, berthed, frozen or open), the ships without a window, and the planning calls left. It still answers after the week ends |
+| `check_plan(plan)` | Checks the windows merged over the confirmed ones, on the week as known now, and confirms nothing: the ships with a problem or a cost, the plan's cost, and the entries `confirm_berths` would refuse. A problem or cost that news brought to a frozen window is listed as excused and not counted |
+| `confirm_berths(plan)` | Sets or changes the windows it lists. Each refusal carries the harbour master's reason |
+| `advance()` | Ends the watch and returns the new watch, its hour, the ships berthed and departed, the freeze line and the ships without a window. After the last watch it returns `done` with `feasible`, `cost` and `reward` |
+
+Once the clock is armed, the gateway also offers the agent its own `get_time`. Those calls never reach the env, so
+the env's `calls_used` leaves them out.
+
+For the harness, not the agent:
+
+| Surface | What it does |
+|---|---|
+| `urn:portsim:live-load/v1` `{"task_id": ...}` | Starts the week. One-week tasks only, and one week per deployed env |
+| `port_notice(event_id, name, text)` | Delivers one notice: the env applies the news and queues the message. The triggers call it; it is hidden from the agent's role |
+| `urn:agentenv:clock/v1` `sync_time` | Takes the gateway clock's URL. From then on, each `advance` sets the clock to the next bulletin |
+| `urn:portsim:end-week/v1` | Runs the watches the agent didn't reach, with no changes, then grades and audits the week |
+| `data/reset` | Clears the week |
+| `data/get` | The plan, the notice log, the frozen windows of each watch, refusals, excused problems and cost, the audit, the grade and the reward. Never the task's reference plans |
+
+The bundle `portsim-live` holds two tasks: `week` plays `dock-24B-w07x1-busy-0` with `portsim-llm`, and
+`wiring-noplay` runs the same steps without `deploy_agent` and `prompt_agent`. The steps of `week`, as of every live
+task:
+
+```
+deploy_env              portsim-live, on the gateway
+apply_server_config     urn:portsim:live-load/v1 {task_id}
+modify_env_tool_access  disable port_notice for the role default
+register_env_triggers   watch-1 ... watch-N
+deploy_agent            portsim-llm
+sync_env_clock          the week's start, rate 0 (stopped)
+prompt_agent            the live rules and the watch-0 briefing, 5 turns a watch plus 2
+apply_server_config     urn:portsim:end-week/v1
+env_outcome_verifier    portsim-live-verifier
+```
+
+The trigger `watch-k` fires when `advance` returns `"watch": k`. It calls `port_notice` once for each of the watch's
+notices, in order, and its barrier holds the agent's next call until they are applied. That is why the messages come
+with the next result, and why the rules tell the agent to call `advance` and `get_situation` in one turn.
+
+**The clock.** The env moves the gateway's clock itself. `sync_env_clock` arms the clock at the week's start with rate
+0, and the gateway gives the env its clock URL through `urn:agentenv:clock/v1`. At each `advance`, the env calls the
+gateway's `PUT /clock/set-time` with the next bulletin's time, again at rate 0. It finds that route by replacing `time`
+with `set-time` at the end of the clock URL. So `get_time`, the trajectory's timestamps and the trigger log all show
+the watch's time, and they hold still between watches. The gateway hands a server the clock URL to read the clock;
+setting the clock from the env is this env's own use of the gateway's route, which takes no credentials.
+
+### The live grade
+
+- **The executed week.** The confirmed windows are checked against the true week and scored with `berth_core`'s
+  reward v3, against the hindsight optimum and the floor, as in v1. An infeasible week scores below 0.2, and the
+  hindsight optimum scores 1.0.
+- **Excuses.** At each notice, the env checks the frozen windows on their own, before and after the news. A rule
+  break or a cost that only the news added to a frozen window is not charged, and `check_plan` lists it as excused.
+  For example, in the week above CARLOTA B is confirmed at hour 95 and frozen when the gale is announced at hour 90.
+  It then has to wait alongside for the gale to pass. That adds 20 to the cost, which is excused, so the week still
+  scores 1.0 (0.81 if the 20 were charged).
+- **The audit.** A week is valid when:
+  - every watch reached got exactly its scheduled notices, in order, before the agent's next call;
+  - every notice after hour 0 came at least 6 hours ahead;
+  - a finished week revealed each notice once.
+
+  For a valid week, `portsim-live-verifier` scores the run with the week's reward and adds an audit row with weight 0.
+  For a week that never finished or failed the audit, it raises, so the run is not scored.
+
+### The references and the live weeks
+
+`data/live/references.jsonl` plays each of the 18 one-week dock-v1-eval weeks two ways. Both go through the same week
+model and grader as the env:
+
+- **Rolling.** CP-SAT re-plans the week as known at every watch, with the frozen windows pinned and every other ship
+  at or after the freeze line.
+- **Naive.** The policy keeps each window that still fits. It moves the rest to the earliest legal hour at or after
+  the freeze line, on the nearest section, with the same cranes.
+
+A week is a live week when the rolling re-planner reaches the hindsight optimum under at least 3 of 4 solver
+configurations: 1 or 8 workers, each with or without an earliest-finish tie-break. That way, 1.0 is reachable on what
+the agent could know. 15 of the 18 weeks qualify:
+
+| Tier | Live weeks (ships, watches) |
+|---|---|
+| standard | `dock-24B-w06x1-standard-0` (16, 4), `dock-24B-w37x1-standard-0` (15, 4), `dock-36A-w06x1-standard-0` (24, 3), `dock-36A-w10x1-standard-0` (32, 2), `dock-36A-w15x1-standard-0` (30, 4), `dock-36A-w35x1-standard-0` (19, 5), `dock-36A-w37x1-standard-0` (22, 5) |
+| busy | `dock-24B-w06x1-busy-0` (17, 4), `dock-24B-w07x1-busy-0` (17, 7), `dock-24B-w16x1-busy-0` (16, 9), `dock-24B-w35x1-busy-0` (14, 8), `dock-36A-w05x1-busy-0` (27, 5), `dock-36A-w06x1-busy-0` (25, 6), `dock-36A-w17x1-busy-0` (28, 5), `dock-36A-w37x1-busy-0` (23, 7) |
+
+On these 15 weeks the rolling re-planner scores 1.0 and the naive policy 0.2025 on average. Three weeks are left out:
+
+- `dock-36A-w15x1-busy-0`: every configuration reaches 194, against an optimum of 153.
+- `dock-36A-w16x1-standard-0`: only 1 of the 4 configurations reaches the optimum.
+- `dock-36A-w17x1-standard-0`: only 2 of the 4 do.
+
+`ortools` isn't a dependency of this package. The script runs CP-SAT on a deterministic time limit, with the 8-worker
+search interleaved so that it reproduces, and takes about 4 minutes:
+
+```bash
+uv run --with ortools==9.15.6755 python scripts/live_references.py
+```
+
+The tests replay the stored plans without ortools and check that they reproduce the stored costs. The rolling
+re-planner assumes news never leaves the frozen windows breaking a rule on their own. That holds on these 18 weeks;
+on another week the script would stop.
+
+### Play a live week
+
+Live weeks run on local Docker for now. On the `modal_vm` profile, the gateway loads every image as a tarball from the
+object store at each deploy, about an hour per deploy from that profile's local file store. `setup` still registers
+`portsim-live` there, but run live weeks on the local profile.
+
+```bash
+agent-env portsim setup --agent                    # also registers portsim-live, on the gateway, with the same image
+agent-env run portsim-live --task wiring-noplay    # no model: no window confirmed, so it scores 0 with the audit ok
+agent-env run portsim-live --task week --model anthropic/claude-sonnet-5-5   # dock-24B-w07x1-busy-0, 7 watches
+agent-env portsim tasks generate --pack dock-v1-eval --live   # the 15 live weeks in results/bundles/dock-v1-eval-live
+```
+
+`portsim-llm` plays live when the env lists `advance`:
+
+- There is no 24-call limit.
+- The turn budget is set by the task: 5 turns a watch (`get_situation`, three planning calls, `advance`) plus 2. So
+  the `(turns left: N)` note also tells the agent how many watches the week has.
+- The episode ends when `advance` reports `done`, and takes its reward from it.
+- The last-turn and no-tool nudges name the live tools.
+- On the Messages API, each request carries one cache breakpoint, on the newest message.
+- v1 episodes send the same requests as before.
+
+A live sweep works like a v1 sweep, with `--live`:
+
+```bash
+agent-env portsim sweep run --live --name live-pilot --models anthropic/claude-sonnet-5-5 --tasks g2 --cap-usd 6
+agent-env portsim sweep report --live live-pilot   # results/live.md
+```
+
+- `--tasks all` takes the G2 weeks first, then the rest by watch count, so a spend stop drops the longest weeks.
+  `g2` is the three G2 weeks among the live weeks: `dock-36A-w35x1-standard-0`, `dock-24B-w06x1-busy-0` and
+  `dock-36A-w05x1-busy-0`.
+- The report gives each model's mean reward, with a 95% CI, next to the rolling and naive references on the same
+  weeks. It also counts weeks that reached `done`, feasible weeks and optimal weeks, and gives regret, excused cost,
+  turns, tokens and cost. Then it goes week by week.
+
+**End to end at no model spend.** `scripts/live_e2e.py` plays the `week` task through `agent-env run` on local
+Docker. `tests/fake_litellm.py` answers `portsim-llm` with the naive policy's moves, one turn per watch. The script
+fails unless:
+
+- each watch's trigger fired once;
+- the agent was never offered `port_notice`;
+- each bulletin came with the first tool result after its `advance`;
+- `get_time` read the watch's time and held still;
+- the week scored the stored naive reward.
+
+```bash
+agent-env portsim setup --agent
+PYTHONPATH=tests .venv/bin/python scripts/live_e2e.py                      # one turn per watch
+PYTHONPATH=tests .venv/bin/python scripts/live_e2e.py --double-advance 2   # skips watch 2 with two advances in a row
+```
+
 ## Built on the AgentEnv Framework
 
 This plugin is built on the [AgentEnv Framework](https://www.agentenvframework.com)
@@ -277,25 +494,31 @@ heavy lifting; this repository adds PortSimEnv. Each piece maps to a framework c
 
 | AgentEnv concept | Here |
 |---|---|
-| [Environment](https://www.agentenvframework.com/docs/environments/creating): MCP tools, a data plane and extensions in one container | `src/agentenv_portsim/server.py`, an `AgentEnvEnvironment` with three tools, `data/reset` and `data/get`, and two extensions |
-| [Plugin](https://www.agentenvframework.com/docs/plugins/environment-plugins): a pip package with entry points | `pyproject.toml`: the bundle (`agent_env.bundles`) and the `agent-env portsim` commands (`agent_env.cli_plugins`) |
-| [Tasks](https://www.agentenvframework.com/docs/tasks/creating) and verifiers | `src/agentenv_portsim/bundles/portsim/`: the wiring tasks and `portsim-verifier`, run with `agent-env run portsim --task <task>`; `agent-env portsim tasks generate` writes a pack's tasks as a folder bundle |
+| [Environment](https://www.agentenvframework.com/docs/environments/creating): MCP tools, a data plane and extensions in one container | `src/agentenv_portsim/server.py`, an `AgentEnvEnvironment` with three tools, `data/reset` and `data/get`, and two extensions; `live.py`, the live env, in the same image |
+| [Gateway topology](https://www.agentenvframework.com/docs/environments/gateway-topology): the gateway in front of an env's servers | `portsim-live` is registered on the gateway provider; `portsim` runs as a server on its own |
+| [Virtual clock](https://www.agentenvframework.com/docs/environments/virtual-clock) | the port's clock: armed at the week's start, stopped, and moved by the env at each `advance` |
+| [Triggers](https://www.agentenvframework.com/docs/environments/triggers) | one action trigger per watch delivers that watch's notices through `port_notice`, under a barrier |
+| [RBAC](https://www.agentenvframework.com/docs/environments/rbac): which roles see which tools | `port_notice` is disabled for the agent's role |
+| [Plugin](https://www.agentenvframework.com/docs/plugins/environment-plugins): a pip package with entry points | `pyproject.toml`: the bundles `portsim` and `portsim-live` (`agent_env.bundles`) and the `agent-env portsim` commands (`agent_env.cli_plugins`) |
+| [Tasks](https://www.agentenvframework.com/docs/tasks/creating) and verifiers | `src/agentenv_portsim/bundles/portsim/`: the wiring tasks and `portsim-verifier`, run with `agent-env run portsim --task <task>`; `bundles/portsim-live/`: the live tasks and `portsim-live-verifier`; `agent-env portsim tasks generate [--live]` writes a pack's tasks as a folder bundle |
 | [A2A agent](https://www.agentenvframework.com/docs/agents/creating): an agent in a container, on agent-env's model endpoint | `agents/portsim-llm/`, an `AgentEnvAgent` that reads the env's MCP server from the task and returns its episode as the trajectory |
-| [Registry](https://www.agentenvframework.com/docs/registry): versioned images, envs, agents and runs | `agent-env portsim setup` builds the image `agentenv-portsim-env` and registers the env `portsim`, and with `--agent` the agent `portsim-llm`; every run and grade is stored |
+| [Registry](https://www.agentenvframework.com/docs/registry): versioned images, envs, agents and runs | `agent-env portsim setup` builds the image `agentenv-portsim-env` and registers the envs `portsim` and `portsim-live` on it, and with `--agent` the agent `portsim-llm`; every run and grade is stored |
 
 ## Repository layout
 
 ```
-src/agentenv_portsim/   the env (server.py), the agent-env portsim commands (cli.py), the eval tasks (tasks.py)
-                        and the sweep and its report (sweep.py)
+src/agentenv_portsim/   the env (server.py), the agent-env portsim commands (cli.py), the eval and live tasks
+                        (tasks.py) and the sweep and its reports (sweep.py)
+                        the live env (live.py), the live week (world.py) and its reveal schedule (schedule.py)
   bundles/portsim/      the wiring tasks and portsim-verifier
+  bundles/portsim-live/ the live tasks week and wiring-noplay, and portsim-live-verifier
 src/berth_core/         PortSimEnv's core: tasks, checker, reward, prompts; copied unchanged (VENDORED.md)
 agents/portsim-llm/     the portsim-llm agent and its image
 data/                   the dock-v1-eval and dock-v1-train task packs, and the published dock-eval50 results in
-                        published/, copied unchanged (CC BY-SA 4.0)
-tests/                  env, agent, packaging, replay, golden and sweep tests; fake_litellm.py stands in for the
-                        model endpoint
-scripts/                record_goldens.py, record_harness.py, replay_episode.py
+                        published/, copied unchanged; live/references.jsonl, computed here (all CC BY-SA 4.0)
+tests/                  env, agent, packaging, replay, golden and sweep tests, and the live port's in live/;
+                        fake_litellm.py stands in for the model endpoint
+scripts/                record_goldens.py, record_harness.py, replay_episode.py; live_references.py, live_e2e.py
 Dockerfile              the env image
 ```
 
@@ -334,7 +557,8 @@ The wheel and the env image carry both, so the package's licence is `Apache-2.0 
   tools are ported from its OpenEnv server, and `portsim-llm` is ported from its agent harness.
 - **The task packs** in `data/` were built by Adithya S Kolavi from the Port of Barcelona's 2024 container calls and
   are licensed under CC BY-SA 4.0 ([data/LICENSE](data/LICENSE)). Contains data from the Port de Barcelona open data
-  portal. `tests/golden/` and the plans in the bundle's tasks are derived from them, under the same licence.
+  portal. `tests/golden/`, the plans in the `portsim` bundle's tasks, the prompts and notices in the `portsim-live`
+  bundle's tasks and `data/live/references.jsonl` are derived from them, under the same licence.
 - **The published episodes** the replay and harness tests read come from the
   [PortSimEnv dataset](https://huggingface.co/datasets/FineEnvs/PortSimEnv) (CC BY-SA 4.0), fetched at a pinned
   revision and never stored here. The published dock-eval50 results that `sweep report` compares with,

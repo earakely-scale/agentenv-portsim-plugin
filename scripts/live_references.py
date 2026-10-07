@@ -7,6 +7,9 @@ tie-break) on a deterministic time limit, the 8 workers interleaved because CP-S
 reproduce otherwise; the first one's plans are stored. A week qualifies for the live tasks when at least 3 of the 4
 reach the hindsight optimum. The tests replay the stored plans without ortools.
 
+The frozen windows keep every rule, so if news leaves them breaking one by themselves (a state the live grade excuses)
+the re-solve is infeasible and the script stops; no one-week dock-v1-eval week gets there.
+
     uv run --with ortools==9.15.6755 python scripts/live_references.py [--tasks id,...] [--out PATH]
 """
 
