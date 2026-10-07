@@ -58,6 +58,7 @@ class Sweep:
     k: int
     episode_cap_usd: float
     live: bool = False
+    marine: bool = False
 
     @property
     def out(self) -> Path:
@@ -141,13 +142,13 @@ def prepare(sweep: Sweep) -> None:
         raise click.UsageError("a sweep's name is 1 to 41 lowercase letters, digits and dashes, starting with no dash")
     path = sweep.out / "sweep.json"
     if path.is_file():
-        if {"live": False, **json.loads(path.read_text())} != asdict(sweep):
+        if {"live": False, "marine": False, **json.loads(path.read_text())} != asdict(sweep):
             raise click.UsageError(f"{path} is another sweep; run it with its own models, tasks, k and episode cap: "
                                    f"{path.read_text().strip()}")
         return
     tasks.generate(EVAL_PACK, sweep.out / "bundle", task_ids=sweep.tasks, episode_cap_usd=sweep.episode_cap_usd,
                    live=sweep.live)
-    spec = {key: value for key, value in asdict(sweep).items() if key != "live" or value}
+    spec = {key: value for key, value in asdict(sweep).items() if key not in ("live", "marine") or value}
     path.write_text(json.dumps(spec, indent=2) + "\n")
 
 

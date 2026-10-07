@@ -16,7 +16,7 @@ RULES = [("missing", r"^missing from the plan$"), ("no_move", r"inside the no-mo
          ("cranes", r"^gets -?\d+ cranes"), ("arrival", r"cannot arrive before hour"),
          ("quay", r"but the quay has sections"), ("closed", r"^overlaps closed sections"),
          ("alongside", r"\(alongside\)"), ("ship", r"^overlaps ship (\d+) "), ("crane_pool", r"^cranes over the pool"),
-         ("moves", r"ships move \(limit")]
+         ("moves", r"ships move \(limit"), ("pilots", r"^pilots short at hour"), ("tugs", r"^tugs short at hour")]
 NOTE = "This watch's bulletin arrives with your next tool result."
 
 
@@ -62,7 +62,8 @@ def rule(problem: str) -> str:
             return f"ship {m[1]}" if key == "ship" else key
 
 
-def excuse(before: Task, after: Task, frozen: Plan) -> tuple[list[tuple[int, str, str]], dict[int, int]]:
+def excuse(before: Task, after: Task, frozen: Plan, evaluate: Callable[[Task, Plan], PlanResult] = evaluate
+           ) -> tuple[list[tuple[int, str, str]], dict[int, int]]:
     """What the news alone did to the frozen entries: the (ship, rule) problems and the cost it added."""
     was = {r.ship: r for r in evaluate(before, frozen).ships if r.ship in frozen}
     problems, cost = [], {}
@@ -85,8 +86,8 @@ def charge(res: PlanResult, excused_problems: Iterable[tuple[int, str]],
             for r in res.ships]
 
 
-def grade_week(task: Task, plan: Plan, excused_problems: Iterable[tuple[int, str]],
-               excused_cost: Mapping[int, int]) -> dict:
+def grade_week(task: Task, plan: Plan, excused_problems: Iterable[tuple[int, str]], excused_cost: Mapping[int, int],
+               evaluate: Callable[[Task, Plan], PlanResult] = evaluate) -> dict:
     ships = charge(evaluate(task, plan), excused_problems, excused_cost)
     violations = [{"ship": r.ship, "problem": p} for r, charged, _, _ in ships for p in charged]
     excused = [{"ship": r.ship, "problem": p} for r, _, forgiven, _ in ships for p in forgiven]
@@ -104,6 +105,8 @@ def grade_week(task: Task, plan: Plan, excused_problems: Iterable[tuple[int, str
 
 
 class Week:
+    evaluate = staticmethod(evaluate)
+
     def __init__(self, task: Task):
         self.task = task
         self.watches = schedule(task)
@@ -151,7 +154,7 @@ class Week:
 
     def windows(self, view: Task) -> list[dict]:
         fixed = self.fixed
-        departures = {r.ship: r.departure for r in evaluate(view, self.plan).ships}
+        departures = {r.ship: r.departure for r in self.evaluate(view, self.plan).ships}
         rows = []
         for sid, (h, sec, cranes) in sorted(self.plan.items()):
             dep = departures[sid]
@@ -206,7 +209,7 @@ class Week:
             view, plan, _, _, refused, entry_problems = self._merge(raw)
         except PlanError as e:
             return {"error": str(e), "planning_calls_left": self.calls_left}
-        ships = charge(evaluate(view, plan), *self.excuses())
+        ships = charge(self.evaluate(view, plan), *self.excuses())
         rows = []
         for r, charged, forgiven, waived in ships:
             if r.berth_hour is None:
@@ -261,7 +264,7 @@ class Week:
             fixed, before = self.fixed, self.view
             self.revealed.append(event_id)
             if fixed:
-                problems, cost = excuse(before, self.view, fixed)
+                problems, cost = excuse(before, self.view, fixed, evaluate=self.evaluate)
                 self.excused_problems += [{"event_id": event_id, "ship": s, "rule": r, "problem": p}
                                           for s, r, p in problems]
                 self.excused_cost += [{"event_id": event_id, "ship": s, "cost": c} for s, c in cost.items()]
@@ -277,7 +280,7 @@ class Week:
 
     def finish(self, end_reason: str) -> dict:
         self.done, self.end_reason = True, end_reason
-        self.grade = grade_week(self.task, self.plan, *self.excuses())
+        self.grade = grade_week(self.task, self.plan, *self.excuses(), evaluate=self.evaluate)
         return {"done": True, "feasible": self.grade["feasible"], "cost": self.grade["cost"],
                 "reward": self.grade["reward"]}
 
@@ -363,8 +366,8 @@ def naive(week: Week) -> Plan:
     return plan
 
 
-def play(task: Task, policy: Policy) -> Week:
-    week = Week(task)
+def play(task: Task, policy: Policy, week: type[Week] = Week) -> Week:
+    week = week(task)
     while True:
         target = policy(week)
         if rows := [r for r in plan_to_list(target) if week.plan.get(r["ship"]) != target[r["ship"]]]:
