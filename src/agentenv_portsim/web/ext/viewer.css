@@ -9,6 +9,9 @@ header.top .name { font-weight: 600; text-decoration: none; }
 .ps-clock { font-variant-numeric: tabular-nums; }
 .ps-line, .ps-known { font-size: 12px; margin-top: 3px; }
 .ps-next { color: var(--warn); font-weight: 600; }
+.ps-marine { font-variant-numeric: tabular-nums; }
+.ps-marine span { white-space: nowrap; }
+.ps-short { color: var(--red); }
 .ps-counts { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; margin-top: 4px; }
 .ps-c b { font-variant-numeric: tabular-nums; }
 .ps-c.ps-departed { color: var(--muted); }
@@ -62,6 +65,8 @@ html.scene .ps-watch .muted, html.scene .ps-c.ps-departed { color: #b8c7d3; }
 html.scene .ps-clock b { font-size: 20px; }
 html.scene .ps-c.ps-berthed b, html.scene .ps-c.ps-frozen b { color: #9fc4ea; }
 html.scene .ps-known { display: none; }
+html.scene .ps-marine { font-size: 14px; }
+html.scene .ps-short { color: #ff9a8f; }
 html.scene .ps-feed { max-height: none; overflow: visible; font-size: 14px; }
 html.scene .ps-feed li { border-left-color: #f0b44c; }
 html.scene .ps-feed li:not(.new) { display: none; }
