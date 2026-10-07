@@ -73,6 +73,12 @@ def test_the_command_lines():
     assert "palettegen" in args[args.index("-vf") + 1] and args[-3:] == ["-loop", "0", str(ROOT / "a.gif")]
 
 
+
+def test_the_scene_layout_is_asked_for_in_the_url():
+    assert "&layout=scene#/run/" in record.episode_url(8000, "live-gpt", "openai/gpt-6.1-sol", "dock-1", "scene")
+    assert "layout" not in record.episode_url(8000, "live-gpt", "openai/gpt-6.1-sol", "dock-1")
+
+
 @pytest.mark.browser
 def test_a_one_second_take(monkeypatch, tmp_path):
     monkeypatch.setattr(record, "RUNS", ROOT)

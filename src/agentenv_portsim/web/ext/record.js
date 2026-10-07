@@ -1,8 +1,10 @@
 // ?record=1: what `agent-env portsim record` drives over the DevTools protocol, one frame at a time.
 import { currentStage } from "./stage.js";
 
-if (new URLSearchParams(location.search).get("record") === "1") {
+const params = new URLSearchParams(location.search);
+if (params.get("record") === "1") {
   document.documentElement.classList.add("recording");
+  if (params.get("layout") === "scene") document.documentElement.classList.add("scene");
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const frames = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
   const deadline = performance.now() + 60e3;

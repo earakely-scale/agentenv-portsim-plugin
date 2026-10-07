@@ -28,6 +28,7 @@ from .view import serve
 CHROMES = ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", "google-chrome", "google-chrome-stable",
            "chromium", "chromium-browser"]
 VIEWS = ["overview", "harbour", "quayside", "overhead"]
+LAYOUTS = ["full", "scene"]
 ANSWER_SECONDS = 120
 
 
@@ -179,8 +180,8 @@ def record(url: str, rollout: dict, out: Path, *, chrome: str, ffmpeg: str, widt
     return len(frames)
 
 
-def episode_url(port: int, run: str, model: str, task_id: str) -> str:
-    return (f"http://127.0.0.1:{port}/viewer/?embed=1&record=1"
+def episode_url(port: int, run: str, model: str, task_id: str, layout: str = "full") -> str:
+    return (f"http://127.0.0.1:{port}/viewer/?embed=1&record=1{'&layout=scene' if layout == 'scene' else ''}"
             f"#/run/{quote(run, safe='')}/{quote(model, safe='')}/{quote(task_id, safe='')}")
 
 
@@ -197,10 +198,12 @@ def episode_url(port: int, run: str, model: str, task_id: str) -> str:
 @click.option("--intro-seconds", default=2.0, show_default=True)
 @click.option("--outro-seconds", default=3.0, show_default=True)
 @click.option("--view", type=click.Choice(VIEWS), default="overview", show_default=True, help="Camera view.")
+@click.option("--layout", type=click.Choice(LAYOUTS), default="full", show_default=True,
+              help="full: the viewer's page; scene: the 3D quay alone, with the watch panel over it.")
 @click.option("--gif", type=click.Path(dir_okay=False, path_type=Path), help="Also write an 800 px GIF here.")
 @click.option("--chrome", help="Chrome or Chromium binary. Default: Google Chrome, else chromium on PATH.")
 def record_command(sweep_name, model, task_id, out, rep, size, fps, step_seconds, hours_per_second, intro_seconds,
-                   outro_seconds, view, gif, chrome):
+                   outro_seconds, view, layout, gif, chrome):
     """Film one recorded episode on the viewer: each plan on the 3D quay and the dock chart, then the week played out;
     a live week watch by watch, with the clock running between watches. Every frame carries the OpenStreetMap
     attribution."""
@@ -213,7 +216,7 @@ def record_command(sweep_name, model, task_id, out, rep, size, fps, step_seconds
     chrome, ffmpeg = find_chrome(chrome), find_ffmpeg()
     server = serve(runs, twin.ensure(), 0)
     threading.Thread(target=server.serve_forever, daemon=True).start()
-    url = episode_url(server.server_port, run, model, task_id)
+    url = episode_url(server.server_port, run, model, task_id, layout)
     click.echo(twin.ATTRIBUTION)
     pace = {"step_seconds": step_seconds, "hours_per_second": hours_per_second, "intro_seconds": intro_seconds,
             "outro_seconds": outro_seconds}

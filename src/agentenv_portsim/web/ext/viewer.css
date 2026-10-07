@@ -44,3 +44,28 @@ html.recording .traffic-counts b { font-size: 12px; }
 html.recording .stage .ov-attr { font-size: 13px; color: #fff; background: rgba(13, 30, 40, 0.92); padding: 2px 8px; }
 html.recording .ps-watch { position: sticky; top: 0; z-index: 3; }
 html.recording .ps-future { display: none; }
+
+html.scene .ro-page { position: relative; height: 100vh; padding: 0; max-width: none; }
+html.scene .ro-grid { display: block; height: 100%; }
+html.scene .ro-right { position: absolute; inset: 0; }
+html.scene .ro-right .chart-sec, html.scene .ro-left > section:not(.ps-watch), html.scene .scene-traffic, html.scene .stage .stepnav { display: none; }
+html.scene .stage { height: 100%; border-radius: 0; }
+html.scene .page-head { position: absolute; z-index: 5; top: 16px; left: 18px; margin: 0; padding: 8px 14px; border-radius: 6px;
+  background: rgba(13, 30, 40, 0.88); color: #fff; }
+html.scene .page-head h1 { font-size: 22px; margin: 0; color: #fff; }
+html.scene .page-head .meta, html.scene .page-head .meta a { color: #c9d6e0; }
+html.scene .ro-left { position: absolute; z-index: 5; bottom: 92px; left: 18px; width: 470px; height: auto; overflow: visible;
+  padding: 0; background: none; pointer-events: none; }
+html.scene .ps-watch { position: static; padding: 12px 14px; border: 0; border-radius: 6px; background: rgba(13, 30, 40, 0.88); color: #fff; }
+html.scene .ps-watch h2 { color: #fff; font-size: 17px; }
+html.scene .ps-watch .muted, html.scene .ps-c.ps-departed { color: #b8c7d3; }
+html.scene .ps-clock b { font-size: 20px; }
+html.scene .ps-c.ps-berthed b, html.scene .ps-c.ps-frozen b { color: #9fc4ea; }
+html.scene .ps-known { display: none; }
+html.scene .ps-feed { max-height: none; overflow: visible; font-size: 14px; }
+html.scene .ps-feed li { border-left-color: #f0b44c; }
+html.scene .ps-feed li:not(.new) { display: none; }
+html.scene .ps-feed li.new { background: rgba(251, 241, 220, 0.97); color: #1c1c1c; display: -webkit-box; -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3; overflow: hidden; }
+html.scene .ps-final dt { color: #b8c7d3; }
+html.scene .stage .ov-tl { top: 16px; left: auto; right: 18px; }
