@@ -9,9 +9,13 @@ const REPO = "https://github.com/earakely-scale/agentenv-portsim-plugin";
 const LINKS = [
   ["PortSimEnv", UPSTREAM, "the environment, its eval and this viewer, by Adithya S Kolavi"],
   ["Article", "https://huggingface.co/spaces/FineEnvs/simulation-rl-environments", "Simulation RL Environments, part 1"],
-  ["agentenv-portsim", REPO, "PortSimEnv v1 and the live week as agent-env environments, the sweeps"],
+  ["agentenv-portsim", REPO, "v1 and v2, the live port, as agent-env environments, and the sweeps"],
 ];
-const ENVS = { portsim: "PortSimEnv v1: one plan, one graded submit", "portsim-live": "the live week: watch by watch on a virtual clock" };
+const ENVS = {
+  "portsim-live": ["v2", "the live port: the week unfolds watch by watch on a virtual clock"],
+  portsim: ["v1", "a week planned in one go: one plan, one graded submit"],
+};
+const versionOf = (env) => (ENVS[env] || [""])[0];
 const enc = encodeURIComponent;
 const runHref = (run, model, task) => `#/run/${enc(run)}/${enc(model)}/${enc(task)}`;
 const optimal = (e) => (e.reward || 0) >= 0.999;
@@ -64,10 +68,10 @@ export async function overviewPage({ app, setCrumbs, isCurrent, sortableTable })
     <section class="ov-intro">
       <h1>PortSim runs: agent-env sweeps, replayed in 3D</h1>
       <p class="muted">Models re-plan a broken week of container-ship dockings at a Port of Barcelona quay, through
-      agent-env sweeps of PortSimEnv v1 and the live week, replayed on PortSimEnv's viewer by Adithya S Kolavi
-      (Apache-2.0): the quay in 3D, the dock chart of every plan the model checked or confirmed, the grade and the
-      transcript. A live week replays watch by watch: the virtual clock, the bulletins as they arrive, the windows as they
-      freeze.</p>
+      agent-env sweeps, replayed on PortSimEnv's viewer by Adithya S Kolavi (Apache-2.0): the quay in 3D, the dock
+      chart of every plan the model checked or confirmed, the grade and the transcript. <b>v2, the live port</b>, plays
+      the week as it unfolds and replays watch by watch: the virtual clock, the bulletins as they arrive, the windows as
+      they freeze. <b>v1</b> plans the week in one go, as PortSimEnv does.</p>
       <p class="muted small">Port of Barcelona twin © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a> (ODbL) · terrain: Terrain Tiles (AWS) · tasks: Port de Barcelona open data, CC BY-SA 4.0.</p>
       <dl class="kv">${LINKS.map(([k, href, what]) => `<dt><a class="ext" href="${href}" target="_blank" rel="noopener">${k} ↗</a></dt><dd class="muted">${what}</dd>`).join("")}</dl>
     </section>
@@ -77,12 +81,12 @@ export async function overviewPage({ app, setCrumbs, isCurrent, sortableTable })
       <table class="tbl click" id="ov-eps"><thead></thead><tbody></tbody></table>
     </section>
   </div>`;
-  const runs = await getRuns();
+  const runs = (await getRuns()).sort((a, b) => versionOf(b.env).localeCompare(versionOf(a.env)));
   const boards = new Map(await Promise.all(runs.map(async (r) => [r.run, board((await getRun(r.run)).episodes)])));
   if (!isCurrent()) return;
   app.querySelector("#ps-runs").innerHTML = runs.length
     ? runs.map((r) => `<section class="ps-run">
-        <div class="sec-head"><h2>${escapeHtml(r.run)}</h2><span class="muted small">${escapeHtml(r.env)} · ${escapeHtml(ENVS[r.env] || "")} · ${r.episodes} episodes${r.k > 1 ? ` · rep ${r.rep} of ${r.k}` : ""} · cap $${r.episode_cap_usd} an episode</span></div>
+        <div class="sec-head"><h2>${escapeHtml(versionOf(r.env))} · ${escapeHtml(r.run)}</h2><span class="muted small">${escapeHtml(r.env)} · ${escapeHtml((ENVS[r.env] || [])[1] || "")} · ${r.episodes} episodes${r.k > 1 ? ` · rep ${r.rep} of ${r.k}` : ""} · cap $${r.episode_cap_usd} an episode</span></div>
         <table class="tbl click"><thead><tr><th>Model</th><th class="num">Episodes</th><th class="num">Mean</th><th class="num">${r.env === "portsim-live" ? "Reached done" : "Submitted"}</th><th class="num">Feasible</th><th class="num">Optimal</th></tr></thead>
         <tbody>${boards.get(r.run).map((b) => `<tr data-row="${escapeHtml(b.model)}" data-run="${escapeHtml(r.run)}" title="List ${escapeHtml(nameOf(b.model))}'s episodes"><td><span title="${escapeHtml(b.model)}">${escapeHtml(nameOf(b.model))}</span></td><td class="num">${b.n}</td><td class="num"><b>${fmtNum(b.mean, 3)}</b></td><td class="num">${fmtPct(b.submitted)}</td><td class="num">${fmtPct(b.feasible)}</td><td class="num">${b.optimal}/${b.n}</td></tr>`).join("")}</tbody></table>
         ${r.failed.length ? `<ul class="viol">${r.failed.map((f) => `<li>${escapeHtml(nameOf(f.model))} on ${escapeHtml(f.task_id)} does not replay: ${escapeHtml(f.error)}</li>`).join("")}</ul>` : ""}
@@ -95,7 +99,7 @@ export async function overviewPage({ app, setCrumbs, isCurrent, sortableTable })
     const b = boards.get(run).find((x) => x.model === model);
     for (const tr of app.querySelectorAll("#ps-runs tr[data-row]")) tr.classList.toggle("sel", tr.dataset.run === run && tr.dataset.row === model);
     epsSec.hidden = false;
-    app.querySelector("#ov-eps-h").textContent = `Episodes · ${nameOf(model)} · ${run}`;
+    app.querySelector("#ov-eps-h").textContent = `Episodes · ${nameOf(model)} · ${versionOf(r.env)} · ${run}`;
     app.querySelector("#ov-eps-note").textContent = `${model} · ${b.n} episodes · click one to replay it in 3D`;
     const rows = b.eps.map((e) => ({ ...e, run }));
     app.querySelector("#ov-eps").replaceChildren(document.createElement("thead"), document.createElement("tbody"));
