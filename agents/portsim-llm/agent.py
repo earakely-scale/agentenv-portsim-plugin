@@ -1,7 +1,9 @@
 """PortSimEnv's harness loop (FineEnvs portsim-v1 b0f4c2f, berth_openenv/agent.py) as an A2A agent: one episode on the
 env's MCP tools through agent-env's model endpoint, on the API upstream calls for the model's provider. Cost is usage
 times PRICES, or the most a request could cost when its usage is lost (it failed, or the harness cut its stream); an
-episode stops before a request that could take it past PORTSIM_MAX_COST_USD."""
+episode stops before a request that could take it past PORTSIM_MAX_COST_USD. An env that lists advance is a live week
+in watches: the episode ends on advance's done, with no tool-call cap, and Anthropic requests carry one rolling cache
+breakpoint."""
 
 import json
 import logging
@@ -40,6 +42,29 @@ PRICES = {  # USD per 1M tokens: input, output, cache read. LiteLLM public price
     "openai/gpt-6.1-sol": (2.00, 10.00, 0.10),
     "fireworks_ai/glm-5p3-flash": (0.15, 0.50, 0.03),
 }
+
+
+@dataclass(frozen=True)
+class Mode:
+    steps: tuple[str, ...]
+    last_turn: str
+    no_call: str
+    cut_off: str
+
+
+V1 = Mode(("check_plan", "submit_plan"),
+          "This is your last turn: call submit_plan now with your best plan.",
+          "No tool was called. Plans only count through the tools: call check_plan to test a draft or submit_plan "
+          "with your final plan.",
+          "Your last turn ran out of output tokens before calling a tool. Your notes from it are above. Keep reasoning "
+          "short now and call check_plan with your current draft, or submit_plan.")
+LIVE = Mode(("check_plan", "confirm_berths", "advance"),
+            "This is your last turn: confirm_berths now for every ship that still needs a window; the rest of the "
+            "week then runs on your confirmed windows.",
+            "No tool was called. Windows only count through the tools: confirm_berths to commit windows, advance to "
+            "move to the next watch.",
+            "Your last turn ran out of output tokens before calling a tool. Your notes from it are above. Keep "
+            "reasoning short now and call check_plan with your current draft, or confirm_berths.")
 
 
 class PortSimConfig(AgentConfig):
@@ -108,6 +133,13 @@ def plan_value(plan: Any) -> Any:
     return plan
 
 
+def _result(out: str) -> Any:
+    try:
+        return json.loads(out)
+    except json.JSONDecodeError:
+        return {"text": out}
+
+
 def _args(raw: str) -> tuple[dict, str | None]:
     try:
         v = json.loads(raw or "{}")
@@ -120,10 +152,10 @@ class AnthropicAgent:
     route = "messages"
 
     def __init__(self, model: str, tools, system: str, max_tokens: int, base_url: str, api_key: str,
-                 effort: str | None = None):
+                 effort: str | None = None, cache: bool = False):
         self.client = anthropic.AsyncAnthropic(base_url=base_url, auth_token=api_key, max_retries=4,
                                                timeout=REQUEST_TIMEOUT)
-        self.model, self.system, self.max_tokens = model, system, max_tokens
+        self.model, self.system, self.max_tokens, self.cache = model, system, max_tokens, cache
         self.extra = ({"extra_body": {"output_config": {"effort": effort}}} if effort in ("low", "medium", "high")
                       else {})
         self.tools = [{"name": t.name, "description": t.description or "",
@@ -146,7 +178,12 @@ class AnthropicAgent:
         if self._pending:
             self.messages.append({"role": "user", "content": self._pending})
             self._pending = []
-        return {"model": self.model, "system": self.system, "messages": self.messages, "tools": self.tools,
+        messages = self.messages
+        if self.cache:
+            *blocks, newest = messages[-1]["content"]
+            messages = [*messages[:-1], {**messages[-1], "content": [
+                *blocks, {**newest, "cache_control": {"type": "ephemeral"}}]}]
+        return {"model": self.model, "system": self.system, "messages": messages, "tools": self.tools,
                 "max_tokens": self.max_tokens, **self.extra}
 
     async def step(self, request: dict) -> Turn:
@@ -323,9 +360,10 @@ def route(model: str) -> str:
     return "messages" if model.startswith("anthropic/") else "responses" if model.startswith("openai/") else "chat"
 
 
-def make_agent(model: str, tools, system: str, max_tokens: int, effort: str | None, root: str, key: str):
+def make_agent(model: str, tools, system: str, max_tokens: int, effort: str | None, root: str, key: str,
+               cache: bool = False):
     if route(model) == "messages":
-        return AnthropicAgent(model, tools, system, max_tokens, root, key, effort)
+        return AnthropicAgent(model, tools, system, max_tokens, root, key, effort, cache)
     if route(model) == "responses":
         return OpenAIResponsesAgent(model, tools, system, max_tokens, f"{root}/v1", key, effort or "medium")
     return ChatAgent(model, tools, system, max_tokens, f"{root}/v1", key, effort)
@@ -361,6 +399,7 @@ class Episode:
                                        "usage": {"input_tokens": 0, "output_tokens": 0}, "turns": 0,
                                        "end_reason": None, "errors": []}
         self.reward: float | None = None
+        self.live = False
         self.tool_calls = self.checks = self.cached = self.written = 0
         self.spent = 0.0
         self.failure: tuple[str, str] | None = None
@@ -394,14 +433,17 @@ class Episode:
     async def play(self, env: EnvSession, opening: str) -> None:
         config, system = self.config, self.config.system_prompt
         self.record["messages"] += [{"role": "system", "content": system}, {"role": "user", "content": opening}]
-        agent = make_agent(self.model, await env.tools(), system, config.model_params["max_tokens"], config.effort,
-                           self.base.rstrip("/").removesuffix("/v1"), self.key)
+        tools = await env.tools()
+        self.live = any(t.name == "advance" for t in tools)
+        agent = make_agent(self.model, tools, system, config.model_params["max_tokens"], config.effort,
+                           self.base.rstrip("/").removesuffix("/v1"), self.key, self.live)
         agent.user(opening)
         async with agent.client:
             await self.turns(env, agent)
 
     async def turns(self, env: EnvSession, agent) -> None:
         config, record, price = self.config, self.record, PRICES[self.model]
+        mode = LIVE if self.live else V1
         max_turns = config.max_turns
         empty = 0
         for turn in range(max_turns):
@@ -410,9 +452,8 @@ class Episode:
                                  f"turn {turn + 1} would start after the {config.timeout_seconds} s limit")
             last = turn == max_turns - 1
             if last:
-                note = "This is your last turn: call submit_plan now with your best plan."
-                agent.user(note)
-                record["messages"].append({"role": "user", "content": note})
+                agent.user(mode.last_turn)
+                record["messages"].append({"role": "user", "content": mode.last_turn})
             request = agent.request()
             most = bound(agent, request, price)
             if self.spent + most > self.max_cost:
@@ -441,12 +482,9 @@ class Episode:
                     break
                 if t.stop.startswith("length") and t.reasoning:
                     agent.notes(t.reasoning[-NOTES_CHARS:])
-                    nudge = ("Your last turn ran out of output tokens before calling a tool. Your notes from it are "
-                             "above. Keep reasoning short now and call check_plan with your current draft, or "
-                             "submit_plan.")
+                    nudge = mode.cut_off
                 else:
-                    nudge = ("No tool was called. Plans only count through the tools: call check_plan to test a draft "
-                             "or submit_plan with your final plan.")
+                    nudge = mode.no_call
                 agent.user(nudge)
                 record["messages"].append({"role": "user", "content": nudge})
                 continue
@@ -462,19 +500,20 @@ class Episode:
                     self.tool_calls += 1
                     if c.name == "check_plan":
                         self.checks += 1
-                    if c.name in ("check_plan", "submit_plan"):
-                        try:
-                            res = json.loads(out)
-                        except json.JSONDecodeError:
-                            res = {"text": out}
+                    res = _result(out)
+                    if c.name in mode.steps:
                         record["steps"].append({"turn": turn + 1, "tool": c.name,
                                                 "plan": plan_value(c.arguments.get("plan")), "result": res})
-                        if c.name == "submit_plan" and res.get("submitted") is True:
-                            done = True
-                            self.reward = record["reward"] = float(res["reward"])
-                            record["final"] = {"submitted": True, "plan": plan_value(c.arguments.get("plan"))}
-                            record["end_reason"] = "submitted"
-                    if not done and self.tool_calls >= MAX_TOOL_CALLS:
+                    if self.live and res.get("done") is True:
+                        done = True
+                        self.reward = record["reward"] = float(res["reward"])
+                        record["end_reason"] = "done"
+                    elif c.name == "submit_plan" and res.get("submitted") is True:
+                        done = True
+                        self.reward = record["reward"] = float(res["reward"])
+                        record["final"] = {"submitted": True, "plan": plan_value(c.arguments.get("plan"))}
+                        record["end_reason"] = "submitted"
+                    if not (done or self.live) and self.tool_calls >= MAX_TOOL_CALLS:
                         done = True
                         self.reward = record["reward"] = 0.0
                         record["end_reason"] = "tool_call_limit"
