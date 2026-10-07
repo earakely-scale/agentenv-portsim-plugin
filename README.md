@@ -449,8 +449,8 @@ agent-env portsim tasks generate --pack dock-v1-eval --live   # the 15 live week
 `portsim-llm` plays live when the env lists `advance`:
 
 - There is no 24-call limit.
-- The turn budget is set by the task: 5 turns a watch (`get_situation`, three planning calls, `advance`) plus 2. So
-  the `(turns left: N)` note also tells the agent how many watches the week has.
+- Every week gets 47 turns: 5 a watch (`get_situation`, three planning calls, `advance`) for the longest week's 9
+  watches, plus 2. One number for all weeks keeps the `(turns left: N)` note from revealing how many bulletins are coming.
 - The episode ends when `advance` reports `done`, and takes its reward from it.
 - The last-turn and no-tool nudges name the live tools.
 - On the Messages API, each request carries one cache breakpoint, on the newest message.

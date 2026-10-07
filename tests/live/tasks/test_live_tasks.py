@@ -17,6 +17,7 @@ from click.testing import CliRunner
 
 from agentenv_portsim import cli, tasks, world
 from agentenv_portsim.cli import portsim
+from agentenv_portsim.schedule import schedule
 from berth_core import rules, situation
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -93,7 +94,7 @@ def test_a_live_week_loads_hides_port_notice_registers_its_watches_arms_the_cloc
          "system_prompt": rules(task, 3).split("\n\nTools:\n")[0] + "\n\n" + LIVE_RULES,
          "prompt": situation(world.known(task, ["closure-2"])) + "\n\nIt is watch 0, Monday 00:00. Confirm berth "
                                                                  "windows with confirm_berths, then call advance.",
-         "max_turns": 37, "model_params": {"max_tokens": 32000}, "timeout_seconds": 7200},
+         "max_turns": 47, "model_params": {"max_tokens": 32000}, "timeout_seconds": 7200},
         {"id": "end-week", "type": "apply_server_config", "env_id": "portsim-live",
          "directives": [{"service": "portsim-live", "uri": "urn:portsim:end-week/v1", "args": {}}]},
         {"id": "grade", "type": "env_outcome_verifier", "env_id": "portsim-live",
@@ -124,10 +125,10 @@ def test_the_live_prompts_keep_the_rules_and_show_only_the_week_known_at_hour_0(
     assert not [line for line in opening if "MAERSK NUBA" in line]
 
 
-@pytest.mark.parametrize(("task_id", "turns"), [("dock-36A-w10x1-standard-0", 12), ("dock-24B-w16x1-busy-0", 47)])
-def test_a_week_gets_five_turns_a_watch_and_two_more(task_id, turns):
+@pytest.mark.parametrize("task_id", ["dock-36A-w10x1-standard-0", "dock-24B-w16x1-busy-0"])
+def test_every_week_gets_the_turns_of_the_longest(task_id):
     play = next(s for s in tasks.live_steps(pack_task(task_id), 5.0) if s["id"] == "play")
-    assert play["max_turns"] == turns
+    assert play["max_turns"] == 47 == 5 * len(schedule(pack_task("dock-24B-w16x1-busy-0"))) + 2
 
 
 def test_the_bundle_installs_week_and_wiring_noplay_and_the_live_verifier(local_stores):

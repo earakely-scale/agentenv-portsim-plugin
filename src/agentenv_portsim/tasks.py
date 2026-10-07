@@ -10,7 +10,7 @@ import click
 
 from berth_core import Task, TaskPack, rules, situation
 
-from .schedule import END_WEEK_URI, LIVE_ENV, LIVE_LOAD_URI, NOTICE_TOOL, PLANNING_CALLS, max_turns, schedule, triggers
+from .schedule import END_WEEK_URI, LIVE_ENV, LIVE_LOAD_URI, MAX_TURNS, NOTICE_TOOL, PLANNING_CALLS, schedule, triggers
 from .world import Week
 
 PACKS = files("agentenv_portsim") / "data"
@@ -92,7 +92,7 @@ def live_steps(task: Task, episode_cap_usd: float) -> list[dict]:
         {"id": "clock", "type": "sync_env_clock", "env_id": LIVE_ENV, "virtual_time": task.week_start_utc,
          "virtual_seconds_per_real_second": 0, "tolerate_missing_sync_time": False},
         {"id": "play", "type": "prompt_agent", "prompt_id": task.task_id, "system_prompt": live_rules(task),
-         "prompt": LIVE_OPENING.format(situation=situation(Week(task).view)), "max_turns": max_turns(len(watches)),
+         "prompt": LIVE_OPENING.format(situation=situation(Week(task).view)), "max_turns": MAX_TURNS,
          "model_params": {"max_tokens": 32000}, "timeout_seconds": 7200},
         {"id": "end-week", "type": "apply_server_config", "env_id": LIVE_ENV,
          "directives": [{"service": LIVE_ENV, "uri": END_WEEK_URI, "args": {}}]},

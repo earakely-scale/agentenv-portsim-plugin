@@ -21,6 +21,9 @@ BULLETIN_HOURS = 6
 PLANNING_CALLS = 3
 TURNS_PER_WATCH = 5
 BARRIER_SECONDS = 60
+MAX_TURNS = TURNS_PER_WATCH * 9 + 2
+"""Every week gets the turns of the longest (9 watches), so the turns-left note doesn't reveal how many
+bulletins are coming."""
 LEADS = {"late": 24, "bunching": 24, "extra": 24, "priority": 24, "emergency": 12, "crane_outage": 24, "gale": 24}
 SPEAKERS = {"bunching": "Ship agents", "gale": "Harbour master", "emergency": "Harbour master",
             "closure": "Terminal ops", "crane_outage": "Terminal ops", "priority": "Line desk"}
@@ -91,9 +94,6 @@ def triggers(watches: list[Watch]) -> list[dict]:
                           "args": {"event_id": n.event_id, "name": n.name, "text": n.text}} for n in w.notices]}
             for w in watches[1:]]
 
-
-def max_turns(watches: int) -> int:
-    return TURNS_PER_WATCH * watches + 2
 
 
 def label(hour: int) -> str:

@@ -1,6 +1,6 @@
 import pytest
 
-from agentenv_portsim.schedule import BULLETIN_HOURS, FREEZE_HOURS, label, max_turns, schedule, triggers, virtual_time
+from agentenv_portsim.schedule import BULLETIN_HOURS, FREEZE_HOURS, MAX_TURNS, label, schedule, triggers, virtual_time
 
 WATCHES = {
     "24B-w06x1-busy": 4, "24B-w07x1-busy": 7, "24B-w16x1-busy": 9, "24B-w35x1-busy": 8, "36A-w05x1-busy": 5,
@@ -90,6 +90,6 @@ def test_multi_week_tasks_are_refused(pack):
 
 
 def test_turns_labels_and_virtual_time(example):
-    assert (max_turns(7), max_turns(2)) == (37, 12)
+    assert MAX_TURNS == 47
     assert (label(0), label(30), label(120)) == ("Mon 00:00", "Tue 06:00", "Sat 00:00")
     assert (virtual_time(example, 0), virtual_time(example, 30)) == ("2024-02-12T00:00:00Z", "2024-02-13T06:00:00Z")
