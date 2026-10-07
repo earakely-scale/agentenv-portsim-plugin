@@ -56,11 +56,12 @@ week is new here.
 ## What's in it
 
 - **Two environments, in one image.**
-  - `portsim` plans a week in one go: the agent reads the situation, checks drafts (10 checks) and submits one plan,
-    within 24 tool calls ([The environment](#the-environment)).
-  - `portsim-live` plays the same week as it unfolds, on AgentEnv's gateway. A virtual clock runs the week watch by
-    watch, the ships, the harbour master, terminal ops and the line desk send their news through triggers, and
-    windows about to start are frozen. The agent confirms berths as it goes ([The live port](#the-live-port)).
+  - **v1,** `portsim`, plans a week in one go: the agent reads the situation, checks drafts (10 checks) and submits
+    one plan, within 24 tool calls ([The environment](#the-environment)).
+  - **v2, the live port,** `portsim-live`, plays the same week as it unfolds, on AgentEnv's gateway. A virtual clock
+    runs the week watch by watch, the ships, the harbour master, terminal ops and the line desk send their news through
+    triggers, and windows about to start are frozen. The agent confirms berths as it goes
+    ([The live port](#the-live-port)).
 - **1,100 weeks to play.** They come from the port's 2024 container calls at two quays, 24B (APM Terminals
   Barcelona) and 36A (Terminal Catalunya, BEST), in four tiers from standard to extreme: 50 eval weeks and 1,050
   train weeks, with no week in both. 15 of the eval weeks are live weeks ([Tasks](#tasks)).
