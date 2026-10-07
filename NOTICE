@@ -26,6 +26,11 @@ licensed under the Apache License, Version 2.0. Derived from it:
   after the freeze line.
 - src/agentenv_portsim/web/upstream/: PortSimEnv's viewer, copied unchanged from
   envs/berth_planning/openenv/berth_openenv/web/.
+- src/agentenv_portsim/web/ext/index.html: adapted from that viewer's index.html (its import map,
+  title and header).
+- src/agentenv_portsim/view.py: the /api routes and their JSON follow
+  envs/berth_planning/openenv/berth_openenv/api.py; src/agentenv_portsim/episodes.py: the episode
+  summaries follow summarize() in eval/run_eval.py.
 
 Data licensed under CC BY-SA 4.0 (data/LICENSE), not under the Apache License:
 
@@ -39,6 +44,13 @@ Data licensed under CC BY-SA 4.0 (data/LICENSE), not under the Apache License:
   packs.
 - data/published/dock-eval50/index.json: the published dock-eval50 results, copied unchanged from
   results/rollouts/dock-eval50/index.json.
+- tests/viewer/runs/: episodes recorded on dock-v1 tasks; their transcripts hold the task text.
+
+The viewer's 3D twin of the Port of Barcelona is not included: agent-env portsim view and record
+download it from PortSimEnv's public bucket. It is © OpenStreetMap contributors, licensed under the
+Open Database License 1.0 (https://www.openstreetmap.org/copyright), with terrain from Terrain Tiles on
+AWS (twin/SOURCES.md). Images and videos rendered from it carry the attribution "© OpenStreetMap
+contributors (ODbL)".
 
 Contains data from the Port de Barcelona open data portal (https://opendata.portdebarcelona.cat/),
 licensed under CC BY-SA 4.0. The task packs are a database Adithya S Kolavi derived from it and shared

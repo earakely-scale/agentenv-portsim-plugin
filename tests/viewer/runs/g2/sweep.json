@@ -1,0 +1,21 @@
+{
+  "name": "g2",
+  "models": [
+    "openai/gpt-6.1-sol",
+    "anthropic/claude-sonnet-5-5"
+  ],
+  "tasks": [
+    "dock-36A-w35x1-standard-0",
+    "dock-36A-w17x1-standard-0",
+    "dock-24B-w06x1-busy-0",
+    "dock-36A-w05x1-busy-0",
+    "dock-36A-w05x2-busy-0",
+    "dock-24B-w35x2-storm-0",
+    "dock-24B-w06x2-storm-0",
+    "dock-36A-w15x2-storm-0",
+    "dock-24B-w35x2-extreme-1",
+    "dock-36A-w35x2-extreme-0"
+  ],
+  "k": 1,
+  "episode_cap_usd": 2.0
+}

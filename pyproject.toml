@@ -51,6 +51,10 @@ include = ["/src", "/data", "/tests", "/agents", "/Dockerfile", "/README.md", "/
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "network: downloads from the public bucket",
+]
+addopts = "-m 'not network'"
 
 [tool.ruff]
 line-length = 120

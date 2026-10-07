@@ -13,3 +13,8 @@ Source: [adithya-s-k/FineEnvs](https://github.com/adithya-s-k/FineEnvs) at commi
 - `berth_core` and the viewer are Apache-2.0, by Adithya S Kolavi. `tests/viewer/test_vendored.py` pins the viewer's
   files.
 - The task packs are built from Port of Barcelona open data and are CC BY-SA 4.0 (`data/LICENSE`). Contains data from the Port de Barcelona open data portal.
+- The viewer's 3D twin of the Port of Barcelona (`twin.json.gz`, `terrain.png`, `cover.png`, `scenery.json.gz`,
+  `surface.webp`) is © OpenStreetMap contributors (ODbL 1.0), with terrain from Terrain Tiles on AWS
+  (`twin/SOURCES.md`), and is not stored here: `agent-env portsim view` and `record` download it from PortSimEnv's
+  public bucket ([FineEnvs/PortSimEnv](https://huggingface.co/buckets/FineEnvs/PortSimEnv), `twin/`) into
+  `~/.cache/agentenv-portsim/twin/b0f4c2f/` and check each file against b0f4c2f's (`src/agentenv_portsim/twin.py`).
