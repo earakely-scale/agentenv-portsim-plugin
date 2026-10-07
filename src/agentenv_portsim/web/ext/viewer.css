@@ -8,6 +8,7 @@ header.top .name { font-weight: 600; text-decoration: none; }
 .ps-watch { border: 1px solid var(--line); border-radius: 4px; padding: 8px 10px; background: var(--bg); }
 .ps-clock { font-variant-numeric: tabular-nums; }
 .ps-line, .ps-known { font-size: 12px; margin-top: 3px; }
+.ps-next { color: var(--warn); font-weight: 600; }
 .ps-counts { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; margin-top: 4px; }
 .ps-c b { font-variant-numeric: tabular-nums; }
 .ps-c.ps-departed { color: var(--muted); }
@@ -26,7 +27,7 @@ header.top .name { font-weight: 600; text-decoration: none; }
 .bchart .ship.ps-draft:not(.bad) .ship-o { stroke: var(--warn); stroke-width: 1.6; stroke-dasharray: 3 2; }
 .bchart .ps-frozen-zone { fill: rgba(36, 73, 111, 0.08); }
 .bchart .ps-freeze { stroke: #24496f; stroke-width: 1.3; stroke-dasharray: 4 3; }
-.bchart .ps-freeze-t { fill: #24496f; }
+.bchart .ps-freeze-t { fill: #24496f; paint-order: stroke; stroke: var(--bg); stroke-width: 3px; stroke-linejoin: round; }
 
 html.recording, html.recording * { cursor: none !important; }
 html.recording .ro-page { display: flex; flex-direction: column; height: 100vh; }
@@ -36,5 +37,8 @@ html.recording .ro-right { height: 100%; display: flex; flex-direction: column; 
 html.recording .ro-right .stage { flex: 1; height: auto; min-height: 0; }
 html.recording .stage .ov-tr { display: none; }
 html.recording .stage .ov-tl { right: 10px; }
+html.recording .scene-traffic { left: 10px; padding: 5px 9px; }
+html.recording .traffic-title, html.recording .traffic-detail, html.recording .traffic-cargo { display: none; }
+html.recording .traffic-counts b { font-size: 12px; }
 html.recording .stage .ov-attr { font-size: 13px; color: #fff; background: rgba(13, 30, 40, 0.92); padding: 2px 8px; }
 html.recording .ps-watch { position: sticky; top: 0; z-index: 3; }

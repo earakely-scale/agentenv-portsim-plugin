@@ -44,18 +44,16 @@ def _hold(step: int, hour: float, seconds: float, fps: int) -> list[Frame]:
 
 def timeline(rollout: dict, horizon: float, *, fps: int = 30, step_seconds: float = 2.5,
              hours_per_second: float = 6, intro_seconds: float = 2, outro_seconds: float = 3) -> list[Frame]:
-    """v1: each plan held at hour 0, then the week played on the last one. A live week: each step held at its watch,
-    and time running to the next watch on each advance; then the rest of the week."""
+    """v1: each plan held at hour 0, then the week played on the last one. A live week: each step held at its watch;
+    an advance runs the clock to the watch it opens first; then the rest of the week."""
     steps = rollout["steps"]
     frames = _hold(0, 0, intro_seconds, fps)
     hour = 0
     for k, step in enumerate(steps):
         if "live" in rollout and step["hour"] > hour:
-            seconds = max(step_seconds, (step["hour"] - hour) / hours_per_second)
-            frames += _sweep(k, hour, step["hour"], seconds, fps)
+            frames += _sweep(k, hour, step["hour"], (step["hour"] - hour) / hours_per_second, fps)
             hour = step["hour"]
-        else:
-            frames += _hold(k, hour, step_seconds, fps)
+        frames += _hold(k, hour, step_seconds, fps)
     last = max(len(steps) - 1, 0)
     frames += _sweep(last, hour, horizon, (horizon - hour) / hours_per_second, fps)
     return frames + _hold(last, horizon, outro_seconds, fps)
@@ -70,8 +68,10 @@ def chrome_args(chrome: str, profile: Path, width: int, height: int) -> list[str
 
 def ffmpeg_args(ffmpeg: str, out: Path, fps: int, title: str) -> list[str]:
     return [ffmpeg, "-v", "error", "-y", "-f", "image2pipe", "-framerate", str(fps), "-c:v", "mjpeg", "-i", "-",
-            "-c:v", "libx264", "-preset", "slow", "-crf", "18", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
-            "-metadata", f"title={title}", "-metadata", f"comment={twin.ATTRIBUTION}", str(out)]
+            "-c:v", "libx264", "-preset", "slow", "-crf", "18", "-vf", "scale=out_range=tv:out_color_matrix=bt709",
+            "-pix_fmt", "yuv420p", "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709",
+            "-movflags", "+faststart", "-metadata", f"title={title}", "-metadata", f"comment={twin.ATTRIBUTION}",
+            str(out)]
 
 
 def gif_args(ffmpeg: str, mp4: Path, gif: Path) -> list[str]:

@@ -48,21 +48,22 @@ function mark(chart, step, t) {
 
 function overlay(chart, step, t) {
   if (!chart.geom) return;
-  chart.svg.querySelector(".ps-ov")?.remove();
+  for (const e of chart.svg.querySelectorAll(".ps-ov")) e.remove();
   mark(chart, step, t);
   if (step.frozen_before <= step.hour) return;
   const { x, top, bottom } = chart.geom;
-  const g = document.createElementNS(SVG, "g");
-  g.setAttribute("class", "ps-ov");
-  const add = (tag, attrs) => {
+  const [under, over] = [0, 1].map(() => document.createElementNS(SVG, "g"));
+  for (const g of [under, over]) g.setAttribute("class", "ps-ov");
+  const add = (g, tag, attrs) => {
     const e = document.createElementNS(SVG, tag);
     for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
     return g.appendChild(e);
   };
-  add("rect", { class: "ps-frozen-zone", x: x(step.hour), y: top, width: Math.max(1, x(step.frozen_before) - x(step.hour)), height: bottom - top });
-  add("line", { class: "ps-freeze", x1: x(step.frozen_before), x2: x(step.frozen_before), y1: top, y2: bottom });
-  if (!chart.mini) add("text", { class: "ax ps-freeze-t", x: x(step.frozen_before) + 3, y: bottom - 3 }).textContent = `freeze line h ${step.frozen_before}`;
-  chart.svg.insertBefore(g, chart.svg.querySelector("g.ships"));
+  add(under, "rect", { class: "ps-frozen-zone", x: x(step.hour), y: top, width: Math.max(1, x(step.frozen_before) - x(step.hour)), height: bottom - top });
+  add(under, "line", { class: "ps-freeze", x1: x(step.frozen_before), x2: x(step.frozen_before), y1: top, y2: bottom });
+  if (!chart.mini) add(over, "text", { class: "ax ps-freeze-t", x: x(step.frozen_before) + 3, y: bottom - 3 }).textContent = `freeze line h ${step.frozen_before}`;
+  chart.svg.insertBefore(under, chart.svg.querySelector("g.ships"));
+  chart.svg.appendChild(over);
 }
 
 /** Keep the overlay through the chart's own re-renders (setData, resize). */
@@ -136,7 +137,7 @@ export function renderLive(root, ro, task, { onStep, horizon }) {
   const outputs = new Map(ro.messages.filter((m) => m.role === "tool").map((m) => [m.tool_call_id, m]));
   const callEls = new Map();
   const charts = [];
-  const state = { step: null, k: -1, t: 0, panel: "" };
+  const state = { step: null, k: -1, t: 0, panel: "", key: null };
   const at = (via, k) => live.bulletins.filter((b) => b.via === via && (k == null || b.step === k));
 
   root.innerHTML = "";
@@ -205,10 +206,13 @@ export function renderLive(root, ro, task, { onStep, horizon }) {
   panel.className = "ps-watch";
   left.insertBefore(panel, root.closest("section"));
 
-  function renderPanel(t) {
+  /** While the clock runs to the watch an advance opens, the week shown is still the one before it. */
+  const shownAt = (t) => (state.k > 0 && state.step.tool === "advance" && t < state.step.hour - 1e-6 ? steps[state.k - 1] : state.step);
+
+  function renderPanel(t, shown) {
     const step = state.step;
-    const st = statuses(step, t);
-    const counts = Object.fromEntries(STATUSES.map((s) => [s, step.windows.filter((w) => st.get(w.ship) === s).length]));
+    const st = statuses(shown, t);
+    const counts = Object.fromEntries(STATUSES.map((s) => [s, shown.windows.filter((w) => st.get(w.ship) === s).length]));
     const c = clockAt(task, t);
     const feed = live.bulletins.filter((b) => b.step <= state.k && b.hour <= t).reverse().map((b, i) => ({ ...b, new: i === 0 }));
     const g = ro.final.grade;
@@ -216,40 +220,50 @@ export function renderLive(root, ro, task, { onStep, horizon }) {
     const final = state.k === steps.length - 1
       ? `<dl class="kv ps-final"><dt>Reward</dt><dd><b>${fmtNum(g.reward, 3)}</b></dd><dt>Cost</dt><dd>${g.feasible ? g.cost : '<i class="dot bad"></i>infeasible'}</dd><dt>Excused cost</dt><dd>${fmtNum(g.excused_cost)}</dd><dt>Regret</dt><dd>${fmtNum(g.regret)}</dd><dt>Rolling re-plan</dt><dd>${ref.rolling.cost} <span class="muted">(reward ${fmtNum(ref.rolling.reward, 3)})</span></dd><dt>Naive re-plan</dt><dd>${ref.naive.cost} <span class="muted">(reward ${fmtNum(ref.naive.reward, 3)})</span></dd><dt>Audit</dt><dd>${live.audit.ok ? '<i class="dot ok"></i>passed' : `<i class="dot bad"></i>${escapeHtml(live.audit.problems.join("; "))}`}</dd></dl>`
       : "";
-    const html = `<div class="sec-head"><h2>Watch ${step.watch}/${last}</h2><span class="muted small">step ${state.k + 1} of ${steps.length} · ${escapeHtml(step.tool)}</span></div>
+    const next = shown === step ? "" : `<div class="ps-line ps-next">Advancing to watch ${step.watch} · ${escapeHtml(step.time)} (h ${step.hour})</div>`;
+    const html = `<div class="sec-head"><h2>Watch ${shown.watch}/${last}</h2><span class="muted small">step ${state.k + 1} of ${steps.length} · ${escapeHtml(step.tool)}</span></div>
       <div class="ps-clock"><b>${c.day} ${c.date} · ${c.hm}</b> <span class="muted">${virtualTime(task, t)}</span></div>
-      <div class="ps-line">Watch ${step.watch} of ${last} · ${escapeHtml(step.time)} (h ${step.hour}) · ${step.watch ? `freeze line h ${step.frozen_before}` : "every window open"}</div>
-      <div class="ps-counts">${["departed", "berthed", "frozen", "open"].map((s) => `<span class="ps-c ps-${s}"><b>${counts[s]}</b> ${s}</span>`).join("")}<span class="ps-c"><b>${step.unconfirmed.length}</b> unconfirmed</span></div>
-      <div class="ps-known">${knownHtml(step.known)}</div>
+      <div class="ps-line">Watch ${shown.watch} of ${last} · ${escapeHtml(shown.time)} (h ${shown.hour}) · ${shown.watch ? `freeze line h ${shown.frozen_before}` : "every window open"}</div>${next}
+      <div class="ps-counts">${["departed", "berthed", "frozen", "open"].map((s) => `<span class="ps-c ps-${s}"><b>${counts[s]}</b> ${s}</span>`).join("")}<span class="ps-c"><b>${shown.unconfirmed.length}</b> unconfirmed</span></div>
+      <div class="ps-known">${knownHtml(shown.known)}</div>
       ${feed.length ? bulletinsHtml(feed, "ps-feed") : '<p class="muted small">No news yet.</p>'}
       ${final}`;
     if (html !== state.panel) panel.innerHTML = state.panel = html;
   }
 
   const stage = currentStage();
-  keepOverlay(stage.chart, () => [state.step, state.t]);
+  left.parentElement.querySelector(".ro-right .chart-sec h2").textContent = "Dock chart of the selected step, on the week as it turned out";
+  keepOverlay(stage.chart, () => [state.step && shownAt(state.t), state.t]);
+  const chip = stage.tl.appendChild(Object.assign(document.createElement("span"), { className: "ovbox ps-chip" }));
+  chip.hidden = true;
+
+  function paint(t) {
+    const shown = shownAt(t);
+    const key = `${state.k}:${shown === state.step}`;
+    if (key !== state.key) {
+      state.key = key;
+      chip.hidden = false;
+      chip.textContent = `${shown === state.step ? "Watch" : "Advancing to watch"} ${state.step.watch}/${last} · ${state.step.time}`;
+      stage.tl.querySelector("#step-status").innerHTML = knownHtml(shown.known);
+      overlay(stage.chart, shown, t);
+    } else mark(stage.chart, shown, t);
+    renderPanel(t, shown);
+  }
+
   const setTime = stage.chart.setTime.bind(stage.chart);
   stage.chart.setTime = (t) => {
     setTime(t);
     state.t = t;
-    if (!state.step) return;
-    mark(stage.chart, state.step, t);
-    renderPanel(t);
+    if (state.step) paint(t);
   };
-  let chip = null;
 
   return {
     select(k) {
       for (const [i, c] of callEls) c.classList.toggle("sel", i === k);
       const step = steps[k];
       if (!step) return;
-      Object.assign(state, { step, k });
-      if (!chip) chip = stage.tl.appendChild(Object.assign(document.createElement("span"), { className: "ovbox ps-chip" }));
-      chip.textContent = `Watch ${step.watch}/${last} · ${step.time}`;
-      stage.tl.querySelector("#step-status").innerHTML = knownHtml(step.known);
+      Object.assign(state, { step, k, key: null });
       stage.setTime(step.hour);
-      overlay(stage.chart, step, stage.time);
-      renderPanel(stage.time);
     },
     scrollTo(k) {
       const c = callEls.get(k);

@@ -27,7 +27,8 @@ if (new URLSearchParams(location.search).get("record") === "1") {
       if (call) {
         call.click();
         const left = call.closest(".ro-left");
-        left.scrollTop = call.offsetTop - left.offsetTop - (left.clientHeight - call.offsetHeight) / 2;
+        const cover = left.querySelector(".ps-watch")?.offsetHeight || 0;
+        left.scrollTop = call.offsetTop - left.offsetTop - cover - Math.max(0, (left.clientHeight - cover - call.offsetHeight) / 2);
       }
       await frames();
     },
