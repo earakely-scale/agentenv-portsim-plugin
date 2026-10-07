@@ -5,5 +5,6 @@
 !src/berth_core
 !src/agentenv_portsim
 src/agentenv_portsim/data
+data/published
 **/__pycache__
 **/*.pyc

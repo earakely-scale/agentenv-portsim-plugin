@@ -1,8 +1,9 @@
-"""`agent-env portsim setup` with a stand-in docker: what it builds, and the env it registers."""
+"""`agent-env portsim setup` with a stand-in docker: what it builds, and the env and agent it registers."""
 
 from pathlib import Path
 
 import pytest
+from agent_env.a2a_agent import A2AAgent
 from agent_env.artifact import DockerImageArtifact
 from agent_env.env import Env
 from click.testing import CliRunner
@@ -25,6 +26,10 @@ def fake_docker(tmp_path: Path, monkeypatch, build_exit: int = 0) -> Path:
     return log
 
 
+def builds(log: Path) -> list[str]:
+    return [line for line in log.read_text().splitlines() if line.startswith("build ")]
+
+
 @pytest.fixture
 def stored(monkeypatch):
     """DockerImageArtifact.put without docker save and the registry push: the arguments setup stores the image with."""
@@ -45,12 +50,28 @@ def test_setup_builds_the_image_and_registers_portsim_on_the_server_provider(loc
     log = fake_docker(tmp_path, monkeypatch)
     result = CliRunner().invoke(portsim, ["setup", "--source", str(ROOT), *args])
     assert result.exit_code == 0, result.output
-    assert log.read_text().splitlines()[-1] == f"build --platform {platform} -t agentenv-portsim-env {ROOT}"
+    assert builds(log) == [f"build --platform {platform} -t agentenv-portsim-env {ROOT}"]
     assert stored == [{"id": "agentenv-portsim-env", "image_name": "agentenv-portsim-env"}]
     env = Env.get("portsim")
     assert (env.type, env.environment_name, env.env_provider_type) == ("mcp_server", "portsim", "server")
     assert env.docker_image_artifact.image_name == "localhost:5000/agentenv-portsim-env:v1"
     assert "Registered env 'portsim' version 1" in result.output
+
+
+@pytest.mark.parametrize(("args", "platform"), [([], "linux/arm64"), (["--platform", "linux/amd64"], "linux/amd64")])
+def test_setup_with_agent_also_builds_portsim_llm_for_the_same_platform_and_registers_it(local_stores, tmp_path,
+                                                                                         monkeypatch, stored, args,
+                                                                                         platform):
+    log = fake_docker(tmp_path, monkeypatch)
+    result = CliRunner().invoke(portsim, ["setup", "--source", str(ROOT), "--agent", *args])
+    assert result.exit_code == 0, result.output
+    assert builds(log) == [f"build --platform {platform} -t agentenv-portsim-env {ROOT}",
+                           f"build --platform {platform} -t agentenv-portsim-agent {ROOT / 'agents/portsim-llm'}"]
+    assert stored[1] == {"id": "agentenv-portsim-agent", "image_name": "agentenv-portsim-agent"}
+    agent = A2AAgent.get("portsim-llm")
+    assert agent.metadata["default_model"] == "anthropic/claude-sonnet-5-5"
+    assert agent.docker_image_artifact.image_name == "localhost:5000/agentenv-portsim-agent:v1"
+    assert "Registered A2A agent 'portsim-llm' version 1" in result.output
 
 
 def test_setup_stops_when_the_build_fails(local_stores, tmp_path, monkeypatch, stored):

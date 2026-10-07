@@ -12,6 +12,12 @@ licensed under the Apache License, Version 2.0. Derived from it:
 - src/agentenv_portsim/server.py: the MCP tools get_situation, check_plan and submit_plan (names,
   descriptions, input schemas, output and error text, limits) are ported from
   envs/berth_planning/openenv/berth_openenv/environment.py.
+- agents/portsim-llm/agent.py: the harness loop (turns, nudges, notes, limits, the episode record) and
+  its Anthropic Messages, OpenAI Responses and chat-completions adapters are ported from
+  envs/berth_planning/openenv/berth_openenv/agent.py.
+- src/agentenv_portsim/tasks.py: the opening message is copied from
+  envs/berth_planning/openenv/berth_openenv/agent.py; src/agentenv_portsim/sweep.py: ci() is copied
+  from eval/report.py.
 
 Data licensed under CC BY-SA 4.0 (data/LICENSE), not under the Apache License:
 
@@ -19,6 +25,8 @@ Data licensed under CC BY-SA 4.0 (data/LICENSE), not under the Apache License:
   envs/berth_planning/tasks/.
 - tests/golden/: outputs recorded from PortSimEnv on dock-v1 tasks.
 - The plans in src/agentenv_portsim/bundles/portsim/tasks/, taken from the dock-v1 task packs.
+- data/published/dock-eval50/index.json: the published dock-eval50 results, copied unchanged from
+  results/rollouts/dock-eval50/index.json.
 
 Contains data from the Port de Barcelona open data portal (https://opendata.portdebarcelona.cat/),
 licensed under CC BY-SA 4.0. The task packs are a database Adithya S Kolavi derived from it and shared

@@ -8,4 +8,5 @@ build/
 *.egg-info/
 .agentenv/config.toml
 results/runs/
+results/bundles/
 .DS_Store
