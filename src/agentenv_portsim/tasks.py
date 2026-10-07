@@ -42,7 +42,8 @@ Tools:
 - get_situation(): the hour, the week as known now, your confirmed windows (departed, berthed, frozen or open), the \
 ships still without a window, and new messages.
 - check_plan(plan): your entries over your confirmed windows, checked on the week as known now: the ships with a \
-problem or a cost, the plan's cost, and the entries confirm_berths would refuse. It confirms nothing.
+problem or a cost, the plan's cost, and the entries confirm_berths would refuse. Problems and cost that news brought \
+to a frozen window are listed as excused and not counted. It confirms nothing.
 - confirm_berths(plan): confirms windows with the ships; ships you leave out keep their windows.
 - advance(): ends the watch. After the last watch it returns "done": the rest of the week runs on your confirmed \
 windows.

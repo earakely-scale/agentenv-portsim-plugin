@@ -5,7 +5,8 @@ from collections.abc import Callable, Iterable, Mapping
 from dataclasses import replace
 
 from berth_core import Plan, PlanError, Task, evaluate, parse_plan, plan_to_list, situation
-from berth_core.check import unavoidable_cost
+from berth_core.check import PlanResult, ShipResult, unavoidable_cost
+from berth_core.model import MOVE_PENALTY
 from berth_core.reward import score_v3
 from berth_core.solve import _Ledger, naive_replan
 
@@ -74,18 +75,25 @@ def excuse(before: Task, after: Task, frozen: Plan) -> tuple[list[tuple[int, str
     return problems, cost
 
 
+def charge(res: PlanResult, excused_problems: Iterable[tuple[int, str]],
+           excused_cost: Mapping[int, int]) -> list[tuple[ShipResult, list[str], list[str], int]]:
+    """Each ship's result with its charged problems, its excused problems and its excused cost, as the grade counts
+    them."""
+    allowed = set(excused_problems)
+    return [(r, [p for p in r.problems if (r.ship, rule(p)) not in allowed],
+             [p for p in r.problems if (r.ship, rule(p)) in allowed], min(r.cost, excused_cost.get(r.ship, 0)))
+            for r in res.ships]
+
+
 def grade_week(task: Task, plan: Plan, excused_problems: Iterable[tuple[int, str]],
                excused_cost: Mapping[int, int]) -> dict:
-    allowed = set(excused_problems)
-    res = evaluate(task, plan)
-    violations, excused = [], []
-    for r in res.ships:
-        for p in r.problems:
-            (excused if (r.ship, rule(p)) in allowed else violations).append({"ship": r.ship, "problem": p})
+    ships = charge(evaluate(task, plan), excused_problems, excused_cost)
+    violations = [{"ship": r.ship, "problem": p} for r, charged, _, _ in ships for p in charged]
+    excused = [{"ship": r.ship, "problem": p} for r, _, forgiven, _ in ships for p in forgiven]
     feasible = not violations
-    clean = sum(all((r.ship, rule(p)) in allowed for p in r.problems) for r in res.ships) / len(task.ships)
-    raw_cost = sum(r.cost for r in res.ships)
-    waived = sum(min(r.cost, excused_cost.get(r.ship, 0)) for r in res.ships)
+    clean = sum(not charged for _, charged, _, _ in ships) / len(task.ships)
+    raw_cost = sum(r.cost for r, *_ in ships)
+    waived = sum(w for *_, w in ships)
     cost = raw_cost - waived if feasible else None
     optimal, floor = task.reference["optimal_cost"], unavoidable_cost(task)
     reward, quality = score_v3(cost, feasible, clean, optimal, int(task.rules.get("gap_k", 100)), floor)
@@ -198,14 +206,23 @@ class Week:
             view, plan, _, _, refused, entry_problems = self._merge(raw)
         except PlanError as e:
             return {"error": str(e), "planning_calls_left": self.calls_left}
-        res = evaluate(view, plan)
-        rows = [{"ship": r.ship, "problems": r.problems} if r.berth_hour is None else
-                {"ship": r.ship, "berth_hour": r.berth_hour, "section": r.section, "cranes": r.cranes,
-                 "departure": r.departure, "delay_h": r.delay_h, "moved": r.moved, "cost": r.cost,
-                 "problems": r.problems}
-                for r in res.ships if r.problems or r.cost > 0]
-        return {"feasible": res.feasible, "cost": res.cost, "delay_cost": res.delay_cost, "moves": res.moves,
-                "ships": rows, "refused": refused, "entry_problems": entry_problems,
+        ships = charge(evaluate(view, plan), *self.excuses())
+        rows = []
+        for r, charged, forgiven, waived in ships:
+            if r.berth_hour is None:
+                rows.append({"ship": r.ship, "problems": charged})
+            elif r.problems or r.cost > 0:
+                rows.append({"ship": r.ship, "berth_hour": r.berth_hour, "section": r.section, "cranes": r.cranes,
+                             "departure": r.departure, "delay_h": r.delay_h, "moved": r.moved, "cost": r.cost,
+                             "problems": charged}
+                            | ({"excused": forgiven, "excused_cost": waived} if forgiven or waived else {}))
+        feasible = not any(charged for _, charged, _, _ in ships)
+        excused_cost = sum(w for *_, w in ships)
+        moves = sum(r.moved for r, *_ in ships)
+        cost = sum(r.cost for r, *_ in ships) - excused_cost
+        return {"feasible": feasible, "cost": cost if feasible else None,
+                "delay_cost": cost - MOVE_PENALTY * moves if feasible else None, "moves": moves if feasible else None,
+                "excused_cost": excused_cost, "ships": rows, "refused": refused, "entry_problems": entry_problems,
                 "planning_calls_left": self.calls_left}
 
     def confirm(self, raw) -> dict:
@@ -252,12 +269,15 @@ class Week:
             self.messages.append({"hour": self.hour, "from": name, "text": text})
         return {"applied": event_id, "watch": self.watch}
 
-    def finish(self, end_reason: str) -> dict:
-        self.done, self.end_reason = True, end_reason
+    def excuses(self) -> tuple[set[tuple[int, str]], dict[int, int]]:
         cost: dict[int, int] = {}
         for c in self.excused_cost:
             cost[c["ship"]] = cost.get(c["ship"], 0) + c["cost"]
-        self.grade = grade_week(self.task, self.plan, {(p["ship"], p["rule"]) for p in self.excused_problems}, cost)
+        return {(p["ship"], p["rule"]) for p in self.excused_problems}, cost
+
+    def finish(self, end_reason: str) -> dict:
+        self.done, self.end_reason = True, end_reason
+        self.grade = grade_week(self.task, self.plan, *self.excuses())
         return {"done": True, "feasible": self.grade["feasible"], "cost": self.grade["cost"],
                 "reward": self.grade["reward"]}
 

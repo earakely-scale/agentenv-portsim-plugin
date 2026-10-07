@@ -71,7 +71,8 @@ class PortSimLiveEnv(AgentEnvEnvironment):
 
     @tool(description="Check berth windows without confirming them: your entries over your confirmed windows, on the "
                       "week as known now. Lists the ships with a rule problem or a cost, the plan's cost, and the "
-                      "entries confirm_berths would refuse. Uses one of this watch's 3 planning calls.")
+                      "entries confirm_berths would refuse. Problems and cost that news brought to a frozen window are "
+                      "listed as excused and not counted. Uses one of this watch's 3 planning calls.")
     def check_plan(self, plan: WindowsArg) -> str:
         week = self._week(open_only=True)
         return _reply(week, week.check(_raw(plan)))

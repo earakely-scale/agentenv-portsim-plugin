@@ -124,6 +124,12 @@ def test_a_gale_on_a_frozen_window_is_excused(example):
                           "regret": 0, "violations": [], "excused": []}
     unexcused = grade_week(example, plan, (), {})
     assert (unexcused["cost"], round(unexcused["reward"], 4)) == (246, 0.8116)
+    checked = week.check([])
+    assert (checked["feasible"], checked["cost"], checked["excused_cost"]) == (True, 226, 20)
+    assert checked["delay_cost"] + 5 * checked["moves"] == 226
+    assert next(r for r in checked["ships"] if r["ship"] == 7) | {"departure": None} == {
+        "ship": 7, "berth_hour": 95, "section": 4, "cranes": 2, "departure": None, "delay_h": 5, "moved": False,
+        "cost": 20, "problems": [], "excused": [], "excused_cost": 20}
 
 
 def test_an_outage_under_frozen_stays_is_excused(example):
@@ -134,6 +140,8 @@ def test_an_outage_under_frozen_stays_is_excused(example):
     problem = "cranes over the pool at hours 108 (e.g. hour 108: 9 in use, 7 available)"
     assert week.excused_problems == [{"event_id": "crane_outage-6", "ship": s, "rule": "crane_pool", "problem": problem}
                                      for s in (3, 8)]
+    checked = {r["ship"]: r for r in week.check([])["ships"]}
+    assert [(checked[s]["problems"], checked[s]["excused"]) for s in (3, 8)] == [([], [problem])] * 2
     week.finish("done")
     assert {"ship": 3, "problem": problem} in week.grade["excused"]
     assert all(v["ship"] not in (3, 8) or "pool" not in v["problem"] for v in week.grade["violations"])

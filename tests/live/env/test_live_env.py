@@ -60,6 +60,11 @@ async def test_the_agents_tools_come_first_and_port_notice_last(tools):
     listed = await tools.client.list_tools()
     assert [t.name for t in listed] == ["get_situation", "check_plan", "confirm_berths", "advance", "port_notice"]
     assert all("\n" not in t.description for t in listed)
+    assert listed[1].description == (
+        "Check berth windows without confirming them: your entries over your confirmed windows, on the week as known "
+        "now. Lists the ships with a rule problem or a cost, the plan's cost, and the entries confirm_berths would "
+        "refuse. Problems and cost that news brought to a frozen window are listed as excused and not counted. Uses "
+        "one of this watch's 3 planning calls.")
 
 
 async def test_no_week_loaded(tools, http):
