@@ -66,7 +66,8 @@ for the same plan:
   and 24 tool calls an episode.
 - **The same tasks.** The dock-v1-eval (50) and dock-v1-train (1,050) task packs, byte for byte; any of the 1,100
   loads by id.
-- **The same reward for the same plan.** The grader is upstream's `berth_core`, installed from FineEnvs at the pinned commit.
+- **The same reward for the same plan.** The grader is upstream's `berth_core`, installed from FineEnvs at the pinned
+  commit.
 
 The tests check this without calling any model:
 
@@ -96,7 +97,9 @@ What differs is how the env is served, not what the agent sees:
 - **Reading the grade.** The env grades the plan once, at submit, and keeps the reward `submit_plan` returns, for the
   plan as validated against the tool's input schema (a ship id sent as `3.0` is ship 3); the task's verifier reads it
   from `data/get`.
-- **Not here:** the 3D viewer, the web UI and the task API. Play and watch episodes in upstream's Spaces.
+- **Not here:** upstream's web UI and task API; play an episode by hand in the
+  [PortSimEnv Space](https://huggingface.co/spaces/FineEnvs/PortSimEnv). Recorded runs replay on upstream's 3D viewer
+  through `agent-env portsim view` ([Watch a run](#watch-a-run)).
 
 ## Run it yourself
 
@@ -104,28 +107,33 @@ You need [Docker](https://docs.docker.com/get-docker/), running and usable witho
 [uv](https://docs.astral.sh/uv/) and git. No model key: the tasks in the bundle call no model.
 
 ```bash
-git clone https://github.com/earakely-scale/agentenv-portsim-plugin
-uv tool install agentenv-framework --with-editable ./agentenv-portsim-plugin
-cd agentenv-portsim-plugin
-
-cp .agentenv/config.example.toml .agentenv/config.toml   # the local profile
+uv tool install agentenv-framework \
+    --with "agentenv-portsim @ git+https://github.com/earakely-scale/agentenv-portsim-plugin"
 agent-env portsim setup              # build the env image for this machine; register the envs "portsim" and "portsim-live"
 agent-env run portsim --task smoke   # load a task, submit its optimal plan, grade it
 ```
 
 The run prints `tasks/smoke.json v1: passed` with the score (1), the time and the instance id; the run and its grade
-are stored under `~/.local/state/agent-env`. Run `agent-env` from inside the checkout, so it reads
-`.agentenv/config.toml`.
+are stored under `~/.local/state/agent-env`. `setup` has Docker build the images from the GitHub commit the plugin was
+installed from, so it needs no clone.
 
-Without a clone, `uv tool install agentenv-framework --with "agentenv-portsim @
-git+https://github.com/earakely-scale/agentenv-portsim-plugin"` installs the plugin from GitHub, and `setup` then has
-Docker build the images from the commit it was installed from.
+agent-env reads `.agentenv/config.toml` from the directory it runs in or one above it. Without one, it runs on its
+local defaults: stores under `~/.local/state/agent-env/`, images in a registry at `localhost:5000` that it starts on
+first push, and the env as a container on this machine's Docker.
+[`.agentenv/config.example.toml`](.agentenv/config.example.toml) describes that profile and the `modal_vm` one.
 
-`setup` builds for the Docker host's own platform (`linux/arm64` on Apple Silicon). For Modal, switch
-`.agentenv/config.toml` to the `modal_vm` profile it describes, set its `repository_prefix` to your own GHCR
-namespace, and run `agent-env portsim setup --platform linux/amd64`, which pushes the image to
-`ghcr.io/<namespace>/agentenv-portsim-env`. In an existing agent-env install, `agent-env plugin add
-./agentenv-portsim-plugin` adds the plugin.
+To change the plugin, work from a clone; `setup` then builds the checkout:
+
+```bash
+git clone https://github.com/earakely-scale/agentenv-portsim-plugin
+uv tool install agentenv-framework --with-editable ./agentenv-portsim-plugin
+cd agentenv-portsim-plugin && agent-env portsim setup
+```
+
+`setup` builds for the Docker host's own platform (`linux/arm64` on Apple Silicon). For Modal, put the `modal_vm`
+profile in `.agentenv/config.toml`, set its `repository_prefix` to your own GHCR namespace, and run
+`agent-env portsim setup --platform linux/amd64`, which pushes the image to `ghcr.io/<namespace>/agentenv-portsim-env`.
+In an existing agent-env install, `agent-env plugin add ./agentenv-portsim-plugin` adds a clone of the plugin.
 
 <details>
 <summary>Troubleshooting</summary>
@@ -135,6 +143,9 @@ namespace, and run `agent-env portsim setup --platform linux/amd64`, which pushe
 - **A step fails because something holds port 5000:** agent-env keeps its images in a local registry on
   `127.0.0.1:5000`. On macOS, AirPlay Receiver often holds that port; turn it off in System Settings.
 - **The run says there is no env `portsim` or `portsim-live`:** run `agent-env portsim setup` first, with the same config.
+- **A model run fails with `provider_refused`:** the model endpoint refused the key or the account (401, 402 or 403).
+  On the Hugging Face router, 402 means the account has no Inference Providers credits: add some, or bill an
+  organization with `--hf-bill-to`.
 </details>
 
 ## Tasks
@@ -168,7 +179,7 @@ To put a model on them, see [Play a model](#play-a-model).
 `portsim-llm` (`agents/portsim-llm/agent.py`) is upstream's harness loop as an A2A agent. It keeps upstream's system
 prompt and opening message, its nudges, notes and limits (12 turns, 32,000 output tokens a turn) and the episode
 record upstream publishes, and it calls each model on the API upstream used for its provider, through agent-env's
-model endpoint, a [LiteLLM](https://docs.litellm.ai/) proxy:
+model endpoint:
 
 | Model id | API |
 |---|---|
@@ -176,17 +187,9 @@ model endpoint, a [LiteLLM](https://docs.litellm.ai/) proxy:
 | `openai/...` | Responses, streamed, with encrypted reasoning, effort `medium` and summary `auto` |
 | any other | chat completions, streamed |
 
-You need a LiteLLM proxy and a key for it. Name them in `.agentenv/config.toml`, or set `LITELLM_BASE_URL` and
-`LITELLM_API_KEY`:
-
-```toml
-[model]
-base_url = "https://your-litellm-proxy"
-api_key  = "secret:PORTSIM_MODEL_KEY"   # read through [stores.secret]; the local store takes it from the env var
-```
-
-Or skip the proxy and use the [Hugging Face router](https://huggingface.co/docs/inference-providers) with a Hugging Face
-token, as upstream does for its open models:
+Name the endpoint in `.agentenv/config.toml`, or set `LITELLM_BASE_URL` and `LITELLM_API_KEY`. The open models
+upstream evaluated go through the [Hugging Face router](https://huggingface.co/docs/inference-providers), as upstream
+runs them, with a Hugging Face token that can make calls to Inference Providers on an account with credits:
 
 ```toml
 [model]
@@ -194,17 +197,23 @@ base_url = "https://router.huggingface.co/v1"
 api_key  = "env:HF_TOKEN"
 ```
 
-with one of the open models upstream evaluated: `Qwen/Qwen3.8-2.4T-A95B:together`, `Qwen/Qwen3.8-27B:ovhcloud`,
-`zai-org/GLM-5.3-Flash:baseten` or `zai-org/GLM-5.3:together` (chat completions, streamed). To bill an organization
-instead of the token's own account, pass `--hf-bill-to <org>` to `tasks generate` or `sweep run`; the agent sends it as
-`X-HF-Bill-To`.
+Its models here are `Qwen/Qwen3.8-2.4T-A95B:together`, `Qwen/Qwen3.8-27B:ovhcloud`, `zai-org/GLM-5.3-Flash:baseten`
+and `zai-org/GLM-5.3:together`. To bill an organization instead of the token's own account, pass `--hf-bill-to <org>`
+to `tasks generate` or `sweep run`; the agent sends it as `X-HF-Bill-To`. The closed models go through a
+[LiteLLM](https://docs.litellm.ai/) proxy:
+
+```toml
+[model]
+base_url = "https://your-litellm-proxy"
+api_key  = "secret:PORTSIM_MODEL_KEY"   # read through [stores.secret]; the local store takes it from the env var
+```
 
 Then build both images, write the eval tasks and play one:
 
 ```bash
 agent-env portsim setup --agent                        # the env and portsim-llm, for this machine
 agent-env portsim tasks generate --pack dock-v1-eval   # 50 tasks in results/bundles/dock-v1-eval
-agent-env run results/bundles/dock-v1-eval --task dock-24B-w06x1-busy-0 --model anthropic/claude-sonnet-5-5
+agent-env run results/bundles/dock-v1-eval --task dock-24B-w06x1-busy-0 --model zai-org/GLM-5.3-Flash:baseten
 ```
 
 Each task deploys the env, loads its PortSim task, deploys `portsim-llm`, plays one episode and grades the plan with
@@ -214,7 +223,8 @@ What differs from upstream's harness:
 
 - **The env** is reached over MCP. MCP has no done flag, so the episode ends when `submit_plan` reports
   `"submitted": true` or after the 24th call.
-- **One endpoint.** Upstream's chains of fallback providers are gone; every model goes through the proxy.
+- **One endpoint.** Upstream's chains of fallback providers are gone; every model goes through the endpoint agent-env
+  is configured with.
 - **Cost.** Each turn's token usage is priced from a table pinned in the agent, which holds
   `anthropic/claude-sonnet-5-5`, `openai/gpt-6.1-sol`, `fireworks_ai/glm-5p3-flash` and the four open models on the
   Hugging Face router; any other model fails before its first request. A request whose usage never arrives (it failed,
@@ -238,8 +248,9 @@ agent-env portsim sweep report pilot   # results/parity.md
   [the comparison](#the-comparison-with-the-published-eval).
 - An attempt starts only if the spend so far plus the episode cap (`--episode-cap-usd`, default $5) of every attempt
   running, the new one included, stays within `--cap-usd`. An attempt whose spend isn't known counts at its cap.
-- A failed attempt is retried up to twice; an episode stopped at its cost cap, or refused by the provider, is not. Running the same sweep again
-  resumes it. Ctrl-C, or an error in the sweep itself, tears the running attempts down and records them.
+- A failed attempt is retried up to twice; an episode stopped at its cost cap, or refused by the provider, is not.
+  Running the same sweep again resumes it. Ctrl-C, or an error in the sweep itself, tears the running attempts down
+  and records them.
 - `report` compares each model with its episodes in the published dock-eval50 run (`data/published/`) on the same
   tasks: means with upstream's bootstrap CIs, the difference per task, per tier and week by week, with submitted,
   feasible and optimal counts, turns, tokens and cost.
@@ -327,8 +338,6 @@ berth windows as it goes. The week is graded once, on the windows it confirmed, 
 happened. The live port runs on the AgentEnv gateway: the gateway's virtual clock is the port's clock, its triggers
 deliver the news, and a per-role rule hides the tool they deliver it through. The `portsim` env and its tasks are
 unchanged.
-
-No model has played the live weeks yet.
 
 ### How a live week runs
 
@@ -628,7 +637,7 @@ data/                   the dock-v1-eval and dock-v1-train task packs, and the p
                         published/, copied unchanged; live/references.jsonl, computed here (all CC BY-SA 4.0)
 tests/                  env, agent, packaging, replay, golden and sweep tests, the live port's in live/, and the
                         viewer's in viewer/; fake_litellm.py stands in for the model endpoint
-assets/                 live-week.gif, a recorded live week
+assets/                 live-port.webp and live-week.gif, recorded live weeks
 scripts/                record_goldens.py, record_harness.py, replay_episode.py; live_references.py, live_e2e.py
 Dockerfile              the env image
 ```
@@ -636,7 +645,7 @@ Dockerfile              the env image
 ## Development
 
 ```bash
-uv venv && uv pip install -e '.[dev]'
+uv venv && uv pip install -e '.[dev]'     # berth-core comes from FineEnvs at the pinned commit
 .venv/bin/pytest                         # sets BERTH_TASKS_DIR itself; calls no model
 .venv/bin/ruff check .
 .venv/bin/pytest -m 'network or browser'   # the twin download, and a one-second film with Chrome and ffmpeg
