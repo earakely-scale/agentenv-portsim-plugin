@@ -74,14 +74,12 @@ MS_TO_KN = 3600 / 1852
 FACTORS = {"30": 1.045, "50": 0.83 / 1.25}
 """Annex III's central reading at Y7: the 10-minute mean is 1.045 x the 30-minute mean, and the rule's 1-minute maximum
 above 1.25 x the threshold is 0.83 x the 3-second gust, so both compare with the threshold itself."""
-THRESHOLDS = (25, 30)
-MERGE_GAP = 2
 STORM_HOURS = 4
 FIRST_WEEK, LAST_WEEK = "2023-W04", "2025-W52"
 BUST_WEEKS = ("2023-W44", "2025-W14")
 HOURS = 264
-PUBLISHED_HOURS = 9
 HOUR, HALF = timedelta(hours=1), timedelta(minutes=30)
+EPOCH = datetime(*FIRST_MONTH, 1, tzinfo=UTC)
 
 BUCKET = "ecmwf-forecasts.s3.eu-central-1.amazonaws.com"
 FIRST_RUN = datetime(2023, 1, 18, tzinfo=UTC)
@@ -94,8 +92,15 @@ PARAMS = ("10u", "10v")
 WEEK_STEPS = tuple(range(0, 73, 3))
 FIT_STEPS = tuple(range(9, 73, 3))
 DAY_AHEAD_STEPS = tuple(range(24, 37, 3))
-FITS = [("0p4", datetime(2024, 2, 1, tzinfo=UTC), datetime(2025, 1, 31, 12, tzinfo=UTC)),
-        ("0p25", datetime(2024, 2, 1, tzinfo=UTC), datetime(2025, 12, 31, 12, tzinfo=UTC))]
+FIT_YEARS = {2023: ("0p4", datetime(2024, 2, 1, tzinfo=UTC), datetime(2025, 1, 31, 12, tzinfo=UTC)),
+             2024: ("0p25", datetime(2025, 1, 1, tzinfo=UTC), datetime(2025, 12, 31, 12, tzinfo=UTC)),
+             2025: ("0p25", datetime(2024, 2, 1, tzinfo=UTC), datetime(2024, 12, 31, 12, tzinfo=UTC))}
+"""Each weather year's quantile maps are fitted on another year's 00/12Z runs, on the grid its weeks use, so no week is
+calibrated on its own wind."""
+FITS = [(grid, min(a for g, a, _ in FIT_YEARS.values() if g == grid),
+         max(b for g, _, b in FIT_YEARS.values() if g == grid))
+        for grid in dict.fromkeys(g for g, *_ in FIT_YEARS.values())]
+"""The fetch's fit periods, one per grid: the span of the years' fits on it."""
 SCREEN = ("0p4", FIRST_RUN, datetime(2024, 1, 31, 12, tzinfo=UTC))
 WORKERS = 16
 ATTEMPTS = 12
@@ -105,16 +110,12 @@ RETRY_STATUS = {429, 500, 502, 503, 504}
 PROGRESS_EVERY = 500
 
 ROOT = Path(__file__).resolve().parents[1]
-FIT_YEARS = {2023: ("0p4", datetime(2024, 2, 1, tzinfo=UTC), datetime(2025, 1, 31, 12, tzinfo=UTC)),
-             2024: ("0p25", datetime(2025, 1, 1, tzinfo=UTC), datetime(2025, 12, 31, 12, tzinfo=UTC)),
-             2025: ("0p25", datetime(2024, 2, 1, tzinfo=UTC), datetime(2024, 12, 31, 12, tzinfo=UTC))}
-"""Each weather year's quantile maps are fitted on another year's 00/12Z runs, on the grid its weeks use, so no week is
-calibrated on its own wind."""
 BLOCKS = ((0, 24), (24, 48), (48, 73))
 PERCENTILES = range(1, 100)
 IN_FORCE_HOURS = range(0, HOURS, 6)
 XEMA = "https://analisi.transparenciacatalunya.cat/d/nzvn-apee"
 OPEN_DATA = "https://www.ecmwf.int/en/forecasts/datasets/open-data"
+TERMS = "https://apps.ecmwf.int/datasets/licences/general/"
 
 
 def cache_dir() -> Path:
@@ -237,15 +238,10 @@ def hourly(obs: dict) -> dict[datetime, float | None]:
     return {h: rule_wind(obs, h) for h in sorted({t.replace(minute=0) for t in obs})}
 
 
-def windows(hours: Iterable[datetime]) -> list[tuple[datetime, datetime]]:
-    """Runs of the hours as [start, end), merged across gaps of up to MERGE_GAP hours."""
-    out: list[list[datetime]] = []
-    for h in sorted(hours):
-        if out and h <= out[-1][1] + MERGE_GAP * HOUR:
-            out[-1][1] = h + HOUR
-        else:
-            out.append([h, h + HOUR])
-    return [(a, b) for a, b in out]
+def windows(hours: dict[datetime, float | None], kn: int) -> list[tuple[datetime, int]]:
+    """The runs of hours whose rule wind is above kn, merged as the truth is, as (start, hours)."""
+    above = [(h - EPOCH) // HOUR for h, x in hours.items() if x is not None and x > kn]
+    return [(EPOCH + w["start"] * HOUR, w["end"] - w["start"]) for w in wind.merge(above, 0)]
 
 
 def iso_week(t: datetime) -> str:
@@ -254,9 +250,9 @@ def iso_week(t: datetime) -> str:
 
 
 def storm_weeks(hours: dict[datetime, float | None]) -> set[str]:
-    above = {t: [h for h, x in hours.items() if x is not None and x > t] for t in THRESHOLDS}
-    weeks = {iso_week(a) for a, b in windows(above[25]) if b - a >= STORM_HOURS * HOUR}
-    weeks |= {iso_week(a) for a, _ in windows(above[30])}
+    (_, low), (_, high) = wind.THRESHOLDS
+    weeks = {iso_week(a) for a, length in windows(hours, low) if length >= STORM_HOURS}
+    weeks |= {iso_week(a) for a, _ in windows(hours, high)}
     return {w for w in weeks if FIRST_WEEK <= w <= LAST_WEEK}
 
 
@@ -266,7 +262,7 @@ def candidate_weeks(obs: dict) -> dict:
     dropped: dict[str, str] = {}
     for t, r in sorted(obs.items()):
         gust, valid = r.get("50", (0.0, True))
-        if valid or FACTORS["50"] * gust <= min(THRESHOLDS):
+        if valid or FACTORS["50"] * gust <= min(kn for _, kn in wind.THRESHOLDS):
             continue
         h = t.replace(minute=0)
         for week in storms - storm_weeks(hours | {h: rule_wind(obs, h, (t, "50"))}):
@@ -287,7 +283,7 @@ def every(start: datetime, end: datetime, hours: int) -> list[datetime]:
 
 def week_runs(week: str) -> list[datetime]:
     """The runs that can serve the week's hours 0-263, from the latest published (init + 9 h) by hour 0."""
-    first, last = -PUBLISHED_HOURS // 6 * 6, (HOURS - 1 - PUBLISHED_HOURS) // 6 * 6
+    first, last = -wind.PUBLISHED_HOURS // 6 * 6, (HOURS - 1 - wind.PUBLISHED_HOURS) // 6 * 6
     return every(monday(week) + first * HOUR, monday(week) + last * HOUR, 6)
 
 
@@ -531,7 +527,7 @@ def complete(run: dict, steps: Iterable[int]) -> bool:
 def usable(run: dict, init: datetime) -> bool:
     """Every step of the run is in the archive, and every message was out by init + 9 h."""
     return complete(run, WEEK_STEPS) and all(
-        datetime.fromisoformat(m["last_modified"]) <= init + PUBLISHED_HOURS * HOUR
+        datetime.fromisoformat(m["last_modified"]) <= init + wind.PUBLISHED_HOURS * HOUR
         for s in WEEK_STEPS for m in run["steps"][str(s)].values())
 
 
@@ -604,28 +600,27 @@ def unvalidated(obs: dict, t0: datetime, window: dict) -> float:
 
 def check(record: dict) -> None:
     for r in record["runs"]:
-        assert r["issued"] == r["init"] + PUBLISHED_HOURS and r["init"] % 6 == 0, r
+        assert r["issued"] == r["init"] + wind.PUBLISHED_HOURS and r["init"] % 6 == 0, r
         assert len(r["kn"]) == len(WEEK_STEPS) and all(isinstance(x, int) and x >= 0 for x in r["kn"]), r
         assert r["windows"] == wind.run_windows(r["init"], r["kn"]), r
-    for h in IN_FORCE_HOURS:
-        assert wind.delivered(record, h)["issued"] <= h, (record["iso_week"], h)
 
 
 def week(index: int, name: str, kind: str, obs: dict, hours: dict, cache: Path, maps: list[QuantileMap]) -> dict:
     """The weather week's truth, the hours above each threshold merged and as observed, and every run in force at a
-    6-hourly hour, the latest whose every message was published by then, in calibrated whole knots."""
+    6-hourly hour, the latest usable run (every step, every message out by init + 9 h) issued by then, in calibrated
+    whole knots."""
     t0 = monday(name)
     flagged = {m: [h for h in range(HOURS) if (x := hours.get(t0 + h * HOUR)) is not None and x > kn]
                for m, kn in wind.THRESHOLDS}
     good = [init for init in week_runs(name) if usable(load_run(cache, week_grid(init), init), init)]
-    in_force = [[i for i in good if i + PUBLISHED_HOURS * HOUR <= t0 + h * HOUR] for h in IN_FORCE_HOURS]
+    in_force = [[i for i in good if i + wind.PUBLISHED_HOURS * HOUR <= t0 + h * HOUR] for h in IN_FORCE_HOURS]
     assert all(in_force), f"{name}: no run in force at some hour"
     runs = []
     for init in sorted({max(inits) for inits in in_force}):
         assert week_grid(init) == FIT_YEARS[int(name[:4])][0], (name, init)
         run, h = load_run(cache, week_grid(init), init), (init - t0) // HOUR
         kn = [maps[block(step)](speed(run["steps"][str(step)])) for step in WEEK_STEPS]
-        runs.append({"run": iso(init), "init": h, "issued": h + PUBLISHED_HOURS, "kn": kn,
+        runs.append({"run": iso(init), "init": h, "issued": h + wind.PUBLISHED_HOURS, "kn": kn,
                      "windows": wind.run_windows(h, kn)})
     record = {"id": f"e{index:02d}", "iso_week": name, "monday": iso(t0), "kind": kind,
               "windows": [w | {"unvalidated": unvalidated(obs, t0, w)}
@@ -643,8 +638,10 @@ def ecmwf_sources(cache: Path, records: list[dict]) -> dict:
     return {
         "data": "ECMWF IFS HRES open data (oper and scda streams), 10 m wind",
         "bucket": f"s3://{BUCKET.split('.')[0]}", "url": f"https://{BUCKET}",
-        "registry": "https://registry.opendata.aws/ecmwf-forecasts/", "terms": OPEN_DATA,
+        "registry": "https://registry.opendata.aws/ecmwf-forecasts/", "open_data": OPEN_DATA, "terms": TERMS,
         "copyright": f"© {min(used).year}-{max(used).year} European Centre for Medium-Range Weather Forecasts (ECMWF)",
+        "acknowledgement": ("This data is based on data and products of the European Centre for Medium-Range Weather "
+                            "Forecasts (ECMWF)."),
         "source": "www.ecmwf.int",
         "licence": ("This data is published under a Creative Commons Attribution 4.0 International (CC BY 4.0). "
                     "https://creativecommons.org/licenses/by/4.0/"),
@@ -655,7 +652,7 @@ def ecmwf_sources(cache: Path, records: list[dict]) -> dict:
         "cells": {g: list(c) for g, c in CELLS.items()},
         "grids": f"0p4 for runs before {iso(SWITCH)}, 0p25 from then",
         "speed": "hypot(10u, 10v) m/s x 3600/1852 kn at the cell",
-        "publication_hours": PUBLISHED_HOURS, "steps": list(WEEK_STEPS), "params": list(PARAMS),
+        "publication_hours": wind.PUBLISHED_HOURS, "steps": list(WEEK_STEPS), "params": list(PARAMS),
         "range": "bytes=offset-(offset+length-1) of the key; sha256 of those bytes",
         "fields": ["key", "offset", "length", "sha256", "last_modified"], "messages": messages}
 
@@ -675,7 +672,8 @@ def y7_sources(cache: Path) -> dict:
                                 "above T; T = 25 (min_length 300) or 30 (min_length 0)")},
         "extracted": max(m["fetched"] for m in metas)[:10],
         "digest": ("sha256 of the month's rows as returned, each row as JSON with sorted keys, separators (',', ':') "
-                   "and non-ASCII kept, the lines sorted and joined by newlines, UTF-8; the rows include codi_estat"),
+                   "and non-ASCII kept, the lines sorted and joined by newlines, UTF-8; codi_estat as the portal "
+                   "returns it, absent from rows it has not yet given a state"),
         "pass2_identical": True,
         "months": [{"month": m["month"], "rows": m["rows"], "sha256": m["sha256"]} for m in metas]}
 
@@ -690,7 +688,7 @@ def calibration_sources(fits: dict[int, dict]) -> dict:
                   "proportional to it; above the last, offset from it; rounded half up to a whole knot, never below 0"),
         "blocks": [list(b) for b in BLOCKS], "fit_runs": "00 and 12 UTC runs with every step 9-72 h",
         "years": {str(year): f for year, f in fits.items()},
-        "maps": "not published"}
+        "maps": "not published; approximately recoverable from the published whole knots and the pinned forecasts"}
 
 
 def sources_text(sources: dict) -> str:

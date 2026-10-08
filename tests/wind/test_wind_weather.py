@@ -1,18 +1,23 @@
-"""The weather weeks' format (data/wind/weather.jsonl; here the synthetic fixture) and the window arithmetic that the
-build and the env share."""
+"""The weather weeks' format, in the synthetic fixture and in the committed data/wind/weather.jsonl, and the window
+arithmetic that the build and the env share."""
 
 import json
 from datetime import datetime, timedelta
 
 import pytest
 import synthetic
-from wind_fixtures import WEATHER
+from wind_fixtures import DATA, WEATHER
 
 from agentenv_portsim import wind
 
-LINES = WEATHER.read_text().splitlines()
-WEEKS = [json.loads(line) for line in LINES]
+FILES = {"fixture": WEATHER, "data": DATA / "wind" / "weather.jsonl"}
+WEEKS = [json.loads(line) for line in WEATHER.read_text().splitlines()]
+ALL_WEEKS = [pytest.param(json.loads(line), id=f"{name}-{i:02d}")
+             for name, path in FILES.items() for i, line in enumerate(path.read_text().splitlines())]
 HOURS = range(0, 264, 6)
+EXPECTED = ["2023-W06", "2023-W10", "2023-W34", "2023-W35", "2023-W44", "2023-W50", "2024-W13", "2024-W18",
+            "2024-W44", "2024-W46", "2024-W47", "2024-W49", "2025-W03", "2025-W14", "2025-W43", "2025-W52"]
+BUSTS = ("2023-W44", "2025-W14")
 
 
 def stamp(text: str) -> datetime:
@@ -41,23 +46,31 @@ def test_a_runs_windows_come_from_its_knots_exactly_in_thirds():
     assert wind.run_windows(0, ramp) == [{"start": 11, "end": 13, "min_length": 300}]
 
 
-def test_the_weeks_are_in_order_and_named_by_position():
-    assert [w["id"] for w in WEEKS] == [f"e{i:02d}" for i in range(len(WEEKS))]
-    assert [w["monday"] for w in WEEKS] == sorted(w["monday"] for w in WEEKS)
-    for w in WEEKS:
+@pytest.mark.parametrize("path", FILES.values(), ids=FILES.keys())
+def test_the_weeks_are_in_order_and_named_by_position(path):
+    lines = path.read_text().splitlines()
+    weeks = [json.loads(line) for line in lines]
+    assert [w["id"] for w in weeks] == [f"e{i:02d}" for i in range(len(weeks))]
+    assert [w["monday"] for w in weeks] == sorted(w["monday"] for w in weeks)
+    for w in weeks:
         monday = stamp(w["monday"])
         assert monday.weekday() == 0 and monday.hour == 0
         assert w["iso_week"] == f"{monday.isocalendar()[0]}-W{monday.isocalendar()[1]:02d}"
         assert w["kind"] in ("storm", "bust")
         assert list(w) == ["id", "iso_week", "monday", "kind", "windows", "observed", "runs"]
-    assert LINES == [json.dumps(w, ensure_ascii=False, separators=(",", ":")) for w in WEEKS]
+    assert lines == [json.dumps(w, ensure_ascii=False, separators=(",", ":")) for w in weeks]
+
+
+def test_the_committed_weeks_are_the_expected_storms_and_busts():
+    weeks = [json.loads(line) for line in FILES["data"].read_text().splitlines()]
+    assert [(w["iso_week"], w["kind"]) for w in weeks] == [(w, "bust" if w in BUSTS else "storm") for w in EXPECTED]
 
 
 def by_length(windows: list[dict]) -> bool:
     return windows == sorted(windows, key=lambda w: (-w["min_length"], w["start"]))
 
 
-@pytest.mark.parametrize("week", WEEKS, ids=lambda w: w["id"])
+@pytest.mark.parametrize("week", ALL_WEEKS)
 def test_the_truth_is_the_observed_hours_merged(week):
     observed = week["observed"]
     assert by_length(observed) and all(0 <= o["start"] < o["end"] <= 264 for o in observed)
@@ -72,7 +85,7 @@ def test_the_truth_is_the_observed_hours_merged(week):
     assert all(0 <= w["unvalidated"] <= 1 and round(w["unvalidated"], 3) == w["unvalidated"] for w in week["windows"])
 
 
-@pytest.mark.parametrize("week", WEEKS, ids=lambda w: w["id"])
+@pytest.mark.parametrize("week", ALL_WEEKS)
 def test_the_runs_are_those_in_force_at_some_watch_hour_each_with_its_windows(week):
     runs = week["runs"]
     assert [r["init"] for r in runs] == sorted({r["init"] for r in runs})

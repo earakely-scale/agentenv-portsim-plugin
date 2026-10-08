@@ -4,8 +4,10 @@
   "bucket": "s3://ecmwf-forecasts",
   "url": "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com",
   "registry": "https://registry.opendata.aws/ecmwf-forecasts/",
-  "terms": "https://www.ecmwf.int/en/forecasts/datasets/open-data",
+  "open_data": "https://www.ecmwf.int/en/forecasts/datasets/open-data",
+  "terms": "https://apps.ecmwf.int/datasets/licences/general/",
   "copyright": "© 2023-2026 European Centre for Medium-Range Weather Forecasts (ECMWF)",
+  "acknowledgement": "This data is based on data and products of the European Centre for Medium-Range Weather Forecasts (ECMWF).",
   "source": "www.ecmwf.int",
   "licence": "This data is published under a Creative Commons Attribution 4.0 International (CC BY 4.0). https://creativecommons.org/licenses/by/4.0/",
   "disclaimer": "ECMWF does not accept any liability whatsoever for any error or omission in the data, their availability, or for any loss or damage arising from their use.",
@@ -33633,7 +33635,7 @@
    "rule": "an hour is above T kn when either half-hour has 1.045 x the mean or 0.664 x the gust above T; T = 25 (min_length 300) or 30 (min_length 0)"
   },
   "extracted": "2026-10-08",
-  "digest": "sha256 of the month's rows as returned, each row as JSON with sorted keys, separators (',', ':') and non-ASCII kept, the lines sorted and joined by newlines, UTF-8; the rows include codi_estat",
+  "digest": "sha256 of the month's rows as returned, each row as JSON with sorted keys, separators (',', ':') and non-ASCII kept, the lines sorted and joined by newlines, UTF-8; codi_estat as the portal returns it, absent from rows it has not yet given a state",
   "pass2_identical": true,
   "months": [
    {
@@ -33883,6 +33885,6 @@
     ]
    }
   },
-  "maps": "not published"
+  "maps": "not published; approximately recoverable from the published whole knots and the pinned forecasts"
  }
 }
