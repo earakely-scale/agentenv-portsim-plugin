@@ -1,5 +1,6 @@
 """Fetch the weather behind portsim-wind into a cache outside the repo: the readings of Meteocat's XEMA station Y7
-(Bocana Sud), the anemometer the port ordinance names, and the ECMWF HRES forecasts as published.
+(Bocana Sud), the anemometer the port ordinance names, and the ECMWF HRES forecasts as published; and build the
+weather weeks from that cache.
 
 `fetch` downloads, into --cache (default ~/.cache/agentenv-portsim/wind):
 
@@ -23,13 +24,28 @@
 Every file is written atomically and a rerun fetches only what is missing. summary.json counts the work and the
 failures; `done` is written when nothing is missing, else the command exits non-zero.
 
+`build` reads only the cache (y7/pass1, weeks.json, ecmwf/) and writes, into --out (default data/):
+
+- wind/weather.jsonl: one line per week of weeks.json, which the storm rule must still give, in date order. The truth
+  is the hours whose rule wind is above 25 kn (min_length 300) or 30 kn (min_length 0), merged across gaps of up to 2
+  hours with each window's share of unvalidated readings, and as observed, unmerged. The runs are every run in force
+  at an hour 0, 6, ..., 258 of the week: the latest with all 25 steps whose every message was out by init + 9 h. Each
+  run's 3-hourly wind is calibrated to the anemometer in whole knots by quantile maps per lead block (0-23, 24-47,
+  48-72 h), fitted on another year's 00/12Z runs on the same grid (2023 on 0.4 degree Feb 2024-Jan 2025, 2024 on
+  0.25 degree 2025, 2025 on 0.25 degree Feb-Dec 2024); its windows are agentenv_portsim.wind.run_windows'.
+- wind/weather-sources.json: the pins, which the wind pack's manifest copies: every ECMWF message the weeks' runs use
+  (key, range, sha256, Last-Modified) with ECMWF's attribution, each Y7 month's digest, and the calibration's
+  description. Never a reading, a quantile map or GRIB.
+
     uv run --with eccodes==2.49.0 python scripts/wind_weather.py fetch [--cache DIR] [--y7-pass N]
+    uv run --no-sync --frozen --with eccodes==2.49.0 python scripts/wind_weather.py build [--cache DIR] [--out DIR]
 """
 
 import argparse
 import hashlib
 import http.client
 import json
+import math
 import os
 import random
 import threading
@@ -45,6 +61,8 @@ from email.utils import parsedate_to_datetime
 from pathlib import Path
 
 import eccodes
+
+from agentenv_portsim import wind
 
 SOCRATA = "https://analisi.transparenciacatalunya.cat/resource/nzvn-apee.json"
 STATION = "Y7"
@@ -85,6 +103,18 @@ BACKOFF_SECONDS, BACKOFF_CAP = 0.5, 60.0
 TIMEOUT = 120
 RETRY_STATUS = {429, 500, 502, 503, 504}
 PROGRESS_EVERY = 500
+
+ROOT = Path(__file__).resolve().parents[1]
+FIT_YEARS = {2023: ("0p4", datetime(2024, 2, 1, tzinfo=UTC), datetime(2025, 1, 31, 12, tzinfo=UTC)),
+             2024: ("0p25", datetime(2025, 1, 1, tzinfo=UTC), datetime(2025, 12, 31, 12, tzinfo=UTC)),
+             2025: ("0p25", datetime(2024, 2, 1, tzinfo=UTC), datetime(2024, 12, 31, 12, tzinfo=UTC))}
+"""Each weather year's quantile maps are fitted on another year's 00/12Z runs, on the grid its weeks use, so no week is
+calibrated on its own wind."""
+BLOCKS = ((0, 24), (24, 48), (48, 73))
+PERCENTILES = range(1, 100)
+IN_FORCE_HOURS = range(0, HOURS, 6)
+XEMA = "https://analisi.transparenciacatalunya.cat/d/nzvn-apee"
+OPEN_DATA = "https://www.ecmwf.int/en/forecasts/datasets/open-data"
 
 
 def cache_dir() -> Path:
@@ -255,6 +285,16 @@ def every(start: datetime, end: datetime, hours: int) -> list[datetime]:
     return [start + timedelta(hours=h) for h in range(0, int((end - start) / HOUR) + 1, hours)]
 
 
+def week_runs(week: str) -> list[datetime]:
+    """The runs that can serve the week's hours 0-263, from the latest published (init + 9 h) by hour 0."""
+    first, last = -PUBLISHED_HOURS // 6 * 6, (HOURS - 1 - PUBLISHED_HOURS) // 6 * 6
+    return every(monday(week) + first * HOUR, monday(week) + last * HOUR, 6)
+
+
+def week_grid(init: datetime) -> str:
+    return "0p4" if init < SWITCH else "0p25"
+
+
 def plan(weeks: Iterable[str]) -> dict[tuple[str, datetime], dict[int, str]]:
     """Every (grid, run) to fetch with its steps, each step under the first kind that needs it: the weeks' runs, then
     the fits', then the screen's."""
@@ -265,10 +305,9 @@ def plan(weeks: Iterable[str]) -> dict[tuple[str, datetime], dict[int, str]]:
             for step in steps:
                 out.setdefault((grid, init), {}).setdefault(step, kind)
 
-    first, last = -PUBLISHED_HOURS // 6 * 6, (HOURS - 1 - PUBLISHED_HOURS) // 6 * 6
     for week in weeks:
-        for init in every(monday(week) + first * HOUR, monday(week) + last * HOUR, 6):
-            add("week", "0p4" if init < SWITCH else "0p25", [init], WEEK_STEPS)
+        for init in week_runs(week):
+            add("week", week_grid(init), [init], WEEK_STEPS)
     for grid, start, end in FITS:
         add("fit", grid, every(start, end, 12), FIT_STEPS)
     grid, start, end = SCREEN
@@ -355,7 +394,8 @@ def point(message: bytes, grid: str, init: datetime, step: int, param: str) -> f
 
 
 def fetch_step(bucket: Bucket, grid: str, init: datetime, step: int) -> dict | None:
-    """The step's two messages, None if the archive lacks the step or its GRIB file, a param None if the step lacks it."""
+    """The step's two messages: None if the archive lacks the step or its GRIB file, a param None if the step lacks
+    it."""
     k = key(grid, init, step)
     index = bucket.get(f"/{k}.index")
     if index is None:
@@ -480,6 +520,206 @@ def fetch(cache: Path, y7_pass: int) -> int:
     return 0
 
 
+def speed(step: dict) -> float:
+    return math.hypot(step["10u"]["value"], step["10v"]["value"]) * MS_TO_KN
+
+
+def complete(run: dict, steps: Iterable[int]) -> bool:
+    return all(run["steps"].get(str(s)) and all(run["steps"][str(s)].get(p) for p in PARAMS) for s in steps)
+
+
+def usable(run: dict, init: datetime) -> bool:
+    """Every step of the run is in the archive, and every message was out by init + 9 h."""
+    return complete(run, WEEK_STEPS) and all(
+        datetime.fromisoformat(m["last_modified"]) <= init + PUBLISHED_HOURS * HOUR
+        for s in WEEK_STEPS for m in run["steps"][str(s)].values())
+
+
+def observed(obs: dict, hour: datetime) -> float | None:
+    """The hour's rule wind, None without a mean reading."""
+    return rule_wind(obs, hour) if any("30" in obs.get(t, {}) for t in (hour, hour + HALF)) else None
+
+
+def block(lead: int) -> int:
+    return next(i for i, (a, b) in enumerate(BLOCKS) if a <= lead < b)
+
+
+def percentiles(xs: list[float]) -> list[float]:
+    """numpy's default (linear) percentiles 1 to 99."""
+    xs = sorted(xs)
+    out = []
+    for p in PERCENTILES:
+        i, rest = divmod((len(xs) - 1) * p, 100)
+        out.append(xs[i] + (xs[min(i + 1, len(xs) - 1)] - xs[i]) * rest / 100)
+    return out
+
+
+class QuantileMap:
+    """A forecast's wind to the anemometer's, in whole knots: linear between the fit's percentiles (a tie in the
+    forecast's taking the mean of the observed), proportional below the first and offset above the last."""
+
+    def __init__(self, forecasts: list[float], observations: list[float]) -> None:
+        self.f, self.o = percentiles(forecasts), percentiles(observations)
+        tied: dict[float, list[float]] = defaultdict(list)
+        for f, o in zip(self.f, self.o, strict=True):
+            tied[f].append(o)
+        self.knots = [(f, sum(os) / len(os)) for f, os in tied.items()]
+
+    def __call__(self, x: float) -> int:
+        if x < self.f[0]:
+            v = self.o[0] * x / self.f[0] if self.f[0] else 0.0
+        elif x > self.f[-1]:
+            v = self.o[-1] + x - self.f[-1]
+        else:
+            i = max(i for i, (f, _) in enumerate(self.knots) if f <= x)
+            (f0, o0), (f1, o1) = self.knots[i], self.knots[min(i + 1, len(self.knots) - 1)]
+            v = o0 if f1 == f0 else o0 + (o1 - o0) * (x - f0) / (f1 - f0)
+        return max(0, math.floor(v + 0.5))
+
+
+def fit(cache: Path, obs: dict, grid: str, first: datetime, last: datetime) -> tuple[list[QuantileMap], dict]:
+    """One map per lead block from the period's 00/12Z runs with every step 9-72 h, each step against the rule wind
+    that blew in the hour it is valid for."""
+    pairs: list[tuple[list[float], list[float]]] = [([], []) for _ in BLOCKS]
+    runs = 0
+    for init in every(first, last, 12):
+        run = load_run(cache, grid, init)
+        if not complete(run, FIT_STEPS):
+            continue
+        runs += 1
+        for step in FIT_STEPS:
+            if (o := observed(obs, init + step * HOUR)) is not None:
+                pairs[block(step)][0].append(speed(run["steps"][str(step)]))
+                pairs[block(step)][1].append(o)
+    return [QuantileMap(f, o) for f, o in pairs], {"grid": grid, "period": [f"{first:%Y-%m-%d}", f"{last:%Y-%m-%d}"],
+                                                   "fitted_runs": runs, "pairs": [len(f) for f, _ in pairs]}
+
+
+def unvalidated(obs: dict, t0: datetime, window: dict) -> float:
+    """The share of the window's readings, both variables in both half-hours of each hour, not validated."""
+    valid = [v for h in range(window["start"], window["end"]) for t in (t0 + h * HOUR, t0 + h * HOUR + HALF)
+             for _, v in obs.get(t, {}).values()]
+    return round(valid.count(False) / len(valid), 3)
+
+
+def check(record: dict) -> None:
+    for r in record["runs"]:
+        assert r["issued"] == r["init"] + PUBLISHED_HOURS and r["init"] % 6 == 0, r
+        assert len(r["kn"]) == len(WEEK_STEPS) and all(isinstance(x, int) and x >= 0 for x in r["kn"]), r
+        assert r["windows"] == wind.run_windows(r["init"], r["kn"]), r
+    for h in IN_FORCE_HOURS:
+        assert wind.delivered(record, h)["issued"] <= h, (record["iso_week"], h)
+
+
+def week(index: int, name: str, kind: str, obs: dict, hours: dict, cache: Path, maps: list[QuantileMap]) -> dict:
+    """The weather week's truth, the hours above each threshold merged and as observed, and every run in force at a
+    6-hourly hour, the latest whose every message was published by then, in calibrated whole knots."""
+    t0 = monday(name)
+    flagged = {m: [h for h in range(HOURS) if (x := hours.get(t0 + h * HOUR)) is not None and x > kn]
+               for m, kn in wind.THRESHOLDS}
+    good = [init for init in week_runs(name) if usable(load_run(cache, week_grid(init), init), init)]
+    in_force = [[i for i in good if i + PUBLISHED_HOURS * HOUR <= t0 + h * HOUR] for h in IN_FORCE_HOURS]
+    assert all(in_force), f"{name}: no run in force at some hour"
+    runs = []
+    for init in sorted({max(inits) for inits in in_force}):
+        assert week_grid(init) == FIT_YEARS[int(name[:4])][0], (name, init)
+        run, h = load_run(cache, week_grid(init), init), (init - t0) // HOUR
+        kn = [maps[block(step)](speed(run["steps"][str(step)])) for step in WEEK_STEPS]
+        runs.append({"run": iso(init), "init": h, "issued": h + PUBLISHED_HOURS, "kn": kn,
+                     "windows": wind.run_windows(h, kn)})
+    record = {"id": f"e{index:02d}", "iso_week": name, "monday": iso(t0), "kind": kind,
+              "windows": [w | {"unvalidated": unvalidated(obs, t0, w)}
+                          for m, _ in wind.THRESHOLDS for w in wind.merge(flagged[m], m)],
+              "observed": [w for m, _ in wind.THRESHOLDS for w in wind.merge(flagged[m], m, gap=0)], "runs": runs}
+    check(record)
+    return record
+
+
+def ecmwf_sources(cache: Path, records: list[dict]) -> dict:
+    used = {datetime.fromisoformat(r["run"]) for w in records for r in w["runs"]}
+    messages = sorted((m["key"], m["offset"], m["length"], m["sha256"], m["last_modified"])
+                      for init in used for s in WEEK_STEPS
+                      for m in load_run(cache, week_grid(init), init)["steps"][str(s)].values())
+    return {
+        "data": "ECMWF IFS HRES open data (oper and scda streams), 10 m wind",
+        "bucket": f"s3://{BUCKET.split('.')[0]}", "url": f"https://{BUCKET}",
+        "registry": "https://registry.opendata.aws/ecmwf-forecasts/", "terms": OPEN_DATA,
+        "copyright": f"© {min(used).year}-{max(used).year} European Centre for Medium-Range Weather Forecasts (ECMWF)",
+        "source": "www.ecmwf.int",
+        "licence": ("This data is published under a Creative Commons Attribution 4.0 International (CC BY 4.0). "
+                    "https://creativecommons.org/licenses/by/4.0/"),
+        "disclaimer": ("ECMWF does not accept any liability whatsoever for any error or omission in the data, their "
+                       "availability, or for any loss or damage arising from their use."),
+        "modified": ("Modified: each run's 10 m wind at one grid point, every 3 hours to 72 hours, mapped to the Y7 "
+                     "anemometer by quantiles and rounded to whole knots."),
+        "cells": {g: list(c) for g, c in CELLS.items()},
+        "grids": f"0p4 for runs before {iso(SWITCH)}, 0p25 from then",
+        "speed": "hypot(10u, 10v) m/s x 3600/1852 kn at the cell",
+        "publication_hours": PUBLISHED_HOURS, "steps": list(WEEK_STEPS), "params": list(PARAMS),
+        "range": "bytes=offset-(offset+length-1) of the key; sha256 of those bytes",
+        "fields": ["key", "offset", "length", "sha256", "last_modified"], "messages": messages}
+
+
+def y7_sources(cache: Path) -> dict:
+    metas = [json.loads(p.read_text()) for p in sorted((cache / "y7" / "pass1").glob("*.meta.json"))]
+    again = {p.name: json.loads(p.read_text())["sha256"] for p in (cache / "y7" / "pass2").glob("*.meta.json")}
+    assert again == {f"{m['month']}.meta.json": m["sha256"] for m in metas}, "Y7 pass 2 differs from pass 1"
+    return {
+        "dataset": "nzvn-apee", "url": XEMA, "api": SOCRATA,
+        "publisher": "Servei Meteorològic de Catalunya (Meteocat), via the Generalitat de Catalunya's open data portal",
+        "station": "Y7", "name": "Barcelona – Bocana Sud",
+        "variables": {"30": "VV10, wind speed at 10 m, 30-minute mean, m/s",
+                      "50": "VVx10, wind gust at 10 m, 3-second maximum, m/s"},
+        "conversion": {"knots": "m/s x 3600/1852", "30": FACTORS["30"], "50": round(FACTORS["50"], 3),
+                       "rule": ("an hour is above T kn when either half-hour has 1.045 x the mean or 0.664 x the gust "
+                                "above T; T = 25 (min_length 300) or 30 (min_length 0)")},
+        "extracted": max(m["fetched"] for m in metas)[:10],
+        "digest": ("sha256 of the month's rows as returned, each row as JSON with sorted keys, separators (',', ':') "
+                   "and non-ASCII kept, the lines sorted and joined by newlines, UTF-8; the rows include codi_estat"),
+        "pass2_identical": True,
+        "months": [{"month": m["month"], "rows": m["rows"], "sha256": m["sha256"]} for m in metas]}
+
+
+def calibration_sources(fits: dict[int, dict]) -> dict:
+    return {
+        "method": ("quantile mapping per lead block: the forecast's speed at the cell against the rule wind observed "
+                   "at Y7 in the hour each step is valid for (the larger of 1.045 x the mean and 0.664 x the gust over "
+                   "its half-hours, readings as published, pairs without a mean skipped)"),
+        "percentiles": "p = 1 to 99 of the fit's forecasts and of its observations, linear between order statistics",
+        "apply": ("linear between the percentiles, the mean observed where forecast percentiles tie; below the first, "
+                  "proportional to it; above the last, offset from it; rounded half up to a whole knot, never below 0"),
+        "blocks": [list(b) for b in BLOCKS], "fit_runs": "00 and 12 UTC runs with every step 9-72 h",
+        "years": {str(year): f for year, f in fits.items()},
+        "maps": "not published"}
+
+
+def sources_text(sources: dict) -> str:
+    rows = sources["ecmwf"]["messages"]
+    text = json.dumps(sources | {"ecmwf": sources["ecmwf"] | {"messages": None}}, indent=1, ensure_ascii=False)
+    body = ",\n".join("  " + json.dumps(list(r), separators=(",", ":")) for r in rows)
+    return text.replace('"messages": null', '"messages": [\n' + body + "\n ]", 1) + "\n"
+
+
+def build(cache: Path, out: Path) -> None:
+    assert (cache / "done").is_file(), f"{cache}: the fetch is not complete"
+    obs = readings(cache / "y7" / "pass1")
+    hours = hourly(obs)
+    weeks = json.loads((cache / "weeks.json").read_text())
+    assert candidate_weeks(obs) == weeks, "the storm rule no longer gives weeks.json"
+    fits = {year: fit(cache, obs, *spec) for year, spec in FIT_YEARS.items()}
+    kinds = {w: "storm" for w in weeks["storm"]} | {w: "bust" for w in weeks["bust"]}
+    records = [week(i, name, kinds[name], obs, hours, cache, fits[int(name[:4])][0])
+               for i, name in enumerate(sorted(kinds))]
+    sources = {"ecmwf": ecmwf_sources(cache, records), "y7": y7_sources(cache),
+               "calibration": calibration_sources({year: f for year, (_, f) in fits.items()})}
+    directory = out / "wind"
+    write_atomic(directory / "weather.jsonl", "".join(
+        json.dumps(r, ensure_ascii=False, separators=(",", ":")) + "\n" for r in records).encode())
+    write_atomic(directory / "weather-sources.json", sources_text(sources).encode())
+    print(f"Wrote {directory}: {len(records)} weeks, {sum(len(r['runs']) for r in records)} runs, "
+          f"{len(sources['ecmwf']['messages'])} messages")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     commands = parser.add_subparsers(dest="command", required=True)
@@ -487,9 +727,13 @@ def main() -> None:
     fetch_parser.add_argument("--cache", type=Path, default=cache_dir())
     fetch_parser.add_argument("--y7-pass", type=int, default=1,
                               help="fetch only Y7, again, into y7/passN (default 1: Y7, then the ECMWF runs)")
+    build_parser = commands.add_parser("build", help="write <out>/wind/weather.jsonl and weather-sources.json")
+    build_parser.add_argument("--cache", type=Path, default=cache_dir())
+    build_parser.add_argument("--out", type=Path, default=ROOT / "data")
     args = parser.parse_args()
     if args.command == "fetch":
         raise SystemExit(fetch(args.cache, args.y7_pass))
+    build(args.cache, args.out)
 
 
 if __name__ == "__main__":
