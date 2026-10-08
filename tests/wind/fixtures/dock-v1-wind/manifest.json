@@ -105,7 +105,12 @@
     }
   ],
   "ecmwf": {
-    "note": "Synthetic fixture: invented forecasts, no ECMWF data."
+    "note": "Synthetic fixture: invented forecasts, no ECMWF data.",
+    "messages": {
+      "file": "wind/weather-sources.json",
+      "sha256": "f56bf4c1eeb0eedaedcbc2e9ae114759b97156a3139a09e745954ec7ae831486",
+      "count": 4
+    }
   },
   "y7": {
     "note": "Synthetic fixture: invented wind, no Meteocat data."

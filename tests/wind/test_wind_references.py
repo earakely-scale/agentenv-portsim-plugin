@@ -85,8 +85,15 @@ def test_the_manifest():
         {"task_id": r["task_id"], "schedule": r["schedule"], "weather": r["weather"], "kind": r["kind"],
          "iso_week": WEEKS[r["weather"]]["iso_week"], "added_watches": r["added_watches"],
          "windows": WEEKS[r["weather"]]["windows"]} for r in REFS]
-    sources = json.loads((FIXTURES / "wind/weather-sources.json").read_text())
-    assert {key: MANIFEST[key] for key in ("ecmwf", "y7", "calibration")} == sources
+    path = FIXTURES / "wind/weather-sources.json"
+    sources = json.loads(path.read_text())
+    assert {key: MANIFEST[key] for key in ("y7", "calibration")} == {key: sources[key] for key in ("y7", "calibration")}
+    ecmwf = sources["ecmwf"]
+    assert ecmwf["fields"] == ["key", "offset", "length", "sha256", "last_modified"]
+    assert ecmwf["messages"] and all(len(m) == 5 for m in ecmwf["messages"])
+    assert MANIFEST["ecmwf"] == {key: value for key, value in ecmwf.items() if key not in ("fields", "messages")} | {
+        "messages": {"file": "wind/weather-sources.json", "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                     "count": len(ecmwf["messages"])}}
     assert list(MANIFEST["wind"]) == ["grounding"]
     for key, item in MANIFEST["wind"]["grounding"].items():
         assert list(item) == ["value", "basis"]

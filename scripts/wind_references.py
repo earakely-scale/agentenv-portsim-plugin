@@ -279,10 +279,19 @@ def packed(v3: Task, weather: dict, row: dict) -> Task:
         "lower_bound": row["hindsight_cost"], "proven_optimal": True})
 
 
+def data_file(path: Path) -> str:
+    return f"{path.parent.name}/{path.name}"
+
+
 def manifest(tasks: list[Task], body: bytes, args: argparse.Namespace, weathers: list[dict], picks: list[dict],
              rows: dict[tuple[str, str], dict]) -> dict:
+    """The sources' y7 and calibration blocks verbatim, and their ecmwf block but for its tens of thousands of message
+    pins, which stay in the sources file, referenced by the file's sha256 and their count."""
     by_id = {w["id"]: w for w in weathers}
-    sources = json.loads((args.weather.parent / "weather-sources.json").read_text())
+    path = args.weather.parent / "weather-sources.json"
+    text = path.read_bytes()
+    sources = json.loads(text)
+    ecmwf = sources["ecmwf"]
     return {"name": schedule.WIND_PACK, "split": "eval", "tasks": len(tasks),
             "tiers": dict(sorted(Counter(t.difficulty for t in tasks).items())),
             "sha256": hashlib.sha256(body).hexdigest(), "weeks": sorted({t.week for t in tasks}),
@@ -291,13 +300,16 @@ def manifest(tasks: list[Task], body: bytes, args: argparse.Namespace, weathers:
                        f"{args.weather.name}: the wind observed at the anemometer and the forecasts as delivered, from "
                        "the sources under ecmwf, y7 and calibration"),
             "marine": {"pack": schedule.MARINE_PACK, "sha256": marine.pack().manifest["sha256"]},
-            "weather": {"file": f"{args.weather.parent.name}/{args.weather.name}",
+            "weather": {"file": data_file(args.weather),
                         "sha256": hashlib.sha256(args.weather.read_bytes()).hexdigest(), "records": len(weathers)},
             "pairs": [{"task_id": t.task_id, "schedule": p["schedule"], "weather": p["weather"],
                        "kind": by_id[p["weather"]]["kind"], "iso_week": by_id[p["weather"]]["iso_week"],
                        "added_watches": rows[p["schedule"], p["weather"]]["added_watches"],
                        "windows": by_id[p["weather"]]["windows"]} for t, p in zip(tasks, picks, strict=True)],
-            "ecmwf": sources["ecmwf"], "y7": sources["y7"], "calibration": sources["calibration"],
+            "ecmwf": {key: value for key, value in ecmwf.items() if key not in ("messages", "fields")} | {
+                "messages": {"file": data_file(path), "sha256": hashlib.sha256(text).hexdigest(),
+                             "count": len(ecmwf["messages"])}},
+            "y7": sources["y7"], "calibration": sources["calibration"],
             "wind": {"grounding": GROUNDING},
             "deal": {"screened": len(rows), "qualifying": sum(r["qualifies"] for r in rows.values()),
                      "dealt": len(picks), "gate": GATE},

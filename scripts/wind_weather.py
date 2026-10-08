@@ -33,9 +33,9 @@ failures; `done` is written when nothing is missing, else the command exits non-
   run's 3-hourly wind is calibrated to the anemometer in whole knots by quantile maps per lead block (0-23, 24-47,
   48-72 h), fitted on another year's 00/12Z runs on the same grid (2023 on 0.4 degree Feb 2024-Jan 2025, 2024 on
   0.25 degree 2025, 2025 on 0.25 degree Feb-Dec 2024); its windows are agentenv_portsim.wind.run_windows'.
-- wind/weather-sources.json: the pins, which the wind pack's manifest copies: every ECMWF message the weeks' runs use
-  (key, range, sha256, Last-Modified) with ECMWF's attribution, each Y7 month's digest, and the calibration's
-  description. Never a reading, a quantile map or GRIB.
+- wind/weather-sources.json: the pins: every ECMWF message the weeks' runs use (key, range, sha256, Last-Modified)
+  with ECMWF's attribution, each Y7 month's digest, and the calibration's description, which the wind pack's manifest
+  copies, the messages by the file's sha256 and their count. Never a reading, a quantile map or GRIB.
 
     uv run --with eccodes==2.49.0 python scripts/wind_weather.py fetch [--cache DIR] [--y7-pass N]
     uv run --no-sync --frozen --with eccodes==2.49.0 python scripts/wind_weather.py build [--cache DIR] [--out DIR]
