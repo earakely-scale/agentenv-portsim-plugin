@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agentenv-portsim"
-version = "0.3.1"
+version = "0.4.0"
 description = "PortSimEnv as an AgentEnv environment: an agent re-plans a disrupted week of container-ship berthing at a Port of Barcelona quay through MCP tools."
 readme = "README.md"
 license = "Apache-2.0 AND CC-BY-SA-4.0"
