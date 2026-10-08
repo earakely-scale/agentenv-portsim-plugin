@@ -16,6 +16,7 @@ the re-solve is infeasible and the script stops; no one-week dock-v1-eval week g
 import argparse
 import json
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 import ortools
@@ -33,8 +34,11 @@ DETERMINISTIC_SECONDS = 60.0
 TIEBREAK_SCALE = 10000
 
 
-def solve(view: Task, fixed: Plan, before: int, hint: Plan, workers: int, tiebreak: bool) -> Plan:
-    """berth_core.solve.optimal_plan's crane-rule model, with ``fixed`` pinned and the others at or after ``before``."""
+def solve(view: Task, fixed: Plan, before: int, hint: Plan, workers: int, tiebreak: bool,
+          extra: Callable[[cp_model.CpModel, dict], None] | None = None, optimal: bool = False) -> Plan:
+    """berth_core.solve.optimal_plan's crane-rule model, with ``fixed`` pinned and the others at or after ``before``;
+    ``extra`` adds constraints over each ship's (berthing, leaving) hour variables, and ``optimal`` accepts only a
+    proven optimum."""
     horizon = (max([s.arrival for s in view.ships] + [before]) + sum(s.handling_for(s.min_cranes) for s in view.ships)
                + max([b.end for b in view.blocks] + [0]))
     md = cp_model.CpModel()
@@ -114,6 +118,8 @@ def solve(view: Task, fixed: Plan, before: int, hint: Plan, workers: int, tiebre
         crane_dem.append(int(o["cranes"]))
     md.AddCumulative(crane_iv, crane_dem, int(view.rules["crane_pool"]))
     md.AddCumulative(move_iv, [1] * len(move_iv), int(view.rules["max_moves_per_hour"]))
+    if extra:
+        extra(md, {s.id: (T[s.id], end) for s, end in zip(view.ships, ends, strict=True)})
     md.Minimize(sum(terms) * TIEBREAK_SCALE + sum(ends) if tiebreak else sum(terms))
     for sid, (h, sec, cranes) in hint.items():
         md.AddHint(T[sid], h)
@@ -125,7 +131,7 @@ def solve(view: Task, fixed: Plan, before: int, hint: Plan, workers: int, tiebre
     solver.parameters.max_deterministic_time = DETERMINISTIC_SECONDS
     solver.parameters.interleave_search = workers > 1
     status = solver.StatusName(solver.Solve(md))
-    if status not in ("OPTIMAL", "FEASIBLE"):
+    if status not in (("OPTIMAL",) if optimal else ("OPTIMAL", "FEASIBLE")):
         raise RuntimeError(f"{view.task_id}: the re-solve at the freeze line {before} is {status}")
     return {s.id: (solver.Value(T[s.id]), solver.Value(M[s.id]), next(k for k, p in C[s.id].items() if solver.Value(p)))
             for s in view.ships}

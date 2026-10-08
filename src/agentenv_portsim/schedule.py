@@ -11,6 +11,8 @@ from berth_core import Task
 from berth_core.prompts import _when
 
 LIVE_ENV = "portsim-live"
+MARINE_ENV = "portsim-marine"
+MARINE_PACK = "dock-v1-marine"
 LIVE_LOAD_URI = "urn:portsim:live-load/v1"
 END_WEEK_URI = "urn:portsim:end-week/v1"
 CLOCK_URI = "urn:agentenv:clock/v1"
@@ -24,9 +26,11 @@ BARRIER_SECONDS = 60
 MAX_TURNS = TURNS_PER_WATCH * 9 + 2
 """Every week gets the turns of the longest (9 watches), so the turns-left note doesn't reveal how many
 bulletins are coming."""
-LEADS = {"late": 24, "bunching": 24, "extra": 24, "priority": 24, "emergency": 12, "crane_outage": 24, "gale": 24}
+LEADS = {"late": 24, "bunching": 24, "extra": 24, "priority": 24, "emergency": 12, "crane_outage": 24, "gale": 24,
+         "tug_outage": 24, "pilot_shortage": 24}
 SPEAKERS = {"bunching": "Ship agents", "gale": "Harbour master", "emergency": "Harbour master",
-            "closure": "Terminal ops", "crane_outage": "Terminal ops", "priority": "Line desk"}
+            "closure": "Terminal ops", "crane_outage": "Terminal ops", "priority": "Line desk",
+            "tug_outage": "Tug company", "pilot_shortage": "Pilot station"}
 HARBOUR_MASTER = "Harbour master"
 ONE_WEEK = re.compile(r"dock-\w+-w\d{2}x1-")
 TIME_FORMAT = "%Y-%m-%dT%H:%M:%SZ"

@@ -49,22 +49,25 @@ week is new here.
 
 **Contents:** [What's in it](#whats-in-it) · [Run it yourself](#run-it-yourself) · [Tasks](#tasks) ·
 [Play a model](#play-a-model) · [The environment](#the-environment) · [Grading](#grading) ·
-[The live port](#the-live-port) · [Watch a run](#watch-a-run) ·
+[The live port](#the-live-port) · [The marine port](#the-marine-port) · [Watch a run](#watch-a-run) ·
 [Built on the AgentEnv Framework](#built-on-the-agentenv-framework) ·
 [Layout](#repository-layout) · [Development](#development) · [Licence and credits](#licence-and-credits)
 
 ## What's in it
 
-- **Two environments, in one image.**
+- **Three environments, in one image.**
   - **v1,** `portsim`, plans a week in one go: the agent reads the situation, checks drafts (10 checks) and submits
     one plan, within 24 tool calls ([The environment](#the-environment)).
   - **v2, the live port,** `portsim-live`, plays the same week as it unfolds, on AgentEnv's gateway. A virtual clock
     runs the week watch by watch, the ships, the harbour master, terminal ops and the line desk send their news through
     triggers, and windows about to start are frozen. The agent confirms berths as it goes
     ([The live port](#the-live-port)).
+  - **v3, the marine port,** `portsim-marine`, plays the live week with the port's pilots and tugs: every berthing
+    and departure takes them from hourly pools shared with the rest of the port's real 2024 traffic, and the tug
+    company and the pilot station announce cuts ([The marine port](#the-marine-port)).
 - **1,100 weeks to play.** They come from the port's 2024 container calls at two quays, 24B (APM Terminals
   Barcelona) and 36A (Terminal Catalunya, BEST), in four tiers from standard to extreme: 50 eval weeks and 1,050
-  train weeks, with no week in both. 15 of the eval weeks are live weeks ([Tasks](#tasks)).
+  train weeks, with no week in both. 15 of the eval weeks are live weeks, and the same 15 are marine weeks ([Tasks](#tasks)).
 - **A deterministic grade, with no judge.** A valid plan scores 0.2 + 0.8·e^(−gap/0.5) against the optimum, so the
   optimum scores 1.0. A plan that breaks a rule scores under 0.2, and no plan scores 0. A live week is graded on the
   windows the agent confirmed, against the week as it really happened ([Grading](#grading)).
@@ -79,8 +82,8 @@ week is new here.
   tasks as runnable bundles (the 50 eval weeks and the 15 live weeks), the live references and every recorded run.
   The [Space](https://huggingface.co/spaces/earakely-scale/PortSimEnv-AgentEnv) replays the runs in 3D.
 - **Results.** GPT-6.1 Sol and Claude Sonnet 5.5 on ten weeks planned in one go
-  ([the comparison with upstream's eval](#the-comparison-with-the-published-eval)) and on all 15 live weeks
-  ([the first live results](#the-first-live-results)).
+  ([the comparison with upstream's eval](#the-comparison-with-the-published-eval)), on all 15 live weeks
+  ([the first live results](#the-first-live-results)) and on the 15 marine weeks ([marine results](#marine-results)).
 
 ## Run it yourself
 
@@ -90,7 +93,7 @@ You need [Docker](https://docs.docker.com/get-docker/), running and usable witho
 ```bash
 uv tool install agentenv-framework \
     --with "agentenv-portsim @ git+https://github.com/earakely-scale/agentenv-portsim-plugin"
-agent-env portsim setup              # build the env image for this machine; register the envs "portsim" and "portsim-live"
+agent-env portsim setup              # build the env image for this machine; register the envs "portsim", "portsim-live" and "portsim-marine"
 agent-env run portsim --task smoke   # load a task, submit its optimal plan, grade it
 ```
 
@@ -123,7 +126,7 @@ In an existing agent-env install, `agent-env plugin add ./agentenv-portsim-plugi
   `uv tool update-shell` and open a new terminal.
 - **A step fails because something holds port 5000:** agent-env keeps its images in a local registry on
   `127.0.0.1:5000`. On macOS, AirPlay Receiver often holds that port; turn it off in System Settings.
-- **The run says there is no env `portsim` or `portsim-live`:** run `agent-env portsim setup` first, with the same config.
+- **The run says there is no env `portsim`, `portsim-live` or `portsim-marine`:** run `agent-env portsim setup` first, with the same config.
 - **A model run fails with `provider_refused`:** the model endpoint refused the key or the account (401, 402 or 403).
   On the Hugging Face router, 402 means the account has no Inference Providers credits: add some, or bill an
   organization with `--hf-bill-to`.
@@ -537,6 +540,180 @@ Every run reached the end of its week with a feasible plan and passed the validi
 Two attempts failed for reasons outside the episode (two local deploys racing for a host port, and a provider timeout)
 and passed on retry.
 
+## The marine port
+
+The marine port is v3: the live weeks with the port's pilots and tugs. The env `portsim-marine`
+(`src/agentenv_portsim/marine.py`) plays the same week as `portsim-live`, from the same image, with the same four
+tools, triggers, freeze, excuses, audit and verifier. What it adds: every berthing and every departure takes a pilot
+and tugs in its hour, from port-wide pools that the quay shares with the rest of the port's real 2024 traffic:
+ferries, cruise ships, tankers, car carriers and the container ships at other quays. During the week the tug company
+and the pilot station announce cuts to the pools, and a gale makes each movement take one more tug. The `portsim`
+and `portsim-live` envs and their tasks are unchanged.
+
+<p align="center">
+  <a href="https://github.com/earakely-scale/agentenv-portsim-plugin/releases/tag/replays-2026-10-08"><img src="assets/marine-port.webp" width="100%" alt="GPT-6.1 Sol plays a marine week: the tug company and the pilot station announce cuts, and the watch panel counts the pilots and tugs free for the quay's ships each hour"></a>
+</p>
+<p align="center"><sub><b>The marine port:</b> GPT-6.1 Sol plays the live port's film week with the port's pilots and tugs. On Tuesday 06:00 the tug company and the pilot station announce cuts from hour 54; at hour 54 it moves one ship with the last 2 free tugs, and it ends at the marine hindsight optimum (reward 1.0), where v2's naive re-plan is infeasible. <a href="https://github.com/earakely-scale/agentenv-portsim-plugin/releases/tag/replays-2026-10-08">Full film</a>. Twin © OpenStreetMap contributors (ODbL).</sub></p>
+
+GPT-6.1 Sol averages 0.905 on the 15 marine weeks and Claude Sonnet 5.5 0.932 on 14 of them, against 1.000 for the
+rolling re-planner and 0.187 for v2's naive policy, which knows nothing of pilots and tugs
+([Marine results](#marine-results)).
+
+### The rules and their sources
+
+Each number comes from a public source or is labelled an assumption. `data/dock-v1-marine/manifest.json` carries the
+same list, under `marine`, and the calibration below it.
+
+| Rule | Value | Source |
+|---|---|---|
+| Who takes a pilot | every berthing and departure of a ship of 45 m or more | The port's [maritime operations FAQ](https://contentv5.portdebarcelona.cat/cntmng/gd/d/workspace/SpacesStore/0f925a59-a5c8-4c7f-9b44-28c80f50f88a/FAQ_ATRACS_es.pdf), item 15: ships over 45 m and 500 GT. RAW has no gross tonnage, so going by length alone is an **assumption** |
+| How long a job takes | 1 hour, the hour the ship berths or leaves, for the pilot and the tugs alike | The [pilotage service specification](https://www.boe.es/diario_boe/txt.php?id=BOE-A-2020-15568) (BOE-A-2020-15568), annex III, sizes the service on a mean of 1 hour per job. Which hour it falls in is an **assumption** |
+| Pilots | 7 on duty every hour | **Assumption**, calibrated: the smallest pool the port's 2024 traffic exceeds in under 1% of hours (0.25%). Published: at least 18 pilots, never fewer than 3 on duty (pilotage specification, prescription 16) |
+| Tugs | 8 on duty every hour | The port has ["8 or more"](https://infopuertos.com/la-fuerza-que-mueve-los-puertos-espanoles/) tugs, and each towage provider must keep at least 5 ([towage service specification](https://www.boe.es/diario_boe/txt.php?id=BOE-A-2015-10895), BOE-A-2015-10895, prescription 14). That all 8 are on duty at once is an **assumption**; the 2024 traffic exceeds 8 in 0.01% of hours |
+| Tugs per movement | 0 under 120 m, 1 under 200 m, 2 under 300 m, 3 from 300 m; ferries, cruise ships and yachts 0 | **Assumption**: the port publishes no table; towage is on request, and the master decides with the pilot (towage specification, prescription 3). The nearest public matrix is [Houston Pilots'](https://www.houston-pilots.com/media/bmxni4u0/tug-matrix-july-2022.pdf) |
+| Wind | one more tug per movement inside an announced window of wind above 25 kn, except Ro-Ro ships and ferries under 200 m, and yachts | The port's [traffic ordinance](https://www.boe.es/diario_boe/txt.php?id=BOE-A-2023-6719) (BOE-A-2023-6719), 4.1.2.2: at least one tug for merchant ships above 25 kn, and for Ro/Ro and Ro/Pax ships under 200 m from 30 kn. **Assumptions:** the extra tug for ships that already take tugs; ferries as Ro/Pax; RAW's car carriers as merchant ships other than Ro/Ro; yachts as non-merchant ships; and the 25 kn window alone, so Ro-Ro ships and ferries under 200 m take no wind tug in its 30 kn hours either, when none of our ships may move |
+| Gales | they hold our ships only; the other traffic keeps its 2024 hours | Ordinance 4.1.2.1: the 25 and 30 kn thresholds start a review with the pilots, which PortSimEnv simplifies to no-movement windows. The gales are PortSimEnv's, not 2024's weather, so leaving the other traffic where it sailed is an **assumption** |
+| Other traffic | every 2024 call of a ship of 45 m or more that doesn't stop at the task's quay: a movement each time it berths, and one when it leaves a berth for the anchorage (90A) or the sea, so a shift between berths counts once; plus the departures of the ships alongside at hour 0, at their recorded length | RAW (below). Its ETA and ETD are berthing and leaving times for container calls (upstream's `data/barcelona/SOURCE.md`); for other ship types that, and 90A as an anchorage rather than a berth, are **assumptions**. A stop RAW lists once per terminal operator counts once. A call that stops at the task's quay is left out with its stops elsewhere, since the quay holds only the week's own ships; leaving out the quay's other calls (10 to 39 movements a week, most of them the next week's, after hour 168) is an **assumption** |
+| Horizon | the other traffic is counted from hour 0 to hour 264 (11 days), past every ship's planned departure; after that every pilot and tug is free | PortSimEnv's choice, not a port rule |
+| Tug outage | 2 tugs for 24 hours, announced 24 hours ahead | A tug may leave service for repairs or a call-away (towage specification, prescription 2), and a provider may be one tug short for up to 240 hours a year (annex 1). Its size, length and timing are **assumptions** |
+| Pilot shortage | 2 pilots for 12 hours, announced 24 hours ahead | **Assumption** |
+
+Response times, 30 minutes for a pilot and 25 for a tug in the two specifications, fall inside the hour and aren't
+modelled. Neither is waiting for a tug: a short hour is a rule break.
+
+RAW is the port's record of its 2024 calls of every ship type, the file upstream extracted its container calls from:
+`generator/raw/Barcelona_2024.csv` in
+[alberto-santini/berth-allocation-problems](https://github.com/alberto-santini/berth-allocation-problems) at commit
+`8e726a4`, from the Port de Barcelona open data portal (CC BY-SA 4.0). It isn't stored here: the pack keeps only
+the movements derived from it, and the manifest records the file's commit and sha256.
+
+### How a marine week runs
+
+Only this changes for the agent:
+
+- **The situation.** `get_situation` and the opening end with a "Pilots and tugs" section: the pools and the rule,
+  the tugs per movement, the wind windows announced so far, the tugs each of our ships takes, the cuts announced so
+  far, and the pilots and tugs free for our ships each hour up to hour 264, after the other traffic, the cuts and the
+  wind, one line a day in blocks of 6 hours.
+- **The rule.** In any hour our ships may need no more pilots or tugs than are free. `check_plan` and the grade name
+  each short hour on every one of our ships that moves in it, as in `tugs short at hour 54: your ships need 3, 2
+  free`. A plan with one is infeasible, like a break of the crane pool or of the movement limit.
+- **The news.** The tug company's outage and the pilot station's shortage arrive on bulletins the week already has,
+  24 hours before they start. The gale warning adds that ships berthing or leaving inside its window take one more
+  tug. The watches and the 47 turns are v2's.
+- **Excuses.** They work as in the live grade, per ship and rule: a cut that leaves a frozen window short is excused,
+  and a ship the agent moves into a short hour is charged.
+
+In the example week `dock-24B-w07x1-busy-0`, the section at hour 0 reads:
+
+```
+## Pilots and tugs
+- Each berthing and each departure takes a pilot and tugs in its hour, from the port's 7 pilots and 8 tugs on duty, shared with the port's other traffic. In any hour your ships may need no more pilots or tugs than are free for them; each ship moving in an hour short of either breaks this rule.
+- Tugs per movement: 0 under 120 m, 1 under 200 m, 2 under 300 m, 3 from 300 m.
+- Your ships take 3 tugs: ships 3, 8; 2 tugs: ships 0, 2, 5, 9, 10, 15; 1 tug: ships 1, 4, 6, 7, 11, 12, 13, 14.
+- Free for your ships after the other traffic, the cuts and the wind, pilots | tugs, each hour from 00:00 in blocks of 6 hours:
+- Mon: 745565 266666 764766 354136 | 867675 286888 867888 854765
+- Tue: 475667 644667 565657 166235 | 385668 858668 577778 885865
+  ... one line a day to +10d
+- From hour 264: 7 pilots and 8 tugs free.
+```
+
+The week keeps v2's seven watches and news; the marine news, in bold, comes with watches 1 and 5:
+
+| Watch | Time (hour) | From | News |
+|---:|---|---|---|
+| 1 | Tue 06:00 (30) | MAERSK NUBA; **Tug company; Pilot station** | v2's unscheduled call; **2 of the 8 tugs out of service from hour 54 to 78; 2 of the 7 pilots unavailable from hour 54 to 66** |
+| 2 | Tue 18:00 (42) | Harbour master | Emergency: ZIM CHINA must dock by hour 64 |
+| 5 | Thu 18:00 (90) | Harbour master | v2's gale, **and ships that berth or leave from hour 115 to 144 take one more tug** |
+
+At hour 54, v2's optimum sails PERSEUS (ship 4, 140 m, 1 tug) and berths ZIM CHINA (ship 5, 261 m, 2 tugs). The
+other traffic takes 4 of the 8 tugs that hour: two container ships at quay 36A, 148 m and 139 m, and a 238 m Ro-Ro.
+The outage takes 2 more, so `check_plan` reports `tugs short at hour 54: your ships need 3, 2 free` on both ships.
+A re-plan of the same cost exists, and the hindsight optimum stays 226.
+
+### The marine grade and references
+
+- **The grade** is the live grade with the marine checker: the executed week, scored with `berth_core`'s reward v3
+  against the marine hindsight optimum and the floor. An infeasible week scores below 0.2.
+- **The hindsight optimum** is CP-SAT's with the whole week known, proven optimal: `scripts/live_references.py`'s
+  model (adapted from `berth_core`'s `optimal_plan`) with one cumulative constraint per pool and the wind's extra
+  tug. It is never below v2's, and above it in 4 of the 18 weeks: `dock-24B-w16x1-busy-0` 1365 (v2 1349),
+  `dock-24B-w35x1-busy-0` 1238 (1223), `dock-36A-w05x1-busy-0` 406 (404) and `dock-36A-w15x1-busy-0` 158 (153).
+- **The references.** `data/marine/references.jsonl` plays every week as `data/live/references.jsonl` does. The
+  rolling re-planner now plans with the pools; in an hour the pools can't cover for the frozen windows' own
+  movements, it lets those have what they need, since the grade excuses them. The naive policy is v2's: it knows
+  nothing of pilots and tugs, and it breaks the rule in 11 of the 18 weeks, all of which it plays feasibly on the
+  live port.
+
+A week is a marine week when the rolling re-planner reaches the hindsight optimum under at least 3 of the 4 solver
+configurations, news included. The 15 marine weeks are the 15 live weeks. On them the rolling re-planner scores 1.0
+and the naive policy 0.187 on average, infeasible in 9. The three weeks left out are the live port's:
+
+- `dock-36A-w15x1-busy-0`: every configuration reaches 199, against an optimum of 158.
+- `dock-36A-w16x1-standard-0`: only 2 of the 4 configurations reach the optimum.
+- `dock-36A-w17x1-standard-0`: only 2 of the 4 do.
+
+The pack `data/dock-v1-marine/` holds the 18 one-week dock-v1-eval weeks with `rules["marine"]` (the pools and the
+other traffic's movements as `[hour, type, length_m]`), the two cuts after the week's disruptions and notices, so
+v2's event ids hold, and the marine hindsight optimum as the reference. The pack shares dock-v1-eval's task ids, so
+the two are never loaded together. One script writes the pack and the references, in about 8 minutes; it downloads
+RAW once into `~/.cache/agentenv-portsim/raw/` and checks it against the pinned sha256:
+
+```bash
+uv run --with ortools==9.15.6755 python scripts/marine_references.py
+```
+
+### Play a marine week
+
+The marine port runs on local Docker, as the live port does.
+
+```bash
+agent-env portsim setup --agent                      # also registers portsim-marine, on the gateway, with the same image
+agent-env run portsim-marine --task wiring-noplay    # no model: no window confirmed, so it scores 0 with the audit ok
+agent-env run portsim-marine --task week --model anthropic/claude-sonnet-5-5   # dock-24B-w07x1-busy-0, 7 watches
+agent-env portsim tasks generate --pack dock-v1-eval --marine   # the 15 marine weeks in results/bundles/dock-v1-eval-marine
+agent-env portsim sweep run --marine --name marine-pilot --models anthropic/claude-sonnet-5-5 --tasks g2 --cap-usd 6
+agent-env portsim sweep report --marine marine-pilot   # results/marine.md
+```
+
+`portsim-llm` plays a marine week as it plays a live one; the rules reach it in the situation. `agent-env portsim
+view` replays marine runs with a pilots-and-tugs line in the watch panel, such as `h54 · pilots: ours 2, free 2 ·
+tugs: ours 3, free 2 · short · Tug company: 2 out h54–78 · Pilot station: 2 out h54–66`.
+
+**End to end at no model spend.** `scripts/live_e2e.py` plays a marine week as it plays a live one. On
+`portsim-marine` it also checks that the opening and every `get_situation` carry the pilots and tugs as known at that
+watch; on either env it checks that `data/get` holds the week as played in process. `--policy rolling` answers with
+the stored rolling plans, and `--task` writes any other week as a one-task bundle:
+
+```bash
+PYTHONPATH=tests .venv/bin/python scripts/live_e2e.py --env portsim-marine --policy rolling   # 1.0, cost 226
+PYTHONPATH=tests .venv/bin/python scripts/live_e2e.py --env portsim-marine --task dock-36A-w35x1-standard-0 --policy rolling
+```
+
+### Marine results
+
+GPT-6.1 Sol and Claude Sonnet 5.5 played the 15 marine weeks once each on local Docker, in sweeps `marine-pilot-*`
+and `marine-*`, for $8.32 recorded ([`results/marine.md`](results/marine.md)):
+
+| Model | Weeks scored | Mean reward (95% CI) | Rolling reference | Naive reference | Feasible | Optimal weeks | Median turns | Cost per episode |
+|---|---:|---|---:|---:|---:|---:|---:|---:|
+| GPT-6.1 Sol | 15 of 15 | 0.905 (0.790 to 0.977) | 1.000 | 0.187 | 14 of 15 | 7 | 14 | $0.08 |
+| Claude Sonnet 5.5 | 14 of 15 | 0.932 (0.886 to 0.971) | 1.000 | 0.187 | 14 of 14 | 5 | 11 | $0.45 |
+
+- Every scored run reached the end of its week and passed the validity audit, and none needed an excuse.
+- GPT-6.1 Sol's infeasible week is `dock-24B-w35x1-busy-0` (0.171). At its last watch it confirmed windows before
+  checking them; `check_plan` then reported `pilots short at hour 161: your ships need 2, 1 free`, but that was the
+  watch's third planning call, and it advanced with the short hour in its plan. Without that week its mean is 0.957,
+  its live-port mean.
+- Claude Sonnet 5.5's unscored week is `dock-36A-w10x1-standard-0`. On both attempts the model's second reply never
+  came: after one tool call, the request ran through the agent's 15-minute request timeout and its retries, and the
+  sweep was stopped there. These two attempts recorded no spend. GPT-6.1 Sol scored 1.0 on that week.
+- Two other attempts lost the provider's stream in their first turn and passed on retry.
+
+On the same 14 weeks, Claude Sonnet 5.5 averaged 0.901 on the live port. With one run per week, neither model's change
+from the live port is beyond noise. The naive policy, which knows nothing of pilots and tugs, is infeasible in 9 of
+the 15 weeks.
+
 ## Watch a run
 
 ![GPT-6.1 Sol plays a live week on the 3D quay, the dock chart and the watch panel](assets/live-week.gif)
@@ -592,15 +769,15 @@ heavy lifting; this repository adds PortSimEnv. Each piece maps to a framework c
 
 | AgentEnv concept | Here |
 |---|---|
-| [Environment](https://www.agentenvframework.com/docs/environments/creating): MCP tools, a data plane and extensions in one container | `src/agentenv_portsim/server.py`, an `AgentEnvEnvironment` with three tools, `data/reset` and `data/get`, and two extensions; `live.py`, the live env, in the same image |
-| [Gateway topology](https://www.agentenvframework.com/docs/environments/gateway-topology): the gateway in front of an env's servers | `portsim-live` is registered on the gateway provider; `portsim` runs as a server on its own |
+| [Environment](https://www.agentenvframework.com/docs/environments/creating): MCP tools, a data plane and extensions in one container | `src/agentenv_portsim/server.py`, an `AgentEnvEnvironment` with three tools, `data/reset` and `data/get`, and two extensions; `live.py`, the live and marine envs, in the same image |
+| [Gateway topology](https://www.agentenvframework.com/docs/environments/gateway-topology): the gateway in front of an env's servers | `portsim-live` and `portsim-marine` are registered on the gateway provider; `portsim` runs as a server on its own |
 | [Virtual clock](https://www.agentenvframework.com/docs/environments/virtual-clock) | the port's clock: armed at the week's start, stopped, and moved by the env at each `advance` |
 | [Triggers](https://www.agentenvframework.com/docs/environments/triggers) | one action trigger per watch delivers that watch's notices through `port_notice`, under a barrier |
 | [RBAC](https://www.agentenvframework.com/docs/environments/rbac): which roles see which tools | `port_notice` is disabled for the agent's role |
-| [Plugin](https://www.agentenvframework.com/docs/plugins/environment-plugins): a pip package with entry points | `pyproject.toml`: the bundles `portsim` and `portsim-live` (`agent_env.bundles`) and the `agent-env portsim` commands (`agent_env.cli_plugins`) |
-| [Tasks](https://www.agentenvframework.com/docs/tasks/creating) and verifiers | `src/agentenv_portsim/bundles/portsim/`: the wiring tasks and `portsim-verifier`, run with `agent-env run portsim --task <task>`; `bundles/portsim-live/`: the live tasks and `portsim-live-verifier`; `agent-env portsim tasks generate [--live]` writes a pack's tasks as a folder bundle |
+| [Plugin](https://www.agentenvframework.com/docs/plugins/environment-plugins): a pip package with entry points | `pyproject.toml`: the bundles `portsim`, `portsim-live` and `portsim-marine` (`agent_env.bundles`) and the `agent-env portsim` commands (`agent_env.cli_plugins`) |
+| [Tasks](https://www.agentenvframework.com/docs/tasks/creating) and verifiers | `src/agentenv_portsim/bundles/portsim/`: the wiring tasks and `portsim-verifier`, run with `agent-env run portsim --task <task>`; `bundles/portsim-live/`: the live tasks and `portsim-live-verifier`; `bundles/portsim-marine/`: the marine tasks; `agent-env portsim tasks generate [--live \| --marine]` writes a pack's tasks as a folder bundle |
 | [A2A agent](https://www.agentenvframework.com/docs/agents/creating): an agent in a container, on agent-env's model endpoint | `agents/portsim-llm/`, an `AgentEnvAgent` that reads the env's MCP server from the task and returns its episode as the trajectory |
-| [Registry](https://www.agentenvframework.com/docs/registry): versioned images, envs, agents and runs | `agent-env portsim setup` builds the image `agentenv-portsim-env` and registers the envs `portsim` and `portsim-live` on it, and with `--agent` the agent `portsim-llm`; every run and grade is stored |
+| [Registry](https://www.agentenvframework.com/docs/registry): versioned images, envs, agents and runs | `agent-env portsim setup` builds the image `agentenv-portsim-env` and registers the envs `portsim`, `portsim-live` and `portsim-marine` on it, and with `--agent` the agent `portsim-llm`; every run and grade is stored |
 
 ## Repository layout
 
@@ -608,19 +785,24 @@ heavy lifting; this repository adds PortSimEnv. Each piece maps to a framework c
 src/agentenv_portsim/   the env (server.py), the agent-env portsim commands (cli.py), the eval and live tasks
                         (tasks.py) and the sweep and its reports (sweep.py)
                         the live env (live.py), the live week (world.py) and its reveal schedule (schedule.py)
+                        the marine week, its pilots and tugs (marine.py)
                         the run records as the viewer reads them (episodes.py), view.py, record.py, and the
                         twin download (twin.py)
   web/upstream/         PortSimEnv's viewer, copied unchanged (VENDORED.md); web/ext/, our additions to it
   bundles/portsim/      the wiring tasks and portsim-verifier
   bundles/portsim-live/ the live tasks week and wiring-noplay, and portsim-live-verifier
+  bundles/portsim-marine/
+                        the marine tasks week and wiring-noplay, and a copy of portsim-live-verifier
 agents/portsim-llm/     the portsim-llm agent and its image
 data/                   the dock-v1-eval and dock-v1-train task packs, and the published dock-eval50 results in
-                        published/, copied unchanged; live/references.jsonl, computed here (all CC BY-SA 4.0)
-tests/                  env, agent, packaging, replay, golden and sweep tests, the live port's in live/, and the
-                        viewer's in viewer/; fake_litellm.py stands in for the model endpoint
-assets/                 live-port.webp and live-week.gif, recorded live weeks
+                        published/, copied unchanged; live/references.jsonl, the dock-v1-marine pack and
+                        marine/references.jsonl, computed here (all CC BY-SA 4.0)
+tests/                  env, agent, packaging, replay, golden and sweep tests, the live port's in live/, the marine
+                        port's in marine/ and live/, and the viewer's in viewer/; fake_litellm.py stands in for the
+                        model endpoint
+assets/                 live-port.webp, live-week.gif and marine-port.webp, recorded live and marine weeks
 scripts/                record_goldens.py, record_harness.py, replay_episode.py; live_references.py, live_e2e.py;
-                        hub_dataset.py, which builds the Hugging Face dataset
+                        marine_references.py; hub_dataset.py, which builds the Hugging Face dataset
 Dockerfile              the env image
 ```
 
@@ -630,7 +812,7 @@ Dockerfile              the env image
 uv venv && uv pip install -e '.[dev]'     # berth-core comes from FineEnvs at the pinned commit
 .venv/bin/pytest                         # sets BERTH_TASKS_DIR itself; calls no model
 .venv/bin/ruff check .
-.venv/bin/pytest -m 'network or browser'   # the twin download, and a one-second film with Chrome and ffmpeg
+.venv/bin/pytest -m 'network or browser'   # the twin download, the marine pack against RAW, and a one-second film
 docker build -t agentenv-portsim-env .   # the env image, for this machine's platform
 .venv/bin/python -m agentenv_portsim.server   # on :18765, with the packs in data/
 ```
@@ -677,6 +859,11 @@ The wheel and the env image carry both, so the package's licence is `Apache-2.0 
   are licensed under CC BY-SA 4.0 ([data/LICENSE](data/LICENSE)). Contains data from the Port de Barcelona open data
   portal. `tests/golden/`, the plans in the `portsim` bundle's tasks, the prompts and notices in the `portsim-live`
   bundle's tasks and `data/live/references.jsonl` are derived from them, under the same licence.
+- **The marine pack** `data/dock-v1-marine/` adds to the one-week dock-v1-eval weeks the port's other 2024 traffic,
+  derived from the Port of Barcelona's 2024 calls of every ship type (`generator/raw/Barcelona_2024.csv` in
+  [alberto-santini/berth-allocation-problems](https://github.com/alberto-santini/berth-allocation-problems) at
+  `8e726a4`, CC BY-SA 4.0, never stored here). It, `data/marine/references.jsonl`, the prompts and notices in the
+  `portsim-marine` bundle's tasks and `tests/viewer/marine_runs/` are under the same licence.
 - **The published episodes** the replay and harness tests read come from the
   [PortSimEnv dataset](https://huggingface.co/datasets/FineEnvs/PortSimEnv) (CC BY-SA 4.0), fetched at a pinned
   revision and never stored here. The published dock-eval50 results that `sweep report` compares with,

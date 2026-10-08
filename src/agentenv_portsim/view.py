@@ -56,9 +56,9 @@ def route(runs: Runs, twin_dir: Path, path: str) -> Response:
         case ["api", "tasks"]:
             return _json(runs.tasks())
         case ["api", "tasks", task_id] if task_id in runs.pack._by_id:
-            return _json(runs.pack.public(runs.pack.get(task_id)))
+            return _json(runs.pack.public(runs.task(task_id)))
         case ["api", "tasks", task_id, "reference"] if task_id in runs.pack._by_id:
-            return _json(runs.pack.get(task_id).reference)
+            return _json(runs.task(task_id).reference)
         case ["api", "runs"]:
             return _json(runs.index())
         case ["api", "runs", run] if run in runs.runs:

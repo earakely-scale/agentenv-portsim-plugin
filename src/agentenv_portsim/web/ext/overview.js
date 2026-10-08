@@ -10,11 +10,12 @@ const DATASET = "https://huggingface.co/datasets/earakely-scale/PortSimEnv-Agent
 const LINKS = [
   ["Run it yourself", `${DATASET}#play-a-week-yourself`, "play a week on your own machine, with agent-env and a Hugging Face token"],
   ["Dataset", DATASET, "the weeks, the references and every run here, as tables and as agent-env tasks"],
-  ["agentenv-portsim", REPO, "the plugin: v1 and v2 as agent-env environments"],
+  ["agentenv-portsim", REPO, "the plugin: v1, v2 and v3 as agent-env environments"],
   ["PortSimEnv", UPSTREAM, "the environment v1 comes from, its eval and this viewer, by Adithya S Kolavi"],
   ["Article", "https://huggingface.co/spaces/FineEnvs/simulation-rl-environments", "Simulation RL Environments, part 1"],
 ];
 const VERSIONS = [
+  { env: "portsim-marine", v: "v3", name: "the marine port", what: "the live week with the port's pilots and tugs, shared with the rest of the port's real traffic" },
   { env: "portsim-live", v: "v2", name: "the live port", what: "the week unfolds watch by watch on a virtual clock, and the agent confirms berths as the news comes in" },
   { env: "portsim", v: "v1", name: "a week planned in one go", what: "the agent checks drafts and submits one plan, as in PortSimEnv" },
 ];
@@ -87,12 +88,13 @@ export async function overviewPage({ app, setCrumbs, isCurrent, sortableTable })
       <h1>PortSim on AgentEnv: model runs, replayed in 3D</h1>
       <p class="muted">Models re-plan a broken week of container-ship dockings at a Port of Barcelona quay on AgentEnv,
       replayed on PortSimEnv's viewer by Adithya S Kolavi (Apache-2.0): the quay in 3D, the dock chart of every plan the
-      model checked or confirmed, the grade and the transcript. <b>v2, the live port</b>, plays the week as it unfolds
+      model checked or confirmed, the grade and the transcript. <b>v3, the marine port</b>, is the live port with the port's
+      pilots and tugs, shared with its real 2024 traffic. <b>v2, the live port</b>, plays the week as it unfolds
       and replays watch by watch: the virtual clock, the bulletins as they arrive, the windows as they freeze. <b>v1</b>
       plans the week in one go, as PortSimEnv does.</p>
       <ul class="ps-glossary muted small">
-        <li><b>Week</b>: one task, a quay with its ships and what goes wrong; a v1 task can span up to three weeks (<code>x2</code>, <code>x3</code> in its id), a v2 week is always one. <b>Reward</b>: 1.0 for the optimum in hindsight, under 0.2 for a plan that breaks a rule, 0 for no plan.</li>
-        <li><b>Watch</b> (v2): watch 0 opens the week at hour 0, and a new watch starts at each news bulletin. The agent re-plans each watch; a window starting within 6 hours is frozen.</li>
+        <li><b>Week</b>: one task, a quay with its ships and what goes wrong; a v1 task can span up to three weeks (<code>x2</code>, <code>x3</code> in its id), a v2 or v3 week is always one. <b>Reward</b>: 1.0 for the optimum in hindsight, under 0.2 for a plan that breaks a rule, 0 for no plan.</li>
+        <li><b>Watch</b> (v2, v3): watch 0 opens the week at hour 0, and a new watch starts at each news bulletin. The agent re-plans each watch; a window starting within 6 hours is frozen.</li>
         <li><b>Optimum</b>, <b>rolling</b>, <b>naive</b>: the best plan CP-SAT finds in hindsight, a CP-SAT re-planner that only knows what has been announced, and a simple policy that pushes ships later (in v2, it keeps each confirmed window that still fits and moves the rest). <b>Regret</b>: cost above the optimum.</li>
       </ul>
       <p class="muted small">Port of Barcelona twin © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a> (ODbL) · terrain: Terrain Tiles (AWS) · tasks: Port de Barcelona open data, CC BY-SA 4.0.</p>
@@ -131,7 +133,7 @@ export async function overviewPage({ app, setCrumbs, isCurrent, sortableTable })
   app.querySelector("#ps-runs").innerHTML = groups.length
     ? groups.map((g) => `<section class="ps-run">
         <div class="sec-head"><h2>${g.v} · ${escapeHtml(g.name)}</h2><span class="muted small">${escapeHtml(g.what)} · env ${escapeHtml(g.env)} · ${escapeHtml(capsText(g.caps))}</span></div>
-        <table class="tbl click"><thead><tr><th>Model</th><th class="num">Weeks</th><th class="num">Mean reward</th><th class="num">${g.env === "portsim-live" ? "Reached the end" : "Submitted"}</th><th class="num">Feasible</th><th class="num">Optimal</th></tr></thead>
+        <table class="tbl click"><thead><tr><th>Model</th><th class="num">Weeks</th><th class="num">Mean reward</th><th class="num">${g.env !== "portsim" ? "Reached the end" : "Submitted"}</th><th class="num">Feasible</th><th class="num">Optimal</th></tr></thead>
         <tbody>${g.boards.map((b) => `<tr data-row="${escapeHtml(b.model)}" data-env="${escapeHtml(g.env)}" title="List ${escapeHtml(nameOf(b.model))}'s weeks"><td><span title="${escapeHtml(b.model)}">${escapeHtml(nameOf(b.model))}</span></td><td class="num">${b.weeks}${b.n > b.weeks ? ` (${b.n} runs)` : ""}</td><td class="num"><b>${fmtNum(b.mean, 3)}</b></td><td class="num">${fmtPct(b.submitted)}</td><td class="num">${fmtPct(b.feasible)}</td><td class="num">${b.optimal}/${b.n}</td></tr>`).join("")}</tbody></table>
         <p class="muted small">From the sweep${g.runs.length > 1 ? "s" : ""} ${g.runs.map((r) => `<code>${escapeHtml(r.run)}</code>`).join(", ")}.</p>
         ${g.failed.length ? `<ul class="viol">${g.failed.map((f) => `<li>${escapeHtml(nameOf(f.model))} on ${escapeHtml(f.task_id)} does not replay: ${escapeHtml(f.error)}</li>`).join("")}</ul>` : ""}
@@ -147,7 +149,7 @@ export async function overviewPage({ app, setCrumbs, isCurrent, sortableTable })
     app.querySelector("#ov-eps-h").textContent = `Weeks · ${nameOf(model)} · ${g.v}, ${g.name}`;
     app.querySelector("#ov-eps-note").textContent = `${model} · ${b.weeks} weeks · click one to replay it in 3D`;
     app.querySelector("#ov-eps").replaceChildren(document.createElement("thead"), document.createElement("tbody"));
-    sortableTable(app.querySelector("#ov-eps"), columns(env === "portsim-live"), b.eps, {
+    sortableTable(app.querySelector("#ov-eps"), columns(env !== "portsim"), b.eps, {
       initial: { key: "task_id", dir: 1 },
       rowAttrs: (e) => `data-row="${escapeHtml(`${e.run}|${e.task_id}`)}"`,
       onRow: (key) => {

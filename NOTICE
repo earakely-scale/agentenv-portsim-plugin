@@ -25,6 +25,8 @@ licensed under the Apache License, Version 2.0. Derived from it:
 - scripts/live_references.py: the CP-SAT model in solve() is adapted from optimal_plan in
   envs/berth_planning/core/berth_core/solve.py, with frozen windows pinned and the rest held at or
   after the freeze line.
+- scripts/marine_references.py: solves with scripts/live_references.py's solve(), adapted from
+  optimal_plan as above, adding a cumulative constraint for the port's pilots and one for its tugs.
 - src/agentenv_portsim/web/upstream/: PortSimEnv's viewer, copied unchanged from
   envs/berth_planning/openenv/berth_openenv/web/.
 - src/agentenv_portsim/web/ext/index.html: adapted from that viewer's index.html (its import map,
@@ -46,9 +48,21 @@ Data licensed under CC BY-SA 4.0 (data/LICENSE), not under the Apache License:
   task packs.
 - src/agentenv_portsim/bundles/portsim-live/tasks/: prompts and notices taken from the dock-v1 task
   packs.
+- data/dock-v1-marine/: the one-week weeks of the dock-v1-eval pack with the port's pilots and tugs;
+  the other traffic in each week's rules is derived from the Port of Barcelona's 2024 calls of every
+  ship type, generator/raw/Barcelona_2024.csv in
+  https://github.com/alberto-santini/berth-allocation-problems at commit 8e726a4, licensed under
+  CC BY-SA 4.0 and not included here; manifest.json records its sha256, how it was derived and the
+  public sources of the pools and rules.
+- data/marine/references.jsonl: rolling and naive reference plans and costs computed from
+  data/dock-v1-marine/.
+- src/agentenv_portsim/bundles/portsim-marine/tasks/: prompts and notices taken from
+  data/dock-v1-marine/.
 - data/published/dock-eval50/index.json: the published dock-eval50 results, copied unchanged from
   results/rollouts/dock-eval50/index.json.
 - tests/viewer/runs/: episodes recorded on dock-v1 tasks; their transcripts hold the task text.
+- tests/viewer/marine_runs/: a week played on data/dock-v1-marine/ by two scripted policies; their
+  transcripts hold the task text.
 - assets/live-week.gif: a recorded live week on the viewer; it also shows the 3D twin (below).
 
 The viewer's 3D twin of the Port of Barcelona is not included: agent-env portsim view and record
@@ -59,4 +73,5 @@ contributors (ODbL)".
 
 Contains data from the Port de Barcelona open data portal (https://opendata.portdebarcelona.cat/),
 licensed under CC BY-SA 4.0. The task packs are a database Adithya S Kolavi derived from it and shared
-under the same licence.
+under the same licence; the marine pack adds the port's other 2024 traffic, derived here from the same
+portal's calls and shared under the same licence.

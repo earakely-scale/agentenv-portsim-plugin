@@ -40,7 +40,9 @@ For a change to `portsim-llm`, the eval tasks or the sweep, `setup --agent` buil
 spend (README, [Development](README.md#development)). For a change to the live port,
 `agent-env run portsim-live --task wiring-noplay` runs a live week through the gateway without a model, and
 `scripts/live_e2e.py` plays one with `portsim-llm` against the stand-in model server (README,
-[The live port](README.md#the-live-port)). CI doesn't run either yet.
+[The live port](README.md#the-live-port)). For the marine port, run the same on `portsim-marine`:
+`agent-env run portsim-marine --task wiring-noplay`, and `scripts/live_e2e.py --env portsim-marine --policy rolling`
+(README, [The marine port](README.md#the-marine-port)). CI doesn't run any of these yet.
 
 ## Where things go
 
@@ -57,8 +59,11 @@ spend (README, [Development](README.md#development)). For a change to the live p
 | The live env, `portsim-live`: its tools, extensions and data plane, the week as known, the freeze, excuses, audit and grade, the reveal schedule | `src/agentenv_portsim/live.py`, `world.py`, `schedule.py` | `tests/live/env/`; the README's [The live port](README.md#the-live-port) |
 | A live task, the live verifier, the live sweep | `src/agentenv_portsim/tasks.py`, `bundles/portsim-live/`, `sweep.py` | `tests/live/tasks/` |
 | The live references | `scripts/live_references.py`, which writes `data/live/references.jsonl` | `tests/live/tasks/test_live_references.py` |
+| The marine env, `portsim-marine`: the pilots and tugs, the other traffic, the marine checker and the situation's pilots and tugs | `src/agentenv_portsim/marine.py`, `PortSimMarineEnv` in `live.py`; its hooks in `world.py` and `schedule.py` | `tests/marine/test_marine_model.py`, `test_marine_world.py`, `tests/live/env/test_marine_env.py`; the README's [The marine port](README.md#the-marine-port) |
+| A marine task, the marine sweep | `src/agentenv_portsim/tasks.py`, `bundles/portsim-marine/`, `sweep.py` | `tests/live/tasks/test_marine_tasks.py`, `test_marine_sweep.py` |
+| The marine pack and references | `scripts/marine_references.py`, which writes `data/dock-v1-marine/` and `data/marine/references.jsonl` | `tests/marine/test_marine_pack.py`, `test_marine_references.py` |
 | `portsim-llm`'s live mode | `agents/portsim-llm/agent.py` | `tests/agent/test_agent_live.py`; v1's requests must stay as `tests/golden/harness.json` has them |
-| Watching runs: `agent-env portsim view` and `record`, the live week's panel and chart marks, the twin download | `src/agentenv_portsim/episodes.py`, `view.py`, `record.py`, `twin.py`, `web/ext/` | `tests/viewer/`; the README's [Watch a run](README.md#watch-a-run) |
+| Watching runs: `agent-env portsim view` and `record`, the live week's panel and chart marks, the twin download | `src/agentenv_portsim/episodes.py`, `view.py`, `record.py`, `twin.py`, `web/ext/` | `tests/viewer/`, with the synthetic marine run in `tests/viewer/marine_runs/` (`python tests/viewer/recorded.py` rebuilds it); the README's [Watch a run](README.md#watch-a-run) |
 | PortSimEnv's core, viewer, task packs or published results | never here: `berth_core` is a dependency pinned to a FineEnvs commit, and `src/agentenv_portsim/web/upstream/`, `data/dock-v1-eval/`, `data/dock-v1-train/` and `data/published/` are copied unchanged from upstream ([VENDORED.md](VENDORED.md)) | a new upstream commit is vendored whole, the berth-core pin moves with it, and VENDORED.md names it |
 
 ## Conventions
@@ -74,11 +79,15 @@ spend (README, [Development](README.md#development)). For a change to the live p
   goes in `web/ext/`, through its index.html's import map. The viewer's 3D twin is OpenStreetMap data (ODbL): it is
   never committed, and anything rendered from it carries the attribution.
   `data/live/references.jsonl` is computed here: rerun `uv run --with ortools==9.15.6755 python
-  scripts/live_references.py` when the live week, its schedule or its grade changes, and commit the file. `ortools`
-  is never a dependency; the tests replay the file without it.
-- **The answer key stays in the image.** No tool, extension, route or `data/get` field of either env returns a task's
+  scripts/live_references.py` when the live week, its schedule or its grade changes, and commit the file.
+  `data/dock-v1-marine/` and `data/marine/references.jsonl` are computed here too: rerun `uv run --with
+  ortools==9.15.6755 python scripts/marine_references.py` when the marine rules or the live week change, and commit
+  both. It reads the port's 2024 calls of every ship type at a pinned commit, checked by sha256 and cached under
+  `~/.cache/agentenv-portsim/raw/`; that file is never committed. `ortools` is never a dependency; the tests replay
+  the files without it.
+- **The answer key stays in the image.** No tool, extension, route or `data/get` field of any env returns a task's
   reference plans; `portsim`'s grade in `data/get`, there only after a submit, includes the optimal and naive costs,
-  and `portsim-live`'s, there only once the week ends, the optimal cost.
+  and the grade of `portsim-live` and of `portsim-marine`, there only once the week ends, the optimal cost.
 - **Code:** match the code around it. `ruff check .` must pass. Name things so the code reads without comments;
   write a short docstring only for why something is the way it is.
 - **Tests:** a fix comes with a test that fails without it. Tests set `BERTH_TASKS_DIR` themselves. They call no
@@ -87,8 +96,8 @@ spend (README, [Development](README.md#development)). For a change to the live p
 - **No secrets or private endpoints** in code, tests, docs or task files: model keys come from agent-env's secret
   store, and examples use placeholders such as `https://your-litellm-proxy`.
 - **Licensing:** code contributions are licensed under the Apache License 2.0, like the rest of the code. Anything
-  derived from the task packs (plans, situations, recorded outputs) is CC BY-SA 4.0 and must be listed in
-  [NOTICE](NOTICE). Recorded episodes from the published dataset are fetched by the tests, never committed.
+  derived from the task packs or the port's 2024 calls (plans, situations, the marine pack's other traffic, recorded
+  outputs) is CC BY-SA 4.0 and must be listed in [NOTICE](NOTICE). Recorded episodes from the published dataset are fetched by the tests, never committed.
 
 ## Reporting bugs and security issues
 
