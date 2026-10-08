@@ -2,6 +2,7 @@
 BERTH_TASKS_DIR, installed from the wheel or editable; berth_core comes from FineEnvs at the commit the wheel and the
 image both pin."""
 
+import configparser
 import os
 import subprocess
 import sys
@@ -40,6 +41,17 @@ def test_the_wheel_carries_the_plugin_and_the_data_unchanged(wheel):
         "agentenv_portsim", wheel.name.removesuffix("-py3-none-any.whl") + ".dist-info"}
     licenses = {name.split(".dist-info/licenses/", 1)[1] for name in packed if ".dist-info/licenses/" in name}
     assert licenses == {"LICENSE", "NOTICE", "data/LICENSE"}
+
+
+def test_the_wheel_declares_each_bundle_it_carries(wheel):
+    with zipfile.ZipFile(wheel) as whl:
+        names = whl.namelist()
+        entry_points = configparser.ConfigParser()
+        entry_points.read_string(whl.read(next(n for n in names if n.endswith(".dist-info/entry_points.txt"))).decode())
+    bundles = ["portsim", "portsim-live", "portsim-marine", "portsim-wind"]
+    assert dict(entry_points["agent_env.bundles"]) == dict.fromkeys(bundles, "agentenv_portsim.bundles")
+    assert sorted({n.split("/")[2] for n in names if n.startswith("agentenv_portsim/bundles/") and n.count("/") > 2}
+                  ) == bundles
 
 
 def test_the_wheel_and_the_image_pin_berth_core_to_the_same_fineenvs_commit(wheel):

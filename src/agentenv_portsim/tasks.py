@@ -1,16 +1,19 @@
 """`agent-env portsim tasks`: a task pack as a folder bundle, one task per PortSim task, each played by portsim-llm with
 upstream's prompts and limits and graded by portsim-verifier; with --live, the qualifying one-week eval weeks played
 live on portsim-live and graded by portsim-live-verifier; with --marine, the qualifying marine weeks played on
-portsim-marine with the port's pilots and tugs."""
+portsim-marine with the port's pilots and tugs; with --wind, the qualifying wind weeks played on portsim-wind in real
+Barcelona wind, with the forecast at every watch."""
 
 import json
 from importlib.resources import files
 from pathlib import Path
 
+import berth_core
 import click
 from berth_core import Task, TaskPack, rules, situation
 
 from . import marine as marine_weeks
+from . import wind as wind_weeks
 from .schedule import (
     END_WEEK_URI,
     LIVE_ENV,
@@ -19,9 +22,11 @@ from .schedule import (
     MAX_TURNS,
     NOTICE_TOOL,
     PLANNING_CALLS,
+    WIND_ENV,
     schedule,
     triggers,
 )
+from .wind import WindWeek
 from .world import Week
 
 PACKS = files("agentenv_portsim") / "data"
@@ -35,6 +40,8 @@ OPENING = ("{situation}\n\nMake the new berth plan. Use check_plan to test draft
            "final plan.")
 LICENCE = ("The prompts are derived from PortSimEnv's dock-v1 task packs (CC BY-SA 4.0). Contains data from the Port de"
            " Barcelona open data portal.")
+WIND_CREDIT = ("Contains modified ECMWF open data (CC BY 4.0, © ECMWF) and wind windows derived from the Servei "
+               "Meteorològic de Catalunya's (Meteocat) XEMA station Y7.")
 LIVE_OPENING = ("{situation}\n\nIt is watch 0, Monday 00:00. Confirm berth windows with confirm_berths, then call "
                 "advance.")
 LIVE_RULES = """How the week runs:
@@ -63,6 +70,18 @@ The week is graded once, on the windows you confirmed and the week as it really 
 low, a feasible one higher the closer its cost is to the best possible in hindsight. Cost or rule breaks that news \
 brings to a window that was already frozen are not charged to you. Every ship needs a confirmed window before the week \
 ends; if you stop before the last watch, the rest of the week runs on the windows you confirmed."""
+WIND_RULES = LIVE_RULES.replace(
+    "the harbour master issues gale warnings and emergencies, terminal ops announce closures and crane outages, and "
+    "the line desk flags priority cargo.",
+    "the harbour master issues emergencies, terminal ops announce closures and crane outages, the line desk flags "
+    "priority cargo, and Barcelona Port Control sends the wind forecast at every watch.").replace(
+    "the week as it really happened: an infeasible week scores low, a feasible one higher the closer its cost is to "
+    "the best possible in hindsight. Cost or rule breaks that news brings to a window that was already frozen are not "
+    "charged to you.",
+    "the week as it really happened, in the wind that really blew: an infeasible week scores low, a feasible one "
+    "higher the closer its cost is to the best possible. Cost or rule breaks that news, or wind the forecast didn't "
+    "show, brings to a window after your last chance to change it are not charged to you; wind the forecast showed "
+    "then is.")
 
 
 HF_BILL_TO_HELP = ("Bill the agent's Hugging Face router calls to this organization (X-HF-Bill-To) instead of the "
@@ -92,12 +111,12 @@ def steps(task: Task, episode_cap_usd: float, hf_bill_to: str | None = None) -> 
     ]
 
 
-def live_rules(task: Task) -> str:
-    return rules(task, PLANNING_CALLS).split("\n\nTools:\n")[0] + "\n\n" + LIVE_RULES
+def live_rules(task: Task, rules: str = LIVE_RULES) -> str:
+    return berth_core.rules(task, PLANNING_CALLS).split("\n\nTools:\n")[0] + "\n\n" + rules
 
 
 def live_steps(task: Task, episode_cap_usd: float, hf_bill_to: str | None = None, *, env: str = LIVE_ENV,
-               week: type[Week] = Week) -> list[dict]:
+               week: type[Week] = Week, rules: str = LIVE_RULES) -> list[dict]:
     watches = schedule(task)
     return [
         {"id": "deploy", "type": "deploy_env", "env_id": env},
@@ -111,7 +130,7 @@ def live_steps(task: Task, episode_cap_usd: float, hf_bill_to: str | None = None
          "env_vars": agent_env_vars(episode_cap_usd, hf_bill_to)},
         {"id": "clock", "type": "sync_env_clock", "env_id": env, "virtual_time": task.week_start_utc,
          "virtual_seconds_per_real_second": 0, "tolerate_missing_sync_time": False},
-        {"id": "play", "type": "prompt_agent", "prompt_id": task.task_id, "system_prompt": live_rules(task),
+        {"id": "play", "type": "prompt_agent", "prompt_id": task.task_id, "system_prompt": live_rules(task, rules),
          "prompt": LIVE_OPENING.format(situation=week(task).situation()["situation"]), "max_turns": MAX_TURNS,
          "model_params": {"max_tokens": 32000}, "timeout_seconds": 7200},
         {"id": "end-week", "type": "apply_server_config", "env_id": env,
@@ -136,15 +155,21 @@ def _write(path: Path, data: bytes) -> None:
 
 
 def generate(pack: str, out: Path, *, task_ids: list[str] | None = None, episode_cap_usd: float = 5.0,
-             live: bool = False, marine: bool = False, hf_bill_to: str | None = None) -> list[str]:
+             live: bool = False, marine: bool = False, hf_bill_to: str | None = None, wind: bool = False) -> list[str]:
     """Writes the bundle into ``out``: README.md, the verifier and tasks/<task_id>.json, for ``task_ids`` or the whole
-    pack (live: the qualifying weeks; marine: the qualifying marine weeks, played live), in the pack's order."""
-    live = live or marine
+    pack (live: the qualifying weeks; marine or wind: the qualifying marine or wind weeks, played live), in the pack's
+    order."""
+    live = live or marine or wind
     if live and task_ids is None:
-        task_ids = marine_weeks.task_ids() if marine else live_task_ids()
-    chosen = [t for t in (marine_weeks.pack().tasks if marine else pack_tasks(pack))
-              if task_ids is None or t.task_id in task_ids]
-    if marine:
+        task_ids = wind_weeks.task_ids() if wind else marine_weeks.task_ids() if marine else live_task_ids()
+    weeks = wind_weeks.pack().tasks if wind else marine_weeks.pack().tasks if marine else pack_tasks(pack)
+    chosen = [t for t in weeks if task_ids is None or t.task_id in task_ids]
+    if wind:
+        _write(out / "README.md", f"PortSim wind {pack}: {len(chosen)} weeks, each played in watches by the "
+                                  f"portsim-llm agent on portsim-wind, with the port's pilots and tugs in real "
+                                  f"Barcelona wind and the forecast at every watch, and graded by "
+                                  f"portsim-live-verifier.\n\n{LICENCE} {WIND_CREDIT}\n".encode())
+    elif marine:
         _write(out / "README.md", f"PortSim marine {pack}: {len(chosen)} weeks, each played in watches by the "
                                   f"portsim-llm agent on portsim-marine, with the port's pilots and tugs, and graded "
                                   f"by portsim-live-verifier.\n\n{LICENCE}\n".encode())
@@ -160,8 +185,12 @@ def generate(pack: str, out: Path, *, task_ids: list[str] | None = None, episode
     else:
         _write(out / "artifacts/portsim-verifier/verify.py", VERIFIER.read_bytes())
     for task in chosen:
-        task_steps = (live_steps(task, episode_cap_usd, hf_bill_to, env=MARINE_ENV, week=marine_weeks.MarineWeek)
-                      if marine else (live_steps if live else steps)(task, episode_cap_usd, hf_bill_to))
+        if wind:
+            task_steps = live_steps(task, episode_cap_usd, hf_bill_to, env=WIND_ENV, week=WindWeek, rules=WIND_RULES)
+        elif marine:
+            task_steps = live_steps(task, episode_cap_usd, hf_bill_to, env=MARINE_ENV, week=marine_weeks.MarineWeek)
+        else:
+            task_steps = (live_steps if live else steps)(task, episode_cap_usd, hf_bill_to)
         _write(out / "tasks" / f"{task.task_id}.json",
                (json.dumps(task_steps, indent=2, ensure_ascii=False) + "\n").encode())
     return [t.task_id for t in chosen]
@@ -178,18 +207,26 @@ def tasks_group():
 @click.option("--marine", is_flag=True,
               help=f"Marine weeks on portsim-marine: the qualifying one-week {LIVE_PACK} weeks with the port's pilots "
                    "and tugs.")
+@click.option("--wind", is_flag=True,
+              help="Wind weeks on portsim-wind: the qualifying marine weeks moved into real Barcelona wind, with the "
+                   "forecast at every watch.")
 @click.option("--out", type=click.Path(file_okay=False, path_type=Path),
-              help="The bundle folder to write. Default: results/bundles/<pack>, or <pack>-live with --live, or "
-                   "<pack>-marine with --marine.")
+              help="The bundle folder to write. Default: results/bundles/<pack>, or <pack>-live with --live, "
+                   "<pack>-marine with --marine, or <pack>-wind with --wind.")
 @click.option("--hf-bill-to", metavar="ORG", help=HF_BILL_TO_HELP)
-def generate_command(pack: str, live: bool, marine: bool, out: Path | None, hf_bill_to: str | None):
+def generate_command(pack: str, live: bool, marine: bool, wind: bool, out: Path | None, hf_bill_to: str | None):
     """Write a bundle with one task per task in the pack: deploy the env, load the task, play it with portsim-llm on
     upstream's prompts and limits, and grade it with portsim-verifier. With --live, one task per qualifying week: load
     it into portsim-live, play it in watches, end the week and grade it with portsim-live-verifier. With --marine, the
-    same on portsim-marine, with the port's pilots and tugs."""
-    if (live or marine) and pack != LIVE_PACK:
-        raise click.UsageError(f"{'--marine' if marine else '--live'} plays the one-week {LIVE_PACK} weeks, not {pack}")
-    out = out or Path("results/bundles") / (f"{pack}-marine" if marine else f"{pack}-live" if live else pack)
-    names = generate(pack, out, live=live, marine=marine, hf_bill_to=hf_bill_to)
+    same on portsim-marine, with the port's pilots and tugs. With --wind, the same on portsim-wind, in real Barcelona
+    wind with the forecast at every watch."""
+    if wind and marine:
+        raise click.UsageError("--wind and --marine play different envs: pick one")
+    if (live or marine or wind) and pack != LIVE_PACK:
+        raise click.UsageError(f"{'--wind' if wind else '--marine' if marine else '--live'} plays the one-week "
+                               f"{LIVE_PACK} weeks, not {pack}")
+    out = out or Path("results/bundles") / (f"{pack}-wind" if wind else f"{pack}-marine" if marine
+                                             else f"{pack}-live" if live else pack)
+    names = generate(pack, out, live=live, marine=marine, hf_bill_to=hf_bill_to, wind=wind)
     click.echo(f"Wrote {len(names)} tasks into {out}; play one with: agent-env run {out} --task {names[0]} "
                "--model <litellm model id>")
