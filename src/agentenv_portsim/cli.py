@@ -90,7 +90,7 @@ def _register_agent(root: str, build_platform: str) -> None:
 @click.option("--agent", is_flag=True, help="Also build the portsim-llm agent for the same platform and register it.")
 def setup(build_platform: str | None, source: Path | None, agent: bool):
     """Build the env image and register it as the MCP server env `portsim` on the `server` provider and as
-    `portsim-wind`, `portsim-live` and `portsim-marine` on the `gateway` provider; with --agent, the portsim-llm agent
+    `portsim-live`, `portsim-marine` and `portsim-wind` on the `gateway` provider; with --agent, the portsim-llm agent
     too."""
     root = _checkout(source)
     build_platform = build_platform or _docker_platform()

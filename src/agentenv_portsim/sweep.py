@@ -29,6 +29,7 @@ from berth_core.reward import score_v3
 from . import marine as marine_weeks
 from . import tasks
 from . import wind as wind_weeks
+from .schedule import WIND_PACK
 
 AGENT_ENV = [sys.executable, "-m", "agent_env.cli"]
 RUNS = Path("results/runs")
@@ -142,8 +143,8 @@ def task_ids(spec: str, live: bool = False, marine: bool = False, wind: bool = F
         return [t for t in G2_TASKS if t in known]
     ids = spec.split(",")
     if unknown := [i for i in ids if i not in known]:
-        mode = "wind " if wind else "marine " if marine else "live " if live else ""
-        raise click.UsageError(f"not {mode}{EVAL_PACK} task ids: {', '.join(unknown)}")
+        pack = WIND_PACK if wind else ("marine " if marine else "live " if live else "") + EVAL_PACK
+        raise click.UsageError(f"not {pack} task ids: {', '.join(unknown)}")
     return ids
 
 
@@ -646,8 +647,7 @@ class Wind(Live):
 
     def __init__(self, sweeps: list[Sweep]):
         super().__init__(sweeps)
-        manifest = json.loads((wind_weeks.pack_dir() / "manifest.json").read_text())
-        self.weather = {p["task_id"]: f"{p['iso_week']} {p['kind']}" for p in manifest["pairs"]}
+        self.weather = {p["task_id"]: f"{p['iso_week']} {p['kind']}" for p in wind_weeks.pack().manifest["pairs"]}
 
     def hindsight_regret(self, task: str, rows: list[dict]) -> list[int]:
         return [r["plan_cost"] - self.refs[task]["hindsight_cost"] for r in rows if r["feasible"]]
@@ -718,7 +718,7 @@ def wind_report(sweeps: list[Sweep]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _mode(live: bool, marine: bool, wind: bool = False) -> str | None:
+def _mode(live: bool, marine: bool, wind: bool) -> str | None:
     return "wind" if wind else "marine" if marine else "live" if live else None
 
 

@@ -70,7 +70,7 @@ def test_the_wind_weeks_run_by_watches_and_a_listed_week_must_be_a_wind_week():
     assert sweep.task_ids("all", live=True, wind=True) == ids
     assert sweep.task_ids(f"{STORM_TASK},{BUST_TASK}", wind=True) == [STORM_TASK, BUST_TASK]
     for spec in (OTHER_TASK, V3):
-        with pytest.raises(click.UsageError, match=f"not wind dock-v1-eval task ids: {spec}"):
+        with pytest.raises(click.UsageError, match=f"not dock-v1-wind task ids: {spec}"):
             sweep.task_ids(spec, wind=True)
 
 

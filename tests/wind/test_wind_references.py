@@ -4,6 +4,7 @@ pair, and the anchor is the lower of the hindsight optimum and the follower's be
 
 import hashlib
 import json
+from collections.abc import Iterator
 from dataclasses import replace
 
 import berth_core
@@ -44,11 +45,20 @@ def outcome(week: world.Week) -> dict:
 def views(week: WindWeek) -> dict[str, berth_core.Task]:
     """The week as each re-planner saw it: the follower as known, the blind one without the wind, the
     hold-every-warning one with every window any delivered forecast showed."""
-    view, hour = week.view, week.hour
-    shown = [week.scheduled[i].event for i in week.revealed if week.scheduled[i].kind == "forecast"]
-    held = [{**w, "start": max(w["start"], hour)} for e in shown for w in e["windows"] if w["end"] > hour]
-    return {"rolling": view, "blind": replace(view, rules=view.rules | {"no_moves": []}),
-            "hold": replace(view, rules=view.rules | {"no_moves": wind.forecast(view)["observed"] + held})}
+    view = week.view
+    return {"rolling": view, "blind": replace(view, rules=view.rules | {"no_moves": []}), "hold": wind.held(week)}
+
+
+def played_through(task: berth_core.Task) -> Iterator[WindWeek]:
+    """The week at each of its watches, its news delivered, with no plan."""
+    week = WindWeek(task)
+    while True:
+        yield week
+        if week.last:
+            return
+        week.open()
+        for n in week.watches[week.watch].notices:
+            week.notice(n.event_id, n.name, n.text, "trigger")
 
 
 def test_the_fixture_pack_is_the_hand_deal_in_schedule_order():
@@ -158,6 +168,23 @@ def test_every_stored_plan_keeps_its_open_ships_clear_on_the_view_it_was_solved_
             week.open()
             for n in week.watches[week.watch].notices:
                 week.notice(n.event_id, n.name, n.text, "trigger")
+
+
+def test_the_hold_view_holds_each_hour_any_delivered_forecast_showed_once():
+    """A movement inside two overlapping windows would take two wind tugs in marine_references' pools."""
+    overlapping = 0
+    for week in played_through(TASKS[BUST_TASK]):
+        observed = wind.forecast(week.view)["observed"]
+        held = wind.held(week).rules["no_moves"]
+        assert held[:len(observed)] == observed
+        shown = [week.scheduled[i].event for i in week.revealed if week.scheduled[i].kind == "forecast"]
+        for min_length, _ in wind.THRESHOLDS:
+            ours = [range(w["start"], w["end"]) for w in held[len(observed):] if w["min_length"] == min_length]
+            theirs = [range(max(w["start"], week.hour), w["end"]) for e in shown for w in e["windows"]
+                      if w["min_length"] == min_length]
+            assert sum(map(len, ours)) == len(set().union(*ours)) and set().union(*ours) == set().union(*theirs)
+            overlapping += sum(map(len, theirs)) > len(set().union(*theirs))
+    assert overlapping
 
 
 def test_the_follower_beats_hindsight_net_of_excuses_so_the_anchor_is_its_cost():

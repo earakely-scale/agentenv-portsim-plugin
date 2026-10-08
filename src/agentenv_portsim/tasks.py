@@ -8,9 +8,9 @@ import json
 from importlib.resources import files
 from pathlib import Path
 
-import berth_core
 import click
-from berth_core import Task, TaskPack, rules, situation
+from berth_core import Task, TaskPack, situation
+from berth_core import rules as berth_rules
 
 from . import marine as marine_weeks
 from . import wind as wind_weeks
@@ -104,7 +104,7 @@ def steps(task: Task, episode_cap_usd: float, hf_bill_to: str | None = None) -> 
         {"id": "deploy-agent", "type": "deploy_agent", "a2a_agent_id": "portsim-llm", "env_ids": ["portsim"],
          "env_vars": agent_env_vars(episode_cap_usd, hf_bill_to)},
         {"id": "play", "type": "prompt_agent", "prompt_id": task.task_id,
-         "system_prompt": rules(task, MAX_CHECKS), "prompt": OPENING.format(situation=situation(task)),
+         "system_prompt": berth_rules(task, MAX_CHECKS), "prompt": OPENING.format(situation=situation(task)),
          "max_turns": 12, "model_params": {"max_tokens": 32000}, "timeout_seconds": 7200},
         {"id": "grade", "type": "env_outcome_verifier", "env_id": "portsim", "file_artifact_id": "portsim-verifier",
          "verifier_id": "portsim", "score_aggregator": "weighted_average"},
@@ -112,7 +112,7 @@ def steps(task: Task, episode_cap_usd: float, hf_bill_to: str | None = None) -> 
 
 
 def live_rules(task: Task, rules: str = LIVE_RULES) -> str:
-    return berth_core.rules(task, PLANNING_CALLS).split("\n\nTools:\n")[0] + "\n\n" + rules
+    return berth_rules(task, PLANNING_CALLS).split("\n\nTools:\n")[0] + "\n\n" + rules
 
 
 def live_steps(task: Task, episode_cap_usd: float, hf_bill_to: str | None = None, *, env: str = LIVE_ENV,

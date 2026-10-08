@@ -7,10 +7,12 @@ import synthetic
 from berth_core import Plan, plan_from_list, plan_to_list
 
 from agentenv_portsim import marine, wind, world
+from agentenv_portsim.marine import MarineWeek
 from agentenv_portsim.wind import WindWeek
 
 BUSY = marine.pack().get("dock-24B-w07x1-busy-0")
 STANDARD = marine.pack().get("dock-36A-w37x1-standard-0")
+APRIL = marine.pack().get("dock-36A-w15x1-standard-0")
 
 
 def week(v3, above25, above30=(), episodes=lambda init: [], plan: Plan | None = None, news=()) -> WindWeek:
@@ -77,6 +79,18 @@ def test_the_wind_tug_is_excused_when_unforecast_and_charged_when_forecast():
     assert problems(forecast.grade["violations"]) == [(4, line)]
 
 
+def test_a_warning_at_another_hour_does_not_stand_for_wind_no_forecast_showed():
+    w = week(APRIL, [123], episodes=lambda init: [(136, 138, 28)])
+    assert not any(17 in f["ships"] for f in w.frozen)
+    last = wind.known(w.task, [e["event_id"] for e in w.log])
+    assert [p for r in w.evaluate(last, w.plan).ships if r.ship == 17 for p in r.problems] == [
+        "tugs short at hour 139: your ships need 6, 5 free"]
+    line = "tugs short at hour 123: your ships need 7, 6 free"
+    assert problems(w.grade["excused"]) == [
+        (17, "berths at hour 123, inside the no-movement window 123-124"), (17, line), (19, line)]
+    assert w.grade["feasible"] and w.grade["reward"] == 1.0
+
+
 def test_ships_frozen_at_different_watches_held_to_the_same_hour_are_excused_the_move_limit():
     w = week(BUSY, range(74, 79), range(74, 79))
     assert (froze(w, 3), froze(w, 16), froze(w, 8)) == (2, 4, 4)
@@ -136,3 +150,22 @@ def test_during_the_week_an_open_ship_is_never_excused():
                                                         lambda init: [(34, 44, 28)])))
     checked = w.check([{"ship": 3, "berth_hour": 39, "section": 15, "cranes": 5}])
     assert w.view.rules["no_moves"] and not checked["feasible"] and checked["excused_cost"] == 0
+
+
+
+def test_with_no_wind_a_feasible_week_grades_as_the_marine_week_does():
+    """In an infeasible week the whole-plan excuse may also waive later news's effect on an earlier-frozen ship, which
+    v2's per-notice excuse charged, so only the clean fraction can differ there."""
+    calm = synthetic.record(0, "storm", "2000-01-10", [], [], lambda init: [])
+    refs = {r["task_id"]: r for r in marine.references()}
+    feasible = 0
+    for v3_id in marine.task_ids():
+        task = wind.transplant(marine.pack().get(v3_id), calm)
+        for policy in (lambda w, plans=refs[v3_id]["rolling"]["plans"]: plan_from_list(plans[w.watch]), world.naive):
+            ours, v3 = (world.play(task, policy, week=kind).grade for kind in (WindWeek, MarineWeek))
+            assert [ours[k] for k in ("feasible", "cost", "raw_cost", "excused_cost")] == [
+                v3[k] for k in ("feasible", "cost", "raw_cost", "excused_cost")]
+            if ours["feasible"]:
+                feasible += 1
+                assert ours == v3
+    assert feasible == 21

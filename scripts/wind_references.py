@@ -97,15 +97,7 @@ def blind(week: world.Week) -> Task:
     return replace(view, rules=view.rules | {"no_moves": []})
 
 
-def hold(week: world.Week) -> Task:
-    """The wind observed so far and every window any forecast delivered so far showed from now on."""
-    view, hour = week.view, week.hour
-    shown = [week.scheduled[i].event for i in week.revealed if week.scheduled[i].kind == "forecast"]
-    windows = [{**w, "start": max(w["start"], hour)} for e in shown for w in e["windows"] if w["end"] > hour]
-    return replace(view, rules=view.rules | {"no_moves": wind.forecast(view)["observed"] + windows})
-
-
-VIEWS = {"follow": lambda week: week.view, "blind": blind, "hold": hold}
+VIEWS = {"follow": lambda week: week.view, "blind": blind, "hold": wind.held}
 
 
 def pools(view: Task, fixed: Plan) -> Callable[[cp_model.CpModel, dict], None]:

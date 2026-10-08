@@ -242,4 +242,3 @@ def test_the_panel_shows_the_forecast_and_the_strip_and_the_3d_quay_the_wind_tha
             page.js(f"portsim.show({n - 1})")
             page.js(f"portsim.time({horizon})")
             assert page.js(PANEL) == [] and page.js("document.querySelectorAll('.ps-wind-strip').length") == 0
-

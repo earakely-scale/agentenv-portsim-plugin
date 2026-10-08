@@ -117,12 +117,15 @@ function windHtml(wind, t, blew, horizon) {
   const rect = (cls, a, b, y0, y1) => `<rect class="${cls}" x="${x(a)}" y="${y0}" width="${r(x(b) - x(a))}" height="${y1 - y0}"/>`;
   const level = (w) => (w.min_length > 0 ? 25 : 30);
   const days = Array.from({ length: Math.ceil(horizon / 24) - 1 }, (_, d) => x((d + 1) * 24));
+  const nodes = wind.kn.filter(([h]) => h <= horizon);
+  const [last, past] = [nodes[nodes.length - 1], wind.kn.find(([h]) => h > horizon)];
+  if (last && past) nodes.push([horizon, last[1] + ((past[1] - last[1]) * (horizon - last[0])) / (past[0] - last[0])]);
   const strip = [
     ...days.map((d) => `<line class="ps-ws-day" x1="${d}" x2="${d}" y1="${top}" y2="${track}"/>`),
     ...wind.windows.map((w) => rect(`ps-ws-w${level(w)}`, w.start, w.end, top, base)),
     ...blew.filter((w) => w.start < t).map((w) => rect(`ps-ws-o${level(w)}`, w.start, Math.min(w.end, t), base + 1, track)),
     ...[[25, 6.5], [30, -1.5]].map(([kn, dy]) => `<g class="ps-ws-t${kn}"><line x1="0" x2="${W}" y1="${y(kn)}" y2="${y(kn)}"/><text x="${W}" y="${r(y(kn) + dy)}">${kn} kn</text></g>`),
-    `<polyline class="ps-ws-fc" points="${wind.kn.map(([h, kn]) => `${x(h)},${y(kn)}`).join(" ")}"/>`,
+    `<polyline class="ps-ws-fc" points="${nodes.map(([h, kn]) => `${x(h)},${y(kn)}`).join(" ")}"/>`,
     `<line class="ps-ws-cursor" x1="${x(t)}" x2="${x(t)}" y1="0" y2="${track}"/>`,
     `<text class="ps-ws-credit" x="0" y="45.5">${WIND_CREDIT}</text>`,
   ];

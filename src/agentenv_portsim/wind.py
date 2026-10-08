@@ -4,6 +4,7 @@ by then, and the week as known holds that forecast's windows and the wind observ
 
 import json
 import os
+import re
 from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import replace
@@ -26,6 +27,7 @@ HORIZON_HOURS = 72
 PUBLISHED_HOURS = 9
 WARNING_HOURS = range(12, 168, 12)
 WARNING_SPAN = 36
+HOURLY = ("no_move", "moves", "pilots", "tugs")
 
 
 def pack_dir() -> Path:
@@ -47,10 +49,10 @@ def task_ids() -> list[str]:
     return [r["task_id"] for r in references() if r["qualifies"]]
 
 
-def merge(hours: Iterable[int], min_length: int) -> list[dict]:
+def merge(hours: Iterable[int], min_length: int, gap: int = GAP_HOURS) -> list[dict]:
     out: list[dict] = []
     for h in sorted(set(hours)):
-        if out and h <= out[-1]["end"] + GAP_HOURS:
+        if out and h <= out[-1]["end"] + gap:
             out[-1]["end"] = h + 1
         else:
             out.append({"start": h, "end": h + 1, "min_length": min_length})
@@ -196,6 +198,11 @@ def step_wind(view: Task) -> dict:
             "windows": _plain(e["windows"]), "observed": _plain(e["observed"])}
 
 
+def _key(problem: str) -> tuple[str, int | None]:
+    rule = world.rule(problem)
+    return rule, int(re.search(r"hour (\d+)", problem)[1]) if rule in HOURLY else None
+
+
 class WindWeek(MarineWeek):
     notice_excuse = False
 
@@ -210,7 +217,8 @@ class WindWeek(MarineWeek):
     def excuses(self) -> tuple[set[tuple[int, str]], dict[int, int]]:
         """Each ship is excused the (ship, rule) problems and the cost that the target (the week as known, the truth
         once done) adds over the week as known at its last watch before it froze, the whole plan evaluated on both;
-        a ship never frozen compares with the last watch reached."""
+        a ship never frozen compares with the last watch reached. An hourly rule is charged only at an hour it broke
+        then, so a warning that never blew doesn't stand for wind no forecast showed."""
         now = {r.ship: r for r in self.evaluate(self.task if self.done else self.view, self.plan).ships}
         first: dict[int, int] = {}
         for k, f in enumerate(self.frozen):
@@ -224,8 +232,20 @@ class WindWeek(MarineWeek):
             view = known(self.task, [e["event_id"] for e in self.log if e["watch"] <= j])
             before = {r.ship: r for r in self.evaluate(view, self.plan).ships}
             for s in ships:
-                seen = {world.rule(p) for p in before[s].problems}
-                problems |= {(s, world.rule(p)) for p in now[s].problems if world.rule(p) not in seen}
+                seen = {_key(p) for p in before[s].problems}
+                charged = {world.rule(p) for p in now[s].problems if _key(p) in seen}
+                problems |= {(s, world.rule(p)) for p in now[s].problems if world.rule(p) not in charged}
                 if now[s].cost > before[s].cost:
                     cost[s] = now[s].cost - before[s].cost
         return problems, cost
+
+
+def held(week: WindWeek) -> Task:
+    """The week as known with every hour any forecast delivered so far showed from now on, each once: the
+    hold-every-warning re-planner's view."""
+    view, hour = week.view, week.hour
+    shown = [week.scheduled[i].event for i in week.revealed if week.scheduled[i].kind == "forecast"]
+    windows = [w for min_length, _ in THRESHOLDS for w in merge(
+        (h for e in shown for w in e["windows"] if w["min_length"] == min_length
+         for h in range(max(w["start"], hour), w["end"])), min_length, gap=0)]
+    return replace(view, rules=view.rules | {"no_moves": forecast(view)["observed"] + _reasons(windows, "forecast: ")})
