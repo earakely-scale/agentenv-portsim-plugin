@@ -567,7 +567,7 @@ class Episode:
         name="portsim-llm",
         description="PortSimEnv's harness loop: a model re-plans a disrupted week of berthing at a Port of Barcelona "
                     "quay through the env's tools, with upstream's prompts and limits, on agent-env's model endpoint.",
-        version="0.1.0",
+        version="0.2.0",
     ),
     config=PortSimConfig,
     extensions=(MCP_CONFIG_V1, TRAJECTORY_V1),
