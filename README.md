@@ -619,7 +619,8 @@ data/                   the dock-v1-eval and dock-v1-train task packs, and the p
 tests/                  env, agent, packaging, replay, golden and sweep tests, the live port's in live/, and the
                         viewer's in viewer/; fake_litellm.py stands in for the model endpoint
 assets/                 live-port.webp and live-week.gif, recorded live weeks
-scripts/                record_goldens.py, record_harness.py, replay_episode.py; live_references.py, live_e2e.py
+scripts/                record_goldens.py, record_harness.py, replay_episode.py; live_references.py, live_e2e.py;
+                        hub_dataset.py, which builds the Hugging Face dataset
 Dockerfile              the env image
 ```
 

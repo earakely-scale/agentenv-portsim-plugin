@@ -4,6 +4,9 @@ header.top .name { font-weight: 600; text-decoration: none; }
 .ps-ov { max-width: 1180px; }
 .ps-ov .ps-run, .ps-ov .ov-eps { margin-top: 24px; }
 .ps-ov .ov-intro .kv { margin-top: 10px; }
+.ps-ov .ps-glossary { margin: 8px 0 0; padding-left: 18px; }
+.ps-ov .ps-glossary li { margin: 2px 0; }
+.ps-ov .ps-start { margin-top: 20px; padding: 10px 12px; border-left: 3px solid var(--warn); background: var(--hover); }
 
 .ps-watch { border: 1px solid var(--line); border-radius: 4px; padding: 8px 10px; background: var(--bg); }
 .ps-clock { font-variant-numeric: tabular-nums; }
