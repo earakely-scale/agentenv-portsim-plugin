@@ -256,7 +256,8 @@ export function renderLive(root, ro, task, { onStep, horizon }) {
     const st = statuses(shown, t);
     const counts = Object.fromEntries(STATUSES.map((s) => [s, shown.windows.filter((w) => st.get(w.ship) === s).length]));
     const c = clockAt(task, t);
-    const feed = live.bulletins.filter((b) => b.step <= state.k && b.hour <= t).reverse().map((b, i) => ({ ...b, new: i === 0 }));
+    const seen = live.bulletins.filter((b) => b.step <= state.k && b.hour <= t).reverse();
+    const feed = seen.map((b) => ({ ...b, new: b.hour === seen[0].hour }));
     const g = ro.final.grade;
     const ref = live.reference;
     const final = state.k === steps.length - 1
