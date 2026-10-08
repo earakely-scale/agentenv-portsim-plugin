@@ -82,6 +82,27 @@ def test_setup_stops_when_the_build_fails(local_stores, tmp_path, monkeypatch, s
     assert stored == []
 
 
+def test_setup_from_a_git_install_builds_the_commit_it_came_from(local_stores, tmp_path, monkeypatch, stored):
+    log = fake_docker(tmp_path, monkeypatch)
+    monkeypatch.setattr(cli, "__file__", str(tmp_path / "site-packages/agentenv_portsim/cli.py"))
+    monkeypatch.setattr(cli, "_installed_commit", lambda: "4f79d0a4662eed1dba66d58cab18cc16895448dd")
+    monkeypatch.chdir(tmp_path)
+    result = CliRunner().invoke(portsim, ["setup", "--agent"])
+    assert result.exit_code == 0, result.output
+    repo = "https://github.com/earakely-scale/agentenv-portsim-plugin.git#4f79d0a4662eed1dba66d58cab18cc16895448dd"
+    assert builds(log) == [f"build --platform linux/arm64 -t agentenv-portsim-env {repo}",
+                           f"build --platform linux/arm64 -t agentenv-portsim-agent {repo}:agents/portsim-llm"]
+
+
+def test_setup_without_a_checkout_or_a_git_install_says_to_clone(tmp_path, monkeypatch):
+    monkeypatch.setattr(cli, "__file__", str(tmp_path / "site-packages/agentenv_portsim/cli.py"))
+    monkeypatch.setattr(cli, "_installed_commit", lambda: None)
+    monkeypatch.chdir(tmp_path)
+    result = CliRunner().invoke(portsim, ["setup"])
+    assert result.exit_code == 2
+    assert "no checkout of agentenv-portsim-plugin found" in result.output
+
+
 def test_setup_needs_a_checkout_to_build(tmp_path):
     result = CliRunner().invoke(portsim, ["setup", "--source", str(tmp_path)])
     assert result.exit_code == 2

@@ -44,7 +44,7 @@ def v2_week(task_id: str):
 
 
 def marine_steps(task_id: str, episode_cap_usd: float = 5.0) -> list[dict]:
-    return tasks.live_steps(marine_week(task_id), episode_cap_usd, "portsim-marine", MarineWeek)
+    return tasks.live_steps(marine_week(task_id), episode_cap_usd, env="portsim-marine", week=MarineWeek)
 
 
 def on_marine(steps: list[dict]) -> list[dict]:

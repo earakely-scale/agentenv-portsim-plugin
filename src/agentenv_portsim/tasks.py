@@ -65,17 +65,25 @@ brings to a window that was already frozen are not charged to you. Every ship ne
 ends; if you stop before the last watch, the rest of the week runs on the windows you confirmed."""
 
 
+HF_BILL_TO_HELP = ("Bill the agent's Hugging Face router calls to this organization (X-HF-Bill-To) instead of the "
+                   "token's own account.")
+
+
 def pack_tasks(name: str) -> list[Task]:
     return TaskPack(PACKS / name).tasks
 
 
-def steps(task: Task, episode_cap_usd: float) -> list[dict]:
+def agent_env_vars(episode_cap_usd: float, hf_bill_to: str | None) -> dict[str, str]:
+    return {"PORTSIM_MAX_COST_USD": format(episode_cap_usd, "g"), **({"HF_BILL_TO": hf_bill_to} if hf_bill_to else {})}
+
+
+def steps(task: Task, episode_cap_usd: float, hf_bill_to: str | None = None) -> list[dict]:
     return [
         {"id": "deploy", "type": "deploy_env", "env_id": "portsim"},
         {"id": "load-task", "type": "apply_server_config", "env_id": "portsim",
          "directives": [{"service": "portsim", "uri": "urn:portsim:load-task/v1", "args": {"task_id": task.task_id}}]},
         {"id": "deploy-agent", "type": "deploy_agent", "a2a_agent_id": "portsim-llm", "env_ids": ["portsim"],
-         "env_vars": {"PORTSIM_MAX_COST_USD": format(episode_cap_usd, "g")}},
+         "env_vars": agent_env_vars(episode_cap_usd, hf_bill_to)},
         {"id": "play", "type": "prompt_agent", "prompt_id": task.task_id,
          "system_prompt": rules(task, MAX_CHECKS), "prompt": OPENING.format(situation=situation(task)),
          "max_turns": 12, "model_params": {"max_tokens": 32000}, "timeout_seconds": 7200},
@@ -88,7 +96,8 @@ def live_rules(task: Task) -> str:
     return rules(task, PLANNING_CALLS).split("\n\nTools:\n")[0] + "\n\n" + LIVE_RULES
 
 
-def live_steps(task: Task, episode_cap_usd: float, env: str = LIVE_ENV, week: type[Week] = Week) -> list[dict]:
+def live_steps(task: Task, episode_cap_usd: float, hf_bill_to: str | None = None, *, env: str = LIVE_ENV,
+               week: type[Week] = Week) -> list[dict]:
     watches = schedule(task)
     return [
         {"id": "deploy", "type": "deploy_env", "env_id": env},
@@ -99,7 +108,7 @@ def live_steps(task: Task, episode_cap_usd: float, env: str = LIVE_ENV, week: ty
         {"id": "watches", "type": "register_env_triggers", "env_id": env, "watch_roles": ["default"],
          "triggers": triggers(watches)},
         {"id": "deploy-agent", "type": "deploy_agent", "a2a_agent_id": "portsim-llm", "env_ids": [env],
-         "env_vars": {"PORTSIM_MAX_COST_USD": format(episode_cap_usd, "g")}},
+         "env_vars": agent_env_vars(episode_cap_usd, hf_bill_to)},
         {"id": "clock", "type": "sync_env_clock", "env_id": env, "virtual_time": task.week_start_utc,
          "virtual_seconds_per_real_second": 0, "tolerate_missing_sync_time": False},
         {"id": "play", "type": "prompt_agent", "prompt_id": task.task_id, "system_prompt": live_rules(task),
@@ -127,7 +136,7 @@ def _write(path: Path, data: bytes) -> None:
 
 
 def generate(pack: str, out: Path, *, task_ids: list[str] | None = None, episode_cap_usd: float = 5.0,
-             live: bool = False, marine: bool = False) -> list[str]:
+             live: bool = False, marine: bool = False, hf_bill_to: str | None = None) -> list[str]:
     """Writes the bundle into ``out``: README.md, the verifier and tasks/<task_id>.json, for ``task_ids`` or the whole
     pack (live: the qualifying weeks; marine: the qualifying marine weeks, played live), in the pack's order."""
     live = live or marine
@@ -151,8 +160,8 @@ def generate(pack: str, out: Path, *, task_ids: list[str] | None = None, episode
     else:
         _write(out / "artifacts/portsim-verifier/verify.py", VERIFIER.read_bytes())
     for task in chosen:
-        task_steps = (live_steps(task, episode_cap_usd, MARINE_ENV, marine_weeks.MarineWeek) if marine
-                      else live_steps(task, episode_cap_usd) if live else steps(task, episode_cap_usd))
+        task_steps = (live_steps(task, episode_cap_usd, hf_bill_to, env=MARINE_ENV, week=marine_weeks.MarineWeek)
+                      if marine else (live_steps if live else steps)(task, episode_cap_usd, hf_bill_to))
         _write(out / "tasks" / f"{task.task_id}.json",
                (json.dumps(task_steps, indent=2, ensure_ascii=False) + "\n").encode())
     return [t.task_id for t in chosen]
@@ -172,7 +181,8 @@ def tasks_group():
 @click.option("--out", type=click.Path(file_okay=False, path_type=Path),
               help="The bundle folder to write. Default: results/bundles/<pack>, or <pack>-live with --live, or "
                    "<pack>-marine with --marine.")
-def generate_command(pack: str, live: bool, marine: bool, out: Path | None):
+@click.option("--hf-bill-to", metavar="ORG", help=HF_BILL_TO_HELP)
+def generate_command(pack: str, live: bool, marine: bool, out: Path | None, hf_bill_to: str | None):
     """Write a bundle with one task per task in the pack: deploy the env, load the task, play it with portsim-llm on
     upstream's prompts and limits, and grade it with portsim-verifier. With --live, one task per qualifying week: load
     it into portsim-live, play it in watches, end the week and grade it with portsim-live-verifier. With --marine, the
@@ -180,6 +190,6 @@ def generate_command(pack: str, live: bool, marine: bool, out: Path | None):
     if (live or marine) and pack != LIVE_PACK:
         raise click.UsageError(f"{'--marine' if marine else '--live'} plays the one-week {LIVE_PACK} weeks, not {pack}")
     out = out or Path("results/bundles") / (f"{pack}-marine" if marine else f"{pack}-live" if live else pack)
-    names = generate(pack, out, live=live, marine=marine)
+    names = generate(pack, out, live=live, marine=marine, hf_bill_to=hf_bill_to)
     click.echo(f"Wrote {len(names)} tasks into {out}; play one with: agent-env run {out} --task {names[0]} "
                "--model <litellm model id>")

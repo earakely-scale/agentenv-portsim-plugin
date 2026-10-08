@@ -71,7 +71,7 @@ def route(runs: Runs, twin_dir: Path, path: str) -> Response:
     return NOT_FOUND
 
 
-def serve(runs: Runs, twin_dir: Path, port: int) -> ThreadingHTTPServer:
+def serve(runs: Runs, twin_dir: Path, port: int, host: str = "127.0.0.1") -> ThreadingHTTPServer:
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
             status, headers, body = route(runs, twin_dir, self.path)
@@ -84,13 +84,15 @@ def serve(runs: Runs, twin_dir: Path, port: int) -> ThreadingHTTPServer:
         def log_message(self, *args):
             pass
 
-    return ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    return ThreadingHTTPServer((host, port), Handler)
 
 
 @click.command("view")
 @click.argument("sweeps", nargs=-1)
-@click.option("--port", default=8237, show_default=True, help="Loopback port to serve on.")
-def view_command(sweeps: tuple[str, ...], port: int):
+@click.option("--port", default=8237, show_default=True, help="Port to serve on.")
+@click.option("--host", default="127.0.0.1", show_default=True,
+              help="Address to serve on: 0.0.0.0 for every interface, as in a container or a Space.")
+def view_command(sweeps: tuple[str, ...], port: int, host: str):
     """Replay recorded sweeps (default: all under results/runs) on PortSimEnv's viewer: the 3D quay, the dock chart,
     each plan the agent checked or confirmed, the grade and the transcript; live weeks watch by watch."""
     runs = Runs(RUNS, list(sweeps) or None)
@@ -98,11 +100,11 @@ def view_command(sweeps: tuple[str, ...], port: int):
         raise click.UsageError(f"no sweeps under {RUNS}: run `agent-env portsim sweep run` first")
     twin_dir = twin.ensure()
     try:
-        server = serve(runs, twin_dir, port)
+        server = serve(runs, twin_dir, port, host)
     except OSError as e:
         raise click.UsageError(f"can't serve on port {port} ({e.strerror}): pass another --port") from e
     click.echo(twin.ATTRIBUTION)
-    click.echo(f"Serving {', '.join(runs.runs)} at http://127.0.0.1:{server.server_port}/viewer/ (Ctrl-C to stop)")
+    click.echo(f"Serving {', '.join(runs.runs)} at http://{host}:{server.server_port}/viewer/ (Ctrl-C to stop)")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

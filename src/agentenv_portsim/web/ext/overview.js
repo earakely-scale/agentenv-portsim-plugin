@@ -6,12 +6,19 @@ import { nameOf as upstreamName } from "../overview.js?v=upstream";
 const CONFIG = await fetch(new URL("/api/config", location.origin)).then((r) => r.json());
 const UPSTREAM = "https://github.com/adithya-s-k/FineEnvs/tree/main/07-simulation-environments/portsim-v1";
 const REPO = "https://github.com/earakely-scale/agentenv-portsim-plugin";
+const DATASET = "https://huggingface.co/datasets/earakely-scale/PortSimEnv-AgentEnv";
 const LINKS = [
-  ["PortSimEnv", UPSTREAM, "the environment, its eval and this viewer, by Adithya S Kolavi"],
+  ["Run it yourself", `${DATASET}#play-a-week-yourself`, "play a week on your own machine, with agent-env and a Hugging Face token"],
+  ["Dataset", DATASET, "the weeks, the references and every run here, as tables and as agent-env tasks"],
+  ["agentenv-portsim", REPO, "the plugin: v1, v2 and v3 as agent-env environments"],
+  ["PortSimEnv", UPSTREAM, "the environment v1 comes from, its eval and this viewer, by Adithya S Kolavi"],
   ["Article", "https://huggingface.co/spaces/FineEnvs/simulation-rl-environments", "Simulation RL Environments, part 1"],
-  ["agentenv-portsim", REPO, "PortSimEnv v1 and the live week as agent-env environments, the sweeps"],
 ];
-const ENVS = { portsim: "PortSimEnv v1: one plan, one graded submit", "portsim-live": "the live week: watch by watch on a virtual clock", "portsim-marine": "the live week with the port's pilots and tugs" };
+const VERSIONS = [
+  { env: "portsim-marine", v: "v3", name: "the marine port", what: "the live week with the port's pilots and tugs, shared with the rest of the port's real traffic" },
+  { env: "portsim-live", v: "v2", name: "the live port", what: "the week unfolds watch by watch on a virtual clock, and the agent confirms berths as the news comes in" },
+  { env: "portsim", v: "v1", name: "a week planned in one go", what: "the agent checks drafts and submits one plan, as in PortSimEnv" },
+];
 const enc = encodeURIComponent;
 const runHref = (run, model, task) => `#/run/${enc(run)}/${enc(model)}/${enc(task)}`;
 const optimal = (e) => (e.reward || 0) >= 0.999;
@@ -26,10 +33,10 @@ function resultHtml(e) {
 
 function columns(live) {
   const cols = [
-    { k: "task_id", label: "Task", get: (e) => e.task_id, html: (e) => `<a href="${runHref(e.run, e.model, e.task_id)}">${escapeHtml(e.task_id)}</a>` },
+    { k: "task_id", label: "Week", get: (e) => e.task_id, html: (e) => `<a href="${runHref(e.run, e.model, e.task_id)}">${escapeHtml(e.task_id)}</a>` },
     { k: "difficulty", label: "Tier", get: (e) => e.difficulty, opt: true },
     { k: "ships", label: "Ships", get: (e) => e.ships, num: true, opt: true },
-    { k: "result", label: live ? "Week" : "Result", get: (e) => e.end_reason, html: resultHtml, sort: (e) => (e.submitted ? 1 : 0) + (e.feasible ? 1 : 0) + (optimal(e) ? 1 : 0) },
+    { k: "result", label: "Result", get: (e) => e.end_reason, html: resultHtml, sort: (e) => (e.submitted ? 1 : 0) + (e.feasible ? 1 : 0) + (optimal(e) ? 1 : 0) },
     { k: "cost", label: "Cost", get: (e) => (e.feasible ? e.cost : "–"), sort: (e) => (e.feasible ? e.cost : null), num: true },
     { k: "optimal_cost", label: "Optimum", get: (e) => e.optimal_cost, num: true, opt: true },
     { k: "naive_cost", label: "Naive", get: (e) => e.naive_cost, num: true, opt: true },
@@ -50,6 +57,7 @@ function board(episodes) {
     model,
     eps,
     n: eps.length,
+    weeks: new Set(eps.map((e) => e.task_id)).size,
     mean: eps.reduce((a, e) => a + e.reward, 0) / eps.length,
     submitted: eps.filter((e) => e.submitted).length / eps.length,
     feasible: eps.filter((e) => e.feasible).length / eps.length,
@@ -57,60 +65,104 @@ function board(episodes) {
   })).sort((a, b) => b.mean - a.mean);
 }
 
+function capsText(caps) {
+  const values = new Set(caps.values());
+  if (values.size === 1) return `model spend capped at $${[...values][0]} an episode`;
+  return `model spend capped per episode at ${[...caps].map(([m, c]) => `$${c} for ${nameOf(m)}`).join(", ")}`;
+}
+
+function showcase(groups) {
+  const first = groups[0];
+  if (!first) return null;
+  const order = first.boards.map((b) => b.model);
+  return first.boards.flatMap((b) => b.eps).sort((a, b) =>
+    optimal(b) - optimal(a) || (b.watches || 0) - (a.watches || 0) || a.task_id.localeCompare(b.task_id)
+    || order.indexOf(a.model) - order.indexOf(b.model))[0];
+}
+
 export async function overviewPage({ app, setCrumbs, isCurrent, sortableTable }) {
   setCrumbs([]);
   app.innerHTML = `
   <div class="page ov-page ps-ov">
     <section class="ov-intro">
-      <h1>PortSim runs: agent-env sweeps, replayed in 3D</h1>
-      <p class="muted">Models re-plan a broken week of container-ship dockings at a Port of Barcelona quay, through
-      agent-env sweeps of PortSimEnv v1 and the live week, replayed on PortSimEnv's viewer by Adithya S Kolavi
-      (Apache-2.0): the quay in 3D, the dock chart of every plan the model checked or confirmed, the grade and the
-      transcript. A live week replays watch by watch: the virtual clock, the bulletins as they arrive, the windows as they
-      freeze.</p>
+      <h1>PortSim on AgentEnv: model runs, replayed in 3D</h1>
+      <p class="muted">Models re-plan a broken week of container-ship dockings at a Port of Barcelona quay on AgentEnv,
+      replayed on PortSimEnv's viewer by Adithya S Kolavi (Apache-2.0): the quay in 3D, the dock chart of every plan the
+      model checked or confirmed, the grade and the transcript. <b>v3, the marine port</b>, is the live port with the port's
+      pilots and tugs, shared with its real 2024 traffic. <b>v2, the live port</b>, plays the week as it unfolds
+      and replays watch by watch: the virtual clock, the bulletins as they arrive, the windows as they freeze. <b>v1</b>
+      plans the week in one go, as PortSimEnv does.</p>
+      <ul class="ps-glossary muted small">
+        <li><b>Week</b>: one task, a quay with its ships and what goes wrong; a v1 task can span up to three weeks (<code>x2</code>, <code>x3</code> in its id), a v2 or v3 week is always one. <b>Reward</b>: 1.0 for the optimum in hindsight, under 0.2 for a plan that breaks a rule, 0 for no plan.</li>
+        <li><b>Watch</b> (v2, v3): watch 0 opens the week at hour 0, and a new watch starts at each news bulletin. The agent re-plans each watch; a window starting within 6 hours is frozen.</li>
+        <li><b>Optimum</b>, <b>rolling</b>, <b>naive</b>: the best plan CP-SAT finds in hindsight, a CP-SAT re-planner that only knows what has been announced, and a simple policy that pushes ships later (in v2, it keeps each confirmed window that still fits and moves the rest). <b>Regret</b>: cost above the optimum.</li>
+      </ul>
       <p class="muted small">Port of Barcelona twin © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a> (ODbL) · terrain: Terrain Tiles (AWS) · tasks: Port de Barcelona open data, CC BY-SA 4.0.</p>
       <dl class="kv">${LINKS.map(([k, href, what]) => `<dt><a class="ext" href="${href}" target="_blank" rel="noopener">${k} ↗</a></dt><dd class="muted">${what}</dd>`).join("")}</dl>
     </section>
+    <section class="ps-start" hidden></section>
     <div id="ps-runs"><p class="muted">Loading runs…</p></div>
     <section class="ov-eps" hidden>
-      <div class="sec-head"><h2 id="ov-eps-h">Episodes</h2><span class="muted small" id="ov-eps-note"></span></div>
+      <div class="sec-head"><h2 id="ov-eps-h">Weeks</h2><span class="muted small" id="ov-eps-note"></span></div>
       <table class="tbl click" id="ov-eps"><thead></thead><tbody></tbody></table>
     </section>
   </div>`;
   const runs = await getRuns();
-  const boards = new Map(await Promise.all(runs.map(async (r) => [r.run, board((await getRun(r.run)).episodes)])));
+  const episodes = new Map(await Promise.all(runs.map(async (r) => [r.run, (await getRun(r.run)).episodes])));
   if (!isCurrent()) return;
-  app.querySelector("#ps-runs").innerHTML = runs.length
-    ? runs.map((r) => `<section class="ps-run">
-        <div class="sec-head"><h2>${escapeHtml(r.run)}</h2><span class="muted small">${escapeHtml(r.env)} · ${escapeHtml(ENVS[r.env] || "")} · ${r.episodes} episodes${r.k > 1 ? ` · rep ${r.rep} of ${r.k}` : ""} · cap $${r.episode_cap_usd} an episode</span></div>
-        <table class="tbl click"><thead><tr><th>Model</th><th class="num">Episodes</th><th class="num">Mean</th><th class="num">${r.env !== "portsim" ? "Reached done" : "Submitted"}</th><th class="num">Feasible</th><th class="num">Optimal</th></tr></thead>
-        <tbody>${boards.get(r.run).map((b) => `<tr data-row="${escapeHtml(b.model)}" data-run="${escapeHtml(r.run)}" title="List ${escapeHtml(nameOf(b.model))}'s episodes"><td><span title="${escapeHtml(b.model)}">${escapeHtml(nameOf(b.model))}</span></td><td class="num">${b.n}</td><td class="num"><b>${fmtNum(b.mean, 3)}</b></td><td class="num">${fmtPct(b.submitted)}</td><td class="num">${fmtPct(b.feasible)}</td><td class="num">${b.optimal}/${b.n}</td></tr>`).join("")}</tbody></table>
-        ${r.failed.length ? `<ul class="viol">${r.failed.map((f) => `<li>${escapeHtml(nameOf(f.model))} on ${escapeHtml(f.task_id)} does not replay: ${escapeHtml(f.error)}</li>`).join("")}</ul>` : ""}
+  const groups = VERSIONS.map((ver) => {
+    const own = runs.filter((r) => r.env === ver.env);
+    return {
+      ...ver,
+      runs: own,
+      boards: board(own.flatMap((r) => episodes.get(r.run).map((e) => ({ ...e, run: r.run })))),
+      failed: own.flatMap((r) => r.failed),
+      caps: new Map(own.flatMap((r) => r.models.map((m) => [m, r.episode_cap_usd]))),
+    };
+  }).filter((g) => g.runs.length && g.boards.length);
+
+  const start = showcase(groups);
+  if (start) {
+    const sec = app.querySelector(".ps-start");
+    sec.hidden = false;
+    sec.innerHTML = `<b>Start here:</b> ${escapeHtml(nameOf(start.model))} plays the ${start.watches ? "live " : ""}week
+      <code>${escapeHtml(start.task_id)}</code>${start.watches ? ` over ${start.watches} watches` : ""} and scores
+      ${fmtNum(start.reward, 3)}. <a href="${runHref(start.run, start.model, start.task_id)}">▶ Replay it</a>`;
+  }
+
+  app.querySelector("#ps-runs").innerHTML = groups.length
+    ? groups.map((g) => `<section class="ps-run">
+        <div class="sec-head"><h2>${g.v} · ${escapeHtml(g.name)}</h2><span class="muted small">${escapeHtml(g.what)} · env ${escapeHtml(g.env)} · ${escapeHtml(capsText(g.caps))}</span></div>
+        <table class="tbl click"><thead><tr><th>Model</th><th class="num">Weeks</th><th class="num">Mean reward</th><th class="num">${g.env !== "portsim" ? "Reached the end" : "Submitted"}</th><th class="num">Feasible</th><th class="num">Optimal</th></tr></thead>
+        <tbody>${g.boards.map((b) => `<tr data-row="${escapeHtml(b.model)}" data-env="${escapeHtml(g.env)}" title="List ${escapeHtml(nameOf(b.model))}'s weeks"><td><span title="${escapeHtml(b.model)}">${escapeHtml(nameOf(b.model))}</span></td><td class="num">${b.weeks}${b.n > b.weeks ? ` (${b.n} runs)` : ""}</td><td class="num"><b>${fmtNum(b.mean, 3)}</b></td><td class="num">${fmtPct(b.submitted)}</td><td class="num">${fmtPct(b.feasible)}</td><td class="num">${b.optimal}/${b.n}</td></tr>`).join("")}</tbody></table>
+        <p class="muted small">From the sweep${g.runs.length > 1 ? "s" : ""} ${g.runs.map((r) => `<code>${escapeHtml(r.run)}</code>`).join(", ")}.</p>
+        ${g.failed.length ? `<ul class="viol">${g.failed.map((f) => `<li>${escapeHtml(nameOf(f.model))} on ${escapeHtml(f.task_id)} does not replay: ${escapeHtml(f.error)}</li>`).join("")}</ul>` : ""}
       </section>`).join("")
     : '<p class="muted">No runs.</p>';
 
   const epsSec = app.querySelector(".ov-eps");
-  function select(run, model) {
-    const r = runs.find((x) => x.run === run);
-    const b = boards.get(run).find((x) => x.model === model);
-    for (const tr of app.querySelectorAll("#ps-runs tr[data-row]")) tr.classList.toggle("sel", tr.dataset.run === run && tr.dataset.row === model);
+  function select(env, model) {
+    const g = groups.find((x) => x.env === env);
+    const b = g.boards.find((x) => x.model === model);
+    for (const tr of app.querySelectorAll("#ps-runs tr[data-row]")) tr.classList.toggle("sel", tr.dataset.env === env && tr.dataset.row === model);
     epsSec.hidden = false;
-    app.querySelector("#ov-eps-h").textContent = `Episodes · ${nameOf(model)} · ${run}`;
-    app.querySelector("#ov-eps-note").textContent = `${model} · ${b.n} episodes · click one to replay it in 3D`;
-    const rows = b.eps.map((e) => ({ ...e, run }));
+    app.querySelector("#ov-eps-h").textContent = `Weeks · ${nameOf(model)} · ${g.v}, ${g.name}`;
+    app.querySelector("#ov-eps-note").textContent = `${model} · ${b.weeks} weeks · click one to replay it in 3D`;
     app.querySelector("#ov-eps").replaceChildren(document.createElement("thead"), document.createElement("tbody"));
-    sortableTable(app.querySelector("#ov-eps"), columns(r.env !== "portsim"), rows, {
+    sortableTable(app.querySelector("#ov-eps"), columns(env !== "portsim"), b.eps, {
       initial: { key: "task_id", dir: 1 },
-      rowAttrs: (e) => `data-row="${escapeHtml(e.task_id)}"`,
-      onRow: (task) => (location.hash = runHref(run, model, task)),
+      rowAttrs: (e) => `data-row="${escapeHtml(`${e.run}|${e.task_id}`)}"`,
+      onRow: (key) => {
+        const [run, task] = key.split("|");
+        location.hash = runHref(run, model, task);
+      },
     });
   }
   app.querySelector("#ps-runs").addEventListener("click", (e) => {
     const tr = e.target.closest("tr[data-row]");
     if (!tr) return;
-    select(tr.dataset.run, tr.dataset.row);
+    select(tr.dataset.env, tr.dataset.row);
     epsSec.scrollIntoView({ block: "start", behavior: "smooth" });
   });
-  const first = runs.find((r) => boards.get(r.run).length);
-  if (first) select(first.run, boards.get(first.run)[0].model);
+  if (groups.length) select(groups[0].env, groups[0].boards[0].model);
 }

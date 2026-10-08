@@ -61,6 +61,7 @@ class Sweep:
     episode_cap_usd: float
     live: bool = False
     marine: bool = False
+    hf_bill_to: str | None = None
 
     @property
     def out(self) -> Path:
@@ -99,10 +100,10 @@ def of(rows: list[dict], run: tuple[str, str, int]) -> list[dict]:
 
 
 def final(rows: list[dict]) -> bool:
-    """A run is final once scored, stopped at its cost cap, or after MAX_ATTEMPTS counted attempts; an interrupted
-    attempt doesn't count."""
+    """A run is final once scored, stopped at its cost cap, refused by the provider, or after MAX_ATTEMPTS counted
+    attempts; an interrupted attempt doesn't count."""
     counted = [r for r in rows if r["outcome"] != "interrupted"]
-    return (any(r["outcome"] == "scored" or r["error_code"] == "cost_cap" for r in counted)
+    return (any(r["outcome"] == "scored" or r["error_code"] in ("cost_cap", "provider_refused") for r in counted)
             or len(counted) >= MAX_ATTEMPTS)
 
 
@@ -147,13 +148,13 @@ def prepare(sweep: Sweep) -> None:
         raise click.UsageError("a sweep's name is 1 to 41 lowercase letters, digits and dashes, starting with no dash")
     path = sweep.out / "sweep.json"
     if path.is_file():
-        if {"live": False, "marine": False, **json.loads(path.read_text())} != asdict(sweep):
+        if {"live": False, "marine": False, "hf_bill_to": None, **json.loads(path.read_text())} != asdict(sweep):
             raise click.UsageError(f"{path} is another sweep; run it with its own models, tasks, k and episode cap: "
                                    f"{path.read_text().strip()}")
         return
     tasks.generate(EVAL_PACK, sweep.out / "bundle", task_ids=sweep.tasks, episode_cap_usd=sweep.episode_cap_usd,
-                   live=sweep.live, marine=sweep.marine)
-    spec = {key: value for key, value in asdict(sweep).items() if key not in ("live", "marine") or value}
+                   live=sweep.live, marine=sweep.marine, hf_bill_to=sweep.hf_bill_to)
+    spec = {key: value for key, value in asdict(sweep).items() if key not in ("live", "marine", "hf_bill_to") or value}
     path.write_text(json.dumps(spec, indent=2) + "\n")
 
 
@@ -630,15 +631,16 @@ def sweep_group():
 @click.option("--parallel", type=click.IntRange(min=1), default=4, show_default=True, help="Attempts at a time.")
 @click.option("--live", is_flag=True, help="Play the live weeks on portsim-live.")
 @click.option("--marine", is_flag=True, help="Play the marine weeks on portsim-marine, with pilots and tugs.")
+@click.option("--hf-bill-to", metavar="ORG", help=tasks.HF_BILL_TO_HELP)
 def run_command(name: str, models: str, task_spec: str, cap_usd: float, k: int, episode_cap_usd: float,
-                parallel: int, live: bool, marine: bool):
+                parallel: int, live: bool, marine: bool, hf_bill_to: str | None):
     """Play each model on each task k times, one `agent-env run` per attempt, logged under results/runs/<name>/logs.
     Each attempt is a line of results.jsonl; a failed one is retried up to twice, and running the sweep again plays
     the runs that aren't final yet. Ctrl-C tears the running attempts down."""
     if "" in models.split(","):
         raise click.UsageError("--models takes comma-separated model ids, none empty")
     sweep = Sweep(name, models.split(","), task_ids(task_spec, live, marine), k, episode_cap_usd, live or marine,
-                  marine)
+                  marine, hf_bill_to)
     prepare(sweep)
     raise SystemExit(run(sweep, cap_usd, parallel))
 

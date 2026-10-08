@@ -41,6 +41,12 @@ PRICES = {  # USD per 1M tokens: input, output, cache read. LiteLLM public price
     "anthropic/claude-sonnet-5-5": (2.00, 10.00, 0.20),
     "openai/gpt-6.1-sol": (2.00, 10.00, 0.10),
     "fireworks_ai/glm-5p3-flash": (0.15, 0.50, 0.03),
+    # The open models upstream evaluated, through the Hugging Face router (https://router.huggingface.co/v1): its
+    # /v1/models prices for each provider, 2026-10-07, with cache reads charged as input.
+    "Qwen/Qwen3.8-2.4T-A95B:together": (2.00, 6.00, 2.00),
+    "Qwen/Qwen3.8-27B:ovhcloud": (0.47, 3.19, 0.47),
+    "zai-org/GLM-5.3-Flash:baseten": (0.15, 0.50, 0.15),
+    "zai-org/GLM-5.3:together": (1.40, 4.40, 1.40),
 }
 
 
@@ -270,8 +276,9 @@ class ChatAgent:
     route = "chat"
 
     def __init__(self, model: str, tools, system: str, max_tokens: int, base_url: str, api_key: str,
-                 effort: str | None = None):
-        self.client = openai.AsyncOpenAI(base_url=base_url, api_key=api_key, max_retries=3, timeout=REQUEST_TIMEOUT)
+                 effort: str | None = None, bill_to: str | None = None):
+        self.client = openai.AsyncOpenAI(base_url=base_url, api_key=api_key, max_retries=3, timeout=REQUEST_TIMEOUT,
+                                         default_headers={"X-HF-Bill-To": bill_to} if bill_to else None)
         self.model, self.max_tokens = model, max_tokens
         self.extra = {"reasoning_effort": effort} if effort in ("low", "medium", "high") else {}
         self.tools = [{"type": "function", "function": {
@@ -361,12 +368,12 @@ def route(model: str) -> str:
 
 
 def make_agent(model: str, tools, system: str, max_tokens: int, effort: str | None, root: str, key: str,
-               cache: bool = False):
+               cache: bool = False, bill_to: str | None = None):
     if route(model) == "messages":
         return AnthropicAgent(model, tools, system, max_tokens, root, key, effort, cache)
     if route(model) == "responses":
         return OpenAIResponsesAgent(model, tools, system, max_tokens, f"{root}/v1", key, effort or "medium")
-    return ChatAgent(model, tools, system, max_tokens, f"{root}/v1", key, effort)
+    return ChatAgent(model, tools, system, max_tokens, f"{root}/v1", key, effort, bill_to)
 
 
 def bound(agent, request: dict, price: tuple[float, float, float]) -> float:
@@ -384,6 +391,7 @@ def cost(usage: dict, price: tuple[float, float, float]) -> float:
 
 
 PROVIDER_ERRORS = (anthropic.APIError, openai.APIError, httpx.HTTPError, httpx2.HTTPError, ProviderError)
+REFUSED = {401, 402, 403}  # the key or the account: nothing billed, and a retry gets the same answer
 
 
 # ================================================================ episode
@@ -393,6 +401,7 @@ class Episode:
         self.config, self.model = config, config.model
         self.base, self.key = environ.get("LITELLM_BASE_URL", ""), environ.get("LITELLM_API_KEY", "")
         self.max_cost = float(environ.get("PORTSIM_MAX_COST_USD", "5"))
+        self.bill_to = environ.get("HF_BILL_TO")
         self.started = time.time()
         self.record: dict[str, Any] = {"model": self.model, "messages": [], "steps": [],
                                        "final": {"submitted": False, "plan": None}, "reward": 0.0,
@@ -436,7 +445,7 @@ class Episode:
         tools = await env.tools()
         self.live = any(t.name == "advance" for t in tools)
         agent = make_agent(self.model, tools, system, config.model_params["max_tokens"], config.effort,
-                           self.base.rstrip("/").removesuffix("/v1"), self.key, self.live)
+                           self.base.rstrip("/").removesuffix("/v1"), self.key, self.live, self.bill_to)
         agent.user(opening)
         async with agent.client:
             await self.turns(env, agent)
@@ -462,6 +471,8 @@ class Episode:
             try:
                 t = await agent.step(request)
             except PROVIDER_ERRORS as e:
+                if getattr(e, "status_code", None) in REFUSED:
+                    return self.fail("provider_refused", error=e)
                 self.spent += most
                 return self.fail("provider_error", error=e)
             self.spent += most if t.stop == HARNESS_CAP else cost(t.usage, price)
@@ -556,7 +567,7 @@ class Episode:
         name="portsim-llm",
         description="PortSimEnv's harness loop: a model re-plans a disrupted week of berthing at a Port of Barcelona "
                     "quay through the env's tools, with upstream's prompts and limits, on agent-env's model endpoint.",
-        version="0.1.0",
+        version="0.2.1",
     ),
     config=PortSimConfig,
     extensions=(MCP_CONFIG_V1, TRAJECTORY_V1),

@@ -90,7 +90,7 @@ def test_a_marine_sweep_plays_the_marine_bundle_and_records_live_rows(fake):
     assert (out / "bundle/README.md").read_text().startswith("PortSim marine dock-v1-eval: 1 weeks, each played in "
                                                              "watches by the portsim-llm agent on portsim-marine")
     assert json.loads((out / f"bundle/tasks/{B}.json").read_text()) == tasks.live_steps(
-        marine.pack().get(B), 5.0, "portsim-marine", marine.MarineWeek)
+        marine.pack().get(B), 5.0, env="portsim-marine", week=marine.MarineWeek)
     calls = [json.loads(line) for line in (fake / "calls.jsonl").read_text().splitlines()]
     assert calls == [["run", str((out / "bundle").absolute()), "--task", B, "--dry-run"],
                      ["run", str((out / "bundle").absolute()), "--task", B, "--model", SONNET]]
