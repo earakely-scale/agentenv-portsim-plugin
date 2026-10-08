@@ -10,11 +10,12 @@ const DATASET = "https://huggingface.co/datasets/earakely-scale/PortSimEnv-Agent
 const LINKS = [
   ["Run it yourself", `${DATASET}#play-a-week-yourself`, "play a week on your own machine, with agent-env and a Hugging Face token"],
   ["Dataset", DATASET, "the weeks, the references and every run here, as tables and as agent-env tasks"],
-  ["agentenv-portsim", REPO, "the plugin: v1, v2 and v3 as agent-env environments"],
+  ["agentenv-portsim", REPO, "the plugin: v1 to v4 as agent-env environments"],
   ["PortSimEnv", UPSTREAM, "the environment v1 comes from, its eval and this viewer, by Adithya S Kolavi"],
   ["Article", "https://huggingface.co/spaces/FineEnvs/simulation-rl-environments", "Simulation RL Environments, part 1"],
 ];
 const VERSIONS = [
+  { env: "portsim-wind", v: "v4", name: "the real wind", what: "the marine port in real Barcelona storms, planned on the forecasts as issued and graded on the wind that blew" },
   { env: "portsim-marine", v: "v3", name: "the marine port", what: "the live week with the port's pilots and tugs, shared with the rest of the port's real traffic" },
   { env: "portsim-live", v: "v2", name: "the live port", what: "the week unfolds watch by watch on a virtual clock, and the agent confirms berths as the news comes in" },
   { env: "portsim", v: "v1", name: "a week planned in one go", what: "the agent checks drafts and submits one plan, as in PortSimEnv" },
@@ -31,7 +32,8 @@ function resultHtml(e) {
   return optimal(e) ? '<i class="dot ok"></i>optimal' : '<i class="dot ok"></i>valid';
 }
 
-function columns(live) {
+function columns(env) {
+  const live = env !== "portsim";
   const cols = [
     { k: "task_id", label: "Week", get: (e) => e.task_id, html: (e) => `<a href="${runHref(e.run, e.model, e.task_id)}">${escapeHtml(e.task_id)}</a>` },
     { k: "difficulty", label: "Tier", get: (e) => e.difficulty, opt: true },
@@ -43,8 +45,12 @@ function columns(live) {
   ];
   if (live) {
     cols.push({ k: "rolling_cost", label: "Rolling", get: (e) => e.rolling_cost, num: true, opt: true, title: "Cost of the rolling CP-SAT re-planner on the same week" });
+    if (env === "portsim-wind") {
+      cols.push({ k: "hindsight_cost", label: "Hindsight", get: (e) => e.hindsight_cost, num: true, opt: true, title: "The best plan in hindsight, on the wind that blew" });
+      cols.push({ k: "weather", label: "Weather", get: (e) => e.weather, opt: true, title: "The weather week the week was played in" });
+    }
     cols.push({ k: "watches", label: "Watches", get: (e) => e.watches, num: true, opt: true });
-    cols.push({ k: "regret", label: "Regret", get: (e) => e.regret ?? "–", sort: (e) => e.regret, num: true, title: "Cost above the optimum in hindsight" });
+    cols.push({ k: "regret", label: "Regret", get: (e) => e.regret ?? "–", sort: (e) => e.regret, num: true, title: env === "portsim-wind" ? "Cost above the optimum" : "Cost above the optimum in hindsight" });
   } else cols.push({ k: "checks", label: "Checks", get: (e) => e.checks, num: true, opt: true });
   cols.push({ k: "reward", label: "Reward", get: (e) => fmtNum(e.reward, 3), sort: (e) => e.reward, num: true });
   return cols;
@@ -89,17 +95,20 @@ export async function overviewPage({ app, setCrumbs, isCurrent, sortableTable })
       <h1>PortSim on AgentEnv: model runs, replayed in 3D</h1>
       <p class="muted">Models re-plan a broken week of container-ship dockings at a Port of Barcelona quay on AgentEnv,
       replayed on PortSimEnv's viewer by Adithya S Kolavi (Apache-2.0): the quay in 3D, the dock chart of every plan the
-      model checked or confirmed, the grade and the transcript. <b>v3, the marine port</b>, is the live port with the port's
-      pilots and tugs, shared with its real 2024 traffic. <b>v2, the live port</b>, plays the week as it unfolds
+      model checked or confirmed, the grade and the transcript. <b>v4, the real wind</b>, plays the marine port in real
+      Barcelona storms: at every watch the agent gets the wind forecast issued by then, and the week is graded on the wind
+      that blew. <b>v3, the marine port</b>, is the live port with the port's pilots and tugs, shared with its real 2024
+      traffic. <b>v2, the live port</b>, plays the week as it unfolds
       and replays watch by watch: the virtual clock, the bulletins as they arrive, the windows as they freeze. <b>v1</b>
       plans the week in one go, as PortSimEnv does.</p>
       <ul class="ps-glossary muted small">
-        <li><b>Week</b>: one task, a quay with its ships and what goes wrong; a v1 task can span up to three weeks (<code>x2</code>, <code>x3</code> in its id), a v2 or v3 week is always one. <b>Reward</b>: 1.0 for the optimum in hindsight, under 0.2 for a plan that breaks a rule, 0 for no plan.</li>
-        <li><b>Watch</b> (v2, v3): watch 0 opens the week at hour 0, and a new watch starts at each news bulletin. The agent re-plans each watch; a window starting within 6 hours is frozen.</li>
+        <li><b>Week</b>: one task, a quay with its ships and what goes wrong; a v1 task can span up to three weeks (<code>x2</code>, <code>x3</code> in its id), a v2, v3 or v4 week is always one, and a v4 week's id ends with its weather week (<code>-e09</code>). <b>Reward</b>: 1.0 for the optimum, under 0.2 for a plan that breaks a rule, 0 for no plan.</li>
+        <li><b>Watch</b> (v2 to v4): watch 0 opens the week at hour 0, and a new watch starts at each news bulletin; in v4 also at 00:00 or 12:00 when a new forecast restricts hours the last one didn't. The agent re-plans each watch; a window starting within 6 hours is frozen.</li>
         <li><b>Pilots and tugs</b> (v3): a pilot is the local mariner who boards to guide a ship in or out, and tugs are the boats that push and pull it alongside. Each berthing and departure takes them in its hour, from 7 pilots and 8 tugs the quay shares with the port's other 2024 traffic; an hour our ships need more than are free is short, which breaks a rule. Sweeps named <code>…-pilot-…</code> are small first batches, not pilots.</li>
-        <li><b>Optimum</b>, <b>rolling</b>, <b>naive</b>: the best plan CP-SAT finds in hindsight, a CP-SAT re-planner that only knows what has been announced, and a simple policy that pushes ships later (in v2 and v3, it keeps each confirmed window that still fits and moves the rest, knowing nothing of pilots and tugs). <b>Regret</b>: cost above the optimum.</li>
+        <li><b>Wind</b> (v4): above 25 kn at the Dique Sur anemometer ships of 300 m or more may not berth or leave, and every movement takes one more tug; above 30 kn no ship moves. The rules follow the wind that blew. Barcelona Port Control sends the ECMWF forecast issued by each watch, adjusted to that anemometer. Wind the forecast didn't show, like news, is not charged to a window frozen before it was known; wind it showed is.</li>
+        <li><b>Optimum</b>, <b>rolling</b>, <b>naive</b>: the best plan CP-SAT finds in hindsight, a CP-SAT re-planner that only knows what has been announced, and a simple policy that pushes ships later (in v2 to v4, it keeps each confirmed window that still fits and moves the rest, knowing nothing of pilots and tugs). In v4 the optimum is the lower of the best plan in hindsight and the cost of the rolling re-planner, which follows the forecasts; <b>blind</b> is that re-planner with the forecast taken away. <b>Regret</b>: cost above the optimum.</li>
       </ul>
-      <p class="muted small">Port of Barcelona twin © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a> (ODbL) · terrain: Terrain Tiles (AWS) · tasks: Port de Barcelona open data, CC BY-SA 4.0.</p>
+      <p class="muted small">Port of Barcelona twin © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a> (ODbL) · terrain: Terrain Tiles (AWS) · tasks: Port de Barcelona open data, CC BY-SA 4.0 · v4 wind: forecasts contain modified ECMWF open data (CC BY 4.0), observed windows derived from the Servei Meteorològic de Catalunya's (Meteocat) XEMA station Y7.</p>
       <dl class="kv">${LINKS.map(([k, href, what]) => `<dt><a class="ext" href="${href}" target="_blank" rel="noopener">${k} ↗</a></dt><dd class="muted">${what}</dd>`).join("")}</dl>
     </section>
     <section class="ps-start" hidden></section>
@@ -152,7 +161,7 @@ export async function overviewPage({ app, setCrumbs, isCurrent, sortableTable })
     app.querySelector("#ov-eps-h").textContent = `Weeks · ${nameOf(model)} · ${g.v}, ${g.name}`;
     app.querySelector("#ov-eps-note").textContent = `${model} · ${b.weeks} weeks · click one to replay it in 3D`;
     app.querySelector("#ov-eps").replaceChildren(document.createElement("thead"), document.createElement("tbody"));
-    sortableTable(app.querySelector("#ov-eps"), columns(env !== "portsim"), b.eps, {
+    sortableTable(app.querySelector("#ov-eps"), columns(env), b.eps, {
       initial: { key: "task_id", dir: 1 },
       rowAttrs: (e) => `data-row="${escapeHtml(`${e.run}|${e.task_id}`)}"`,
       onRow: (key) => {
