@@ -1,0 +1,928 @@
+{
+  "name": "dock-v1-wind",
+  "split": "eval",
+  "tasks": 15,
+  "tiers": {
+    "busy": 11,
+    "standard": 4
+  },
+  "sha256": "c9602860464d117382a3da0ac493d8c83dbdaf0f310160ae34cd48508607b8b7",
+  "weeks": [
+    5,
+    6,
+    7,
+    10,
+    17,
+    35,
+    37
+  ],
+  "quays": {
+    "24B": 4,
+    "36A": 11
+  },
+  "source": "dock-v1-marine's qualified weeks, each moved into a weather week of weather.jsonl: the wind observed at the anemometer and the forecasts as delivered, from the sources under ecmwf, y7 and calibration",
+  "marine": {
+    "pack": "dock-v1-marine",
+    "sha256": "90ec3aa8726b755c36ae98170b83a57a4db16ab5746e5b5b4e1ea44da4918187"
+  },
+  "weather": {
+    "file": "wind/weather.jsonl",
+    "sha256": "c445b6cd791710374ebeab3bf4b257213c875c8ef73cb53bf67964fa287c239b",
+    "records": 16
+  },
+  "pairs": [
+    {
+      "task_id": "dock-24B-w06x1-busy-0-e15",
+      "schedule": "dock-24B-w06x1-busy-0",
+      "weather": "e15",
+      "kind": "storm",
+      "iso_week": "2025-W52",
+      "added_watches": [
+        72,
+        96
+      ],
+      "windows": [
+        {
+          "start": 44,
+          "end": 47,
+          "min_length": 300,
+          "unvalidated": 0.0
+        },
+        {
+          "start": 97,
+          "end": 107,
+          "min_length": 300,
+          "unvalidated": 0.0
+        },
+        {
+          "start": 115,
+          "end": 116,
+          "min_length": 300,
+          "unvalidated": 0.0
+        },
+        {
+          "start": 127,
+          "end": 136,
+          "min_length": 300,
+          "unvalidated": 0.0
+        },
+        {
+          "start": 98,
+          "end": 99,
+          "min_length": 0,
+          "unvalidated": 0.0
+        }
+      ]
+    },
+    {
+      "task_id": "dock-24B-w07x1-busy-0-e08",
+      "schedule": "dock-24B-w07x1-busy-0",
+      "weather": "e08",
+      "kind": "storm",
+      "iso_week": "2024-W44",
+      "added_watches": [
+        24,
+        36
+      ],
+      "windows": [
+        {
+          "start": 8,
+          "end": 9,
+          "min_length": 300,
+          "unvalidated": 1.0
+        },
+        {
+          "start": 40,
+          "end": 60,
+          "min_length": 300,
+          "unvalidated": 1.0
+        },
+        {
+          "start": 131,
+          "end": 135,
+          "min_length": 300,
+          "unvalidated": 1.0
+        }
+      ]
+    },
+    {
+      "task_id": "dock-24B-w07x1-busy-0-e12",
+      "schedule": "dock-24B-w07x1-busy-0",
+      "weather": "e12",
+      "kind": "storm",
+      "iso_week": "2025-W03",
+      "added_watches": [
+        60,
+        72
+      ],
+      "windows": [
+        {
+          "start": 86,
+          "end": 108,
+          "min_length": 300,
+          "unvalidated": 1.0
+        },
+        {
+          "start": 86,
+          "end": 87,
+          "min_length": 0,
+          "unvalidated": 1.0
+        },
+        {
+          "start": 92,
+          "end": 96,
+          "min_length": 0,
+          "unvalidated": 1.0
+        }
+      ]
+    },
+    {
+      "task_id": "dock-36A-w05x1-busy-0-e09",
+      "schedule": "dock-36A-w05x1-busy-0",
+      "weather": "e09",
+      "kind": "storm",
+      "iso_week": "2024-W46",
+      "added_watches": [
+        24,
+        36
+      ],
+      "windows": [
+        {
+          "start": 38,
+          "end": 42,
+          "min_length": 300,
+          "unvalidated": 1.0
+        },
+        {
+          "start": 55,
+          "end": 66,
+          "min_length": 300,
+          "unvalidated": 1.0
+        },
+        {
+          "start": 223,
+          "end": 226,
+          "min_length": 300,
+          "unvalidated": 1.0
+        },
+        {
+          "start": 259,
+          "end": 262,
+          "min_length": 300,
+          "unvalidated": 1.0
+        },
+        {
+          "start": 57,
+          "end": 62,
+          "min_length": 0,
+          "unvalidated": 1.0
+        },
+        {
+          "start": 223,
+          "end": 226,
+          "min_length": 0,
+          "unvalidated": 1.0
+        }
+      ]
+    },
+    {
+      "task_id": "dock-36A-w05x1-busy-0-e14",
+      "schedule": "dock-36A-w05x1-busy-0",
+      "weather": "e14",
+      "kind": "storm",
+      "iso_week": "2025-W43",
+      "added_watches": [
+        60
+      ],
+      "windows": [
+        {
+          "start": 83,
+          "end": 88,
+          "min_length": 300,
+          "unvalidated": 0.0
+        },
+        {
+          "start": 84,
+          "end": 85,
+          "min_length": 0,
+          "unvalidated": 0.0
+        }
+      ]
+    },
+    {
+      "task_id": "dock-36A-w06x1-busy-0-e07",
+      "schedule": "dock-36A-w06x1-busy-0",
+      "weather": "e07",
+      "kind": "storm",
+      "iso_week": "2024-W18",
+      "added_watches": [
+        12
+      ],
+      "windows": [
+        {
+          "start": 16,
+          "end": 20,
+          "min_length": 300,
+          "unvalidated": 1.0
+        },
+        {
+          "start": 85,
+          "end": 87,
+          "min_length": 300,
+          "unvalidated": 1.0
+        }
+      ]
+    },
+    {
+      "task_id": "dock-36A-w06x1-busy-0-e12",
+      "schedule": "dock-36A-w06x1-busy-0",
+      "weather": "e12",
+      "kind": "storm",
+      "iso_week": "2025-W03",
+      "added_watches": [
+        60,
+        72,
+        84
+      ],
+      "windows": [
+        {
+          "start": 86,
+          "end": 108,
+          "min_length": 300,
+          "unvalidated": 1.0
+        },
+        {
+          "start": 86,
+          "end": 87,
+          "min_length": 0,
+          "unvalidated": 1.0
+        },
+        {
+          "start": 92,
+          "end": 96,
+          "min_length": 0,
+          "unvalidated": 1.0
+        }
+      ]
+    },
+    {
+      "task_id": "dock-36A-w17x1-busy-0-e00",
+      "schedule": "dock-36A-w17x1-busy-0",
+      "weather": "e00",
+      "kind": "storm",
+      "iso_week": "2023-W06",
+      "added_watches": [
+        24
+      ],
+      "windows": [
+        {
+          "start": 6,
+          "end": 7,
+          "min_length": 300,
+          "unvalidated": 0.0
+        },
+        {
+          "start": 11,
+          "end": 18,
+          "min_length": 300,
+          "unvalidated": 0.0
+        },
+        {
+          "start": 31,
+          "end": 53,
+          "min_length": 300,
+          "unvalidated": 0.0
+        },
+        {
+          "start": 58,
+          "end": 60,
+          "min_length": 300,
+          "unvalidated": 0.0
+        },
+        {
+          "start": 12,
+          "end": 13,
+          "min_length": 0,
+          "unvalidated": 0.0
+        },
+        {
+          "start": 38,
+          "end": 48,
+          "min_length": 0,
+          "unvalidated": 0.0
+        }
+      ]
+    },
+    {
+      "task_id": "dock-36A-w17x1-busy-0-e12",
+      "schedule": "dock-36A-w17x1-busy-0",
+      "weather": "e12",
+      "kind": "storm",
+      "iso_week": "2025-W03",
+      "added_watches": [
+        48,
+        60,
+        72
+      ],
+      "windows": [
+        {
+          "start": 86,
+          "end": 108,
+          "min_length": 300,
+          "unvalidated": 1.0
+        },
+        {
+          "start": 86,
+          "end": 87,
+          "min_length": 0,
+          "unvalidated": 1.0
+        },
+        {
+          "start": 92,
+          "end": 96,
+          "min_length": 0,
+          "unvalidated": 1.0
+        }
+      ]
+    },
+    {
+      "task_id": "dock-36A-w37x1-busy-0-e00",
+      "schedule": "dock-36A-w37x1-busy-0",
+      "weather": "e00",
+      "kind": "storm",
+      "iso_week": "2023-W06",
+      "added_watches": [
+        24,
+        36
+      ],
+      "windows": [
+        {
+          "start": 6,
+          "end": 7,
+          "min_length": 300,
+          "unvalidated": 0.0
+        },
+        {
+          "start": 11,
+          "end": 18,
+          "min_length": 300,
+          "unvalidated": 0.0
+        },
+        {
+          "start": 31,
+          "end": 53,
+          "min_length": 300,
+          "unvalidated": 0.0
+        },
+        {
+          "start": 58,
+          "end": 60,
+          "min_length": 300,
+          "unvalidated": 0.0
+        },
+        {
+          "start": 12,
+          "end": 13,
+          "min_length": 0,
+          "unvalidated": 0.0
+        },
+        {
+          "start": 38,
+          "end": 48,
+          "min_length": 0,
+          "unvalidated": 0.0
+        }
+      ]
+    },
+    {
+      "task_id": "dock-36A-w37x1-busy-0-e12",
+      "schedule": "dock-36A-w37x1-busy-0",
+      "weather": "e12",
+      "kind": "storm",
+      "iso_week": "2025-W03",
+      "added_watches": [
+        60
+      ],
+      "windows": [
+        {
+          "start": 86,
+          "end": 108,
+          "min_length": 300,
+          "unvalidated": 1.0
+        },
+        {
+          "start": 86,
+          "end": 87,
+          "min_length": 0,
+          "unvalidated": 1.0
+        },
+        {
+          "start": 92,
+          "end": 96,
+          "min_length": 0,
+          "unvalidated": 1.0
+        }
+      ]
+    },
+    {
+      "task_id": "dock-24B-w37x1-standard-0-e01",
+      "schedule": "dock-24B-w37x1-standard-0",
+      "weather": "e01",
+      "kind": "storm",
+      "iso_week": "2023-W10",
+      "added_watches": [
+        108
+      ],
+      "windows": [
+        {
+          "start": 122,
+          "end": 135,
+          "min_length": 300,
+          "unvalidated": 0.0
+        },
+        {
+          "start": 191,
+          "end": 192,
+          "min_length": 300,
+          "unvalidated": 0.0
+        },
+        {
+          "start": 122,
+          "end": 125,
+          "min_length": 0,
+          "unvalidated": 0.0
+        }
+      ]
+    },
+    {
+      "task_id": "dock-36A-w06x1-standard-0-e07",
+      "schedule": "dock-36A-w06x1-standard-0",
+      "weather": "e07",
+      "kind": "storm",
+      "iso_week": "2024-W18",
+      "added_watches": [
+        12
+      ],
+      "windows": [
+        {
+          "start": 16,
+          "end": 20,
+          "min_length": 300,
+          "unvalidated": 1.0
+        },
+        {
+          "start": 85,
+          "end": 87,
+          "min_length": 300,
+          "unvalidated": 1.0
+        }
+      ]
+    },
+    {
+      "task_id": "dock-36A-w10x1-standard-0-e12",
+      "schedule": "dock-36A-w10x1-standard-0",
+      "weather": "e12",
+      "kind": "storm",
+      "iso_week": "2025-W03",
+      "added_watches": [
+        48,
+        60,
+        72,
+        84
+      ],
+      "windows": [
+        {
+          "start": 86,
+          "end": 108,
+          "min_length": 300,
+          "unvalidated": 1.0
+        },
+        {
+          "start": 86,
+          "end": 87,
+          "min_length": 0,
+          "unvalidated": 1.0
+        },
+        {
+          "start": 92,
+          "end": 96,
+          "min_length": 0,
+          "unvalidated": 1.0
+        }
+      ]
+    },
+    {
+      "task_id": "dock-36A-w35x1-standard-0-e03",
+      "schedule": "dock-36A-w35x1-standard-0",
+      "weather": "e03",
+      "kind": "storm",
+      "iso_week": "2023-W35",
+      "added_watches": [
+        120,
+        132,
+        144
+      ],
+      "windows": [
+        {
+          "start": 52,
+          "end": 53,
+          "min_length": 300,
+          "unvalidated": 0.0
+        },
+        {
+          "start": 141,
+          "end": 144,
+          "min_length": 300,
+          "unvalidated": 0.0
+        },
+        {
+          "start": 155,
+          "end": 162,
+          "min_length": 300,
+          "unvalidated": 0.0
+        }
+      ]
+    }
+  ],
+  "ecmwf": {
+    "data": "ECMWF IFS HRES open data (oper and scda streams), 10 m wind",
+    "bucket": "s3://ecmwf-forecasts",
+    "url": "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com",
+    "registry": "https://registry.opendata.aws/ecmwf-forecasts/",
+    "open_data": "https://www.ecmwf.int/en/forecasts/datasets/open-data",
+    "terms": "https://apps.ecmwf.int/datasets/licences/general/",
+    "copyright": "© 2023-2026 European Centre for Medium-Range Weather Forecasts (ECMWF)",
+    "acknowledgement": "This data is based on data and products of the European Centre for Medium-Range Weather Forecasts (ECMWF).",
+    "source": "www.ecmwf.int",
+    "licence": "This data is published under a Creative Commons Attribution 4.0 International (CC BY 4.0). https://creativecommons.org/licenses/by/4.0/",
+    "disclaimer": "ECMWF does not accept any liability whatsoever for any error or omission in the data, their availability, or for any loss or damage arising from their use.",
+    "modified": "Modified: each run's 10 m wind at one grid point, every 3 hours to 72 hours, mapped to the Y7 anemometer by quantiles and rounded to whole knots.",
+    "cells": {
+      "0p4": [
+        41.2,
+        2.0
+      ],
+      "0p25": [
+        41.25,
+        2.25
+      ]
+    },
+    "grids": "0p4 for runs before 2024-02-28T06:00:00Z, 0p25 from then",
+    "speed": "hypot(10u, 10v) m/s x 3600/1852 kn at the cell",
+    "publication_hours": 9,
+    "steps": [
+      0,
+      3,
+      6,
+      9,
+      12,
+      15,
+      18,
+      21,
+      24,
+      27,
+      30,
+      33,
+      36,
+      39,
+      42,
+      45,
+      48,
+      51,
+      54,
+      57,
+      60,
+      63,
+      66,
+      69,
+      72
+    ],
+    "params": [
+      "10u",
+      "10v"
+    ],
+    "range": "bytes=offset-(offset+length-1) of the key; sha256 of those bytes",
+    "messages": {
+      "file": "wind/weather-sources.json",
+      "sha256": "6178146ae0d8b244d682a8f086c51d2e69237024b1d256845733534761efdda4",
+      "count": 33550
+    }
+  },
+  "y7": {
+    "dataset": "nzvn-apee",
+    "url": "https://analisi.transparenciacatalunya.cat/d/nzvn-apee",
+    "api": "https://analisi.transparenciacatalunya.cat/resource/nzvn-apee.json",
+    "publisher": "Servei Meteorològic de Catalunya (Meteocat), via the Generalitat de Catalunya's open data portal",
+    "station": "Y7",
+    "name": "Barcelona – Bocana Sud",
+    "variables": {
+      "30": "VV10, wind speed at 10 m, 30-minute mean, m/s",
+      "50": "VVx10, wind gust at 10 m, 3-second maximum, m/s"
+    },
+    "conversion": {
+      "knots": "m/s x 3600/1852",
+      "30": 1.045,
+      "50": 0.664,
+      "rule": "an hour is above T kn when either half-hour has 1.045 x the mean or 0.664 x the gust above T; T = 25 (min_length 300) or 30 (min_length 0)"
+    },
+    "extracted": "2026-10-08",
+    "digest": "sha256 of the month's rows as returned, each row as JSON with sorted keys, separators (',', ':') and non-ASCII kept, the lines sorted and joined by newlines, UTF-8; codi_estat as the portal returns it, absent from rows it has not yet given a state",
+    "pass2_identical": true,
+    "months": [
+      {
+        "month": "2023-01",
+        "rows": 2976,
+        "sha256": "70ace27e4663af3a80357642273275d1fe5ea86e7c146f3f336c7269ee6fa1cb"
+      },
+      {
+        "month": "2023-02",
+        "rows": 2688,
+        "sha256": "9cd0742b8db1ba6b77967adb7ff41bb2c04845455e6b7e22f8f030692b5f144e"
+      },
+      {
+        "month": "2023-03",
+        "rows": 2976,
+        "sha256": "b23d47d2501d7187655db80dd10c338b15caaaa35e4ec4e6a7087d199a522d9d"
+      },
+      {
+        "month": "2023-04",
+        "rows": 2880,
+        "sha256": "895c44e6842c8a22b6004f6d2d49f51ac74d16a38978ff86ef0012d26387c0d3"
+      },
+      {
+        "month": "2023-05",
+        "rows": 2970,
+        "sha256": "4c7b4288e124039302e1685adaf74692b66d1b268236ea35226a16b3d83e3490"
+      },
+      {
+        "month": "2023-06",
+        "rows": 2880,
+        "sha256": "32649e6e374f08f78fce265ac5b4d31671bfef1f207318a17273b59120b70522"
+      },
+      {
+        "month": "2023-07",
+        "rows": 2972,
+        "sha256": "531df415c0f2ef0f3ae6eba2df9f7d0705a1972b450ea1be72bd35b3624d8f97"
+      },
+      {
+        "month": "2023-08",
+        "rows": 2976,
+        "sha256": "99aae0977ce8cfd01c5c2d4355b1393331d86e10d194985676368b93a3e00847"
+      },
+      {
+        "month": "2023-09",
+        "rows": 2880,
+        "sha256": "731434a7e4ab4daf3876a7edc53ad6fa893502e9873e30c3fc03109e72e2c870"
+      },
+      {
+        "month": "2023-10",
+        "rows": 2968,
+        "sha256": "74227793bcd06910eec78f4160708c0f725a9a2c8af11e3fc1a878bd204cc2b5"
+      },
+      {
+        "month": "2023-11",
+        "rows": 2880,
+        "sha256": "4fc424d894e81606f336bb62b43e785ca7b81070e7b91a4585f6ea8a030ef099"
+      },
+      {
+        "month": "2023-12",
+        "rows": 2976,
+        "sha256": "1145685244b0302e9fe99e352bb7955f8342816f2739948604df23ebf2dba38b"
+      },
+      {
+        "month": "2024-01",
+        "rows": 2958,
+        "sha256": "611639fb5f5903d4cb04b83db09607cfe0afad52b762f0ee6c78d3d7c222729e"
+      },
+      {
+        "month": "2024-02",
+        "rows": 2758,
+        "sha256": "795052e4ab431b9d60b825767fd70a96a4137f2600a7436182593c578c51d78c"
+      },
+      {
+        "month": "2024-03",
+        "rows": 1852,
+        "sha256": "dc9a2983aaa354ad61406c5f37ee1b8d400f9212ba2fafa00cb9973e7ea28f23"
+      },
+      {
+        "month": "2024-04",
+        "rows": 2878,
+        "sha256": "035a8fb1d4b2795a516efb72936e7f8a2529de17d75671b92a60caec4d31baf8"
+      },
+      {
+        "month": "2024-05",
+        "rows": 2884,
+        "sha256": "def0d18789cddc7bb2bfa2716d3c5417339dc677c6124a492de9b7ea349248e2"
+      },
+      {
+        "month": "2024-06",
+        "rows": 2800,
+        "sha256": "ec055c8f55d61706b25f5933266ce57fb6bfa0652cbbd9208e419d12654947b8"
+      },
+      {
+        "month": "2024-07",
+        "rows": 2976,
+        "sha256": "2962005b53fc4b2f26167a0da4528d7deb51cc647ce7bfa4438e77646092b5af"
+      },
+      {
+        "month": "2024-08",
+        "rows": 2976,
+        "sha256": "c15bc4c257d578b61ff9e39e1f34408af89347020440d55c1ed08963ab0f28d7"
+      },
+      {
+        "month": "2024-09",
+        "rows": 2878,
+        "sha256": "e5a16f7317c5299df674426028e532b08e69e3ea33e4342658fdee83fab78b5c"
+      },
+      {
+        "month": "2024-10",
+        "rows": 2951,
+        "sha256": "24cde8a38176cf7f57fcec4246cc022a95e01b7c21ed31c11de3777ebd11d7b8"
+      },
+      {
+        "month": "2024-11",
+        "rows": 2880,
+        "sha256": "10e3ea5138822d1da9e9571b324e3c7f09856510bb9c7d7f1eb43fca95aa66e7"
+      },
+      {
+        "month": "2024-12",
+        "rows": 2942,
+        "sha256": "0d6ec89960567d2ac59011770063cafb861164cce43cebd7a48d1662829c8ead"
+      },
+      {
+        "month": "2025-01",
+        "rows": 2964,
+        "sha256": "280bc4c9cb4090ffc1f4eb99ba3bd9f756d81594d607d2708992e78f59e0f5fa"
+      },
+      {
+        "month": "2025-02",
+        "rows": 2678,
+        "sha256": "2a143121fb239c87a9b80afc995370c5073dd8792d260911aec439a1e940d4db"
+      },
+      {
+        "month": "2025-03",
+        "rows": 2976,
+        "sha256": "b3a6b6855be6261a9321f26669aafac7e4c5a1fc45a1cac6bfa10be3f0ff525a"
+      },
+      {
+        "month": "2025-04",
+        "rows": 2880,
+        "sha256": "fc5b3b162f9edcc63b1796acf668a5325ba6d8c55bd79cbedac4b1ece737f095"
+      },
+      {
+        "month": "2025-05",
+        "rows": 2975,
+        "sha256": "8969719eecfec1d69fb0c1d22d7b255cb66e869e6fef3be8ee493b95cefd6bc4"
+      },
+      {
+        "month": "2025-06",
+        "rows": 2870,
+        "sha256": "4035e0b89f0588eed1d5be0e9b7c0977b4088cce6a6da159c45cf8adb8e9f0ab"
+      },
+      {
+        "month": "2025-07",
+        "rows": 2960,
+        "sha256": "24a03f873c01830f9d9ef8e73c9138fa349dea93765f120eeb4113319e85c55d"
+      },
+      {
+        "month": "2025-08",
+        "rows": 2974,
+        "sha256": "0314263ab65a24cba36e753e70ea562c3f034af321142359e52b6f4e44e60d8f"
+      },
+      {
+        "month": "2025-09",
+        "rows": 2880,
+        "sha256": "23e86212c432b576e044e2571f53994ea74f646e96ffc26501d2d61579e8754f"
+      },
+      {
+        "month": "2025-10",
+        "rows": 2976,
+        "sha256": "10e15609461d584e458877d771656d11b042fbae0fe86511c915d2616fc67dc8"
+      },
+      {
+        "month": "2025-11",
+        "rows": 2880,
+        "sha256": "760a6a6685fb878e7fde9cc9e2ad441b2bbd10478529a9da4c8032d220110fbc"
+      },
+      {
+        "month": "2025-12",
+        "rows": 2976,
+        "sha256": "b50755716b013cc953a3cffe3b2ac505a73f8171affdfe96e4bff7a5a150b115"
+      },
+      {
+        "month": "2026-01",
+        "rows": 2966,
+        "sha256": "357dba11b0f3075c1d58e0a719c4fcd1cfa247ab424e50ca5877be3ca7a749e5"
+      }
+    ]
+  },
+  "calibration": {
+    "method": "quantile mapping per lead block: the forecast's speed at the cell against the rule wind observed at Y7 in the hour each step is valid for (the larger of 1.045 x the mean and 0.664 x the gust over its half-hours, readings as published, pairs without a mean skipped)",
+    "percentiles": "p = 1 to 99 of the fit's forecasts and of its observations, linear between order statistics",
+    "apply": "linear between the percentiles, the mean observed where forecast percentiles tie; below the first, proportional to it; above the last, offset from it; rounded half up to a whole knot, never below 0",
+    "blocks": [
+      [
+        0,
+        24
+      ],
+      [
+        24,
+        48
+      ],
+      [
+        48,
+        73
+      ]
+    ],
+    "fit_runs": "00 and 12 UTC runs with every step 9-72 h",
+    "years": {
+      "2023": {
+        "grid": "0p4",
+        "period": [
+          "2024-02-01",
+          "2025-01-31"
+        ],
+        "fitted_runs": 731,
+        "pairs": [
+          3512,
+          5624,
+          6327
+        ]
+      },
+      "2024": {
+        "grid": "0p25",
+        "period": [
+          "2025-01-01",
+          "2025-12-31"
+        ],
+        "fitted_runs": 729,
+        "pairs": [
+          3643,
+          5828,
+          6557
+        ]
+      },
+      "2025": {
+        "grid": "0p25",
+        "period": [
+          "2024-02-01",
+          "2024-12-31"
+        ],
+        "fitted_runs": 670,
+        "pairs": [
+          3208,
+          5138,
+          5780
+        ]
+      }
+    },
+    "maps": "not published; approximately recoverable from the published whole knots and the pinned forecasts"
+  },
+  "wind": {
+    "grounding": {
+      "rule": {
+        "value": "above 25 kn no ship of 300 m or more berths or leaves, above 30 kn no ship does",
+        "basis": "The port's traffic ordinance, BOE-A-2023-6719 (https://www.boe.es/diario_boe/txt.php?id=BOE-A-2023-6719), 4.1 and 4.1.2.1: the thresholds are 25 kn for container ships of 300 m or more and 30 kn for the others, reached or forecast by the official forecasts. They start a review with the pilots; PortSimEnv simplifies them to no-movement windows, as v1 does."
+      },
+      "anemometer": {
+        "value": "Meteocat XEMA station Y7, Port de Barcelona - Bocana Sud",
+        "basis": "BOE-A-2023-6719 (https://www.boe.es/diario_boe/txt.php?id=BOE-A-2023-6719), annex III, measures the wind at the anemometer of the Dique Sur's red light; taking Y7 for it is an assumption. Its readings come from the Generalitat de Catalunya's open data portal, dataset nzvn-apee (https://analisi.transparenciacatalunya.cat/d/nzvn-apee)."
+      },
+      "reading": {
+        "value": "an hour is above T when max(1.045 x the 30-minute mean, 0.664 x the 3-second gust) > T",
+        "basis": "BOE-A-2023-6719 (https://www.boe.es/diario_boe/txt.php?id=BOE-A-2023-6719), annex III, takes the 10-minute mean, or the largest 1-minute mean above 1.25 T. Y7 publishes a 30-minute mean and a 3-second gust; the factors 1.045 (10- over 30-minute mean) and 0.83 (1-minute mean over 3-second gust, so 0.83 / 1.25 = 0.664) are assumptions."
+      },
+      "windows": {
+        "value": "the hours above each threshold, gaps of 2 hours or less merged",
+        "basis": "Assumption."
+      },
+      "forecast": {
+        "value": "the four daily HRES runs of ECMWF open data, to 72 hours, at the nearest sea grid point",
+        "basis": "ECMWF open data (https://www.ecmwf.int/en/forecasts/datasets/open-data), CC BY 4.0; that the port's official forecasts are like it is an assumption."
+      },
+      "published": {
+        "value": "a run is delivered 9 hours after its start time; a run that never came leaves the one before it in force",
+        "basis": "Assumption, after the times the runs appeared in the public bucket (https://registry.opendata.aws/ecmwf-forecasts/)."
+      },
+      "calibration": {
+        "value": "each run's wind mapped to the anemometer by quantiles fitted on another year, in whole knots every 3 hours",
+        "basis": "Assumption."
+      },
+      "watches": {
+        "value": "v3's watches, plus each 12-hourly hour whose delivered run restricts an hour of the next 36 past the freeze line that the last watch's run didn't",
+        "basis": "Assumption."
+      },
+      "wind_tug": {
+        "value": "one more tug per movement inside a window above 25 kn, as in dock-v1-marine",
+        "basis": "BOE-A-2023-6719 (https://www.boe.es/diario_boe/txt.php?id=BOE-A-2023-6719), 4.1.2.2, as dock-v1-marine's manifest sets out under marine.wind."
+      }
+    }
+  },
+  "deal": {
+    "screened": 240,
+    "qualifying": 21,
+    "dealt": 15,
+    "gate": 12
+  },
+  "note": "dock-v1-marine's weeks in the wind of another week: rules.no_moves holds the windows that blew, which the grade uses, and the gale is gone; a forecast disruption at every watch holds the run delivered by then (its 3-hourly knots and windows from the watch on) and the wind observed before it, which the week as known shows instead. The reference cost is the lower of the hindsight optimum, proven by CP-SAT, and the forecast-following re-planner's best net cost; the reference plan is the hindsight optimum's. Each task id ends in its weather week's id."
+}

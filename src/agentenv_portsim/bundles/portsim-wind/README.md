@@ -12,8 +12,7 @@ and grades the week. The `portsim-live-verifier` artifact reads the week from th
 with the reward of the executed week; a week that never finished, or whose notices broke the reveal schedule, fails the
 step, so the run is not scored.
 
-- `week` plays `dock-24B-w07x1-busy-0-e00` with the portsim-llm agent (`agent-env portsim setup --agent`), eight
-  watches.
+- `week` plays `dock-24B-w06x1-busy-0-e15` with the portsim-llm agent (`agent-env portsim setup --agent`), six watches.
 - `wiring-noplay` runs the same steps without the agent and needs no model: end-week delivers every watch's notices
   itself, the week ends with no window confirmed, and it scores 0 with the audit passing.
 

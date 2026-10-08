@@ -1,4 +1,4 @@
-"""The wind pack and its references (here the fixtures scripts/wind_references.py built from synthetic weather),
+"""The wind pack and its references, data/'s and the fixtures scripts/wind_references.py built from synthetic weather,
 replayed without ortools: the stored plans reproduce their grades and respect their own views, the clauses decide a
 pair, and the anchor is the lower of the hindsight optimum and the follower's best net cost."""
 
@@ -6,6 +6,7 @@ import hashlib
 import json
 from collections.abc import Iterator
 from dataclasses import replace
+from pathlib import Path
 
 import berth_core
 import pytest
@@ -14,6 +15,7 @@ from berth_core.check import unavoidable_cost
 from berth_core.reward import score_v3
 from wind_fixtures import (
     BUST_TASK,
+    DATA,
     FIXTURES,
     OTHER_TASK,
     PACK_DIR,
@@ -32,10 +34,20 @@ PACK = TaskPack(PACK_DIR)
 TASKS = {t.task_id: t for t in PACK.tasks}
 REFS = [json.loads(line) for line in REFERENCES.read_text().splitlines()]
 BY_ID = {r["task_id"]: r for r in REFS}
-WEEKS = {w["id"]: w for w in map(json.loads, WEATHER.read_text().splitlines())}
-MANIFEST = json.loads((PACK_DIR / "manifest.json").read_text())
+REAL_DIR = DATA / "dock-v1-wind"
+REAL_REFS = [json.loads(line) for line in (DATA / "wind/references.jsonl").read_text().splitlines()]
 CONFIGS = [(1, True), (1, False), (8, True), (8, False)]
 OUTCOME = ("cost", "reward", "feasible", "excused_cost")
+
+
+def cases(name: str, pack_dir: Path, refs: list[dict], weather: Path) -> list:
+    tasks = {t.task_id: t for t in TaskPack(pack_dir).tasks}
+    weeks = {w["id"]: w for w in map(json.loads, weather.read_text().splitlines())}
+    return [pytest.param(ref, tasks[ref["task_id"]], weeks[ref["weather"]], id=f"{name}-{ref['task_id']}")
+            for ref in refs]
+
+
+CASES = cases("fixture", PACK_DIR, REFS, WEATHER) + cases("data", REAL_DIR, REAL_REFS, DATA / "wind/weather.jsonl")
 
 
 def outcome(week: world.Week) -> dict:
@@ -68,47 +80,62 @@ def test_the_fixture_pack_is_the_hand_deal_in_schedule_order():
     assert [(r["kind"], r["qualifies"]) for r in REFS] == [("storm", True), ("bust", True), ("storm", False)]
 
 
-def test_the_manifest():
-    body = (PACK_DIR / "tasks.jsonl").read_bytes()
-    assert list(MANIFEST) == ["name", "split", "tasks", "tiers", "sha256", "weeks", "quays", "source", "marine",
+def test_the_data_pack_is_its_references_in_schedule_order_and_every_week_qualifies():
+    ids = marine.task_ids()
+    pairs = [(r["schedule"], r["weather"]) for r in REAL_REFS]
+    assert [t.task_id for t in TaskPack(REAL_DIR).tasks] == [r["task_id"] for r in REAL_REFS] == wind.task_ids()
+    assert pairs == sorted(pairs, key=lambda p: (ids.index(p[0]), p[1])) and len(set(pairs)) == 15
+    assert all(r["qualifies"] for r in REAL_REFS) and {r["kind"] for r in REAL_REFS} == {"storm"}
+
+
+@pytest.mark.parametrize(("pack_dir", "refs", "weather", "summary", "deal"), [
+    pytest.param(PACK_DIR, REFS, WEATHER, {"tasks": 3, "tiers": {"busy": 2, "standard": 1}, "weeks": [7, 37],
+                                           "quays": {"24B": 2, "36A": 1}},
+                 {"screened": 4, "qualifying": 2, "dealt": 3, "gate": 12}, id="fixture"),
+    pytest.param(REAL_DIR, REAL_REFS, DATA / "wind/weather.jsonl", {
+        "tasks": 15, "tiers": {"busy": 11, "standard": 4}, "weeks": [5, 6, 7, 10, 17, 35, 37],
+        "quays": {"24B": 4, "36A": 11}}, {"screened": 240, "qualifying": 21, "dealt": 15, "gate": 12}, id="data")])
+def test_the_manifest(pack_dir, refs, weather, summary, deal):
+    manifest = json.loads((pack_dir / "manifest.json").read_text())
+    body = (pack_dir / "tasks.jsonl").read_bytes()
+    weeks = {w["id"]: w for w in map(json.loads, weather.read_text().splitlines())}
+    assert list(manifest) == ["name", "split", "tasks", "tiers", "sha256", "weeks", "quays", "source", "marine",
                               "weather", "pairs", "ecmwf", "y7", "calibration", "wind", "deal", "note"]
-    assert {key: MANIFEST[key] for key in ("name", "split", "tasks", "tiers", "weeks", "quays")} == {
-        "name": "dock-v1-wind", "split": "eval", "tasks": 3, "tiers": {"busy": 2, "standard": 1}, "weeks": [7, 37],
-        "quays": {"24B": 2, "36A": 1}}
-    assert MANIFEST["sha256"] == hashlib.sha256(body).hexdigest()
+    assert {key: manifest[key] for key in ("name", "split", "tasks", "tiers", "weeks", "quays")} == {
+        "name": "dock-v1-wind", "split": "eval"} | summary
+    assert manifest["sha256"] == hashlib.sha256(body).hexdigest()
     assert body == b"".join(json.dumps(t.to_dict(), ensure_ascii=False, separators=(",", ":")).encode() + b"\n"
-                            for t in PACK.tasks)
-    assert MANIFEST["marine"] == {"pack": "dock-v1-marine", "sha256": marine.pack().manifest["sha256"]}
-    assert MANIFEST["weather"] == {"file": "wind/weather.jsonl", "records": 2,
-                                   "sha256": hashlib.sha256(WEATHER.read_bytes()).hexdigest()}
-    assert MANIFEST["pairs"] == [
+                            for t in TaskPack(pack_dir).tasks)
+    assert manifest["marine"] == {"pack": "dock-v1-marine", "sha256": marine.pack().manifest["sha256"]}
+    assert manifest["weather"] == {"file": "wind/weather.jsonl", "records": len(weeks),
+                                   "sha256": hashlib.sha256(weather.read_bytes()).hexdigest()}
+    assert manifest["pairs"] == [
         {"task_id": r["task_id"], "schedule": r["schedule"], "weather": r["weather"], "kind": r["kind"],
-         "iso_week": WEEKS[r["weather"]]["iso_week"], "added_watches": r["added_watches"],
-         "windows": WEEKS[r["weather"]]["windows"]} for r in REFS]
-    path = FIXTURES / "wind/weather-sources.json"
+         "iso_week": weeks[r["weather"]]["iso_week"], "added_watches": r["added_watches"],
+         "windows": weeks[r["weather"]]["windows"]} for r in refs]
+    path = weather.parent / "weather-sources.json"
     sources = json.loads(path.read_text())
-    assert {key: MANIFEST[key] for key in ("y7", "calibration")} == {key: sources[key] for key in ("y7", "calibration")}
+    assert {key: manifest[key] for key in ("y7", "calibration")} == {key: sources[key] for key in ("y7", "calibration")}
     ecmwf = sources["ecmwf"]
     assert ecmwf["fields"] == ["key", "offset", "length", "sha256", "last_modified"]
     assert ecmwf["messages"] and all(len(m) == 5 for m in ecmwf["messages"])
-    assert MANIFEST["ecmwf"] == {key: value for key, value in ecmwf.items() if key not in ("fields", "messages")} | {
+    assert manifest["ecmwf"] == {key: value for key, value in ecmwf.items() if key not in ("fields", "messages")} | {
         "messages": {"file": "wind/weather-sources.json", "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
                      "count": len(ecmwf["messages"])}}
-    assert list(MANIFEST["wind"]) == ["grounding"]
-    for key, item in MANIFEST["wind"]["grounding"].items():
+    assert list(manifest["wind"]) == ["grounding"]
+    for key, item in manifest["wind"]["grounding"].items():
         assert list(item) == ["value", "basis"]
         assert "https://" in item["basis"] or "Assumption" in item["basis"], key
-    assert MANIFEST["deal"] == {"screened": 4, "qualifying": 2, "dealt": 3, "gate": 12}
+    assert manifest["deal"] == deal
 
 
-@pytest.mark.parametrize("ref", REFS, ids=lambda r: r["task_id"])
-def test_the_record(ref):
-    task = TASKS[ref["task_id"]]
+@pytest.mark.parametrize(("ref", "task", "weather"), CASES)
+def test_the_record(ref, task, weather):
     v3 = marine.pack().get(ref["schedule"])
     assert list(ref) == ["task_id", "schedule", "weather", "kind", "watch_hours", "added_watches", "optimal_cost",
                          "hindsight_cost", "v3_optimal_cost", "unavoidable_cost", "rolling", "configs", "blind"] + (
         ["hold"] if ref["kind"] == "bust" else []) + ["naive", "clauses", "qualifies", "solver"]
-    assert ref["watch_hours"] == [w.hour for w in WindWeek(task).watches] == wind.watch_hours(v3, WEEKS[ref["weather"]])
+    assert ref["watch_hours"] == [w.hour for w in WindWeek(task).watches] == wind.watch_hours(v3, weather)
     assert ref["added_watches"] == [h for h in ref["watch_hours"] if h not in [w.hour for w in schedule(v3)]]
     assert (ref["v3_optimal_cost"], ref["unavoidable_cost"]) == (v3.reference["optimal_cost"], unavoidable_cost(task))
     hindsight = marine.evaluate(task, plan_from_list(task.reference["optimal_plan"]))
@@ -121,9 +148,9 @@ def test_the_record(ref):
     assert ref["rolling"]["config"] == next(k for k, c in enumerate(ref["configs"]) if "error" not in c)
 
 
-@pytest.mark.parametrize("ref", REFS, ids=lambda r: r["task_id"])
-def test_the_clauses_decide_the_pair(ref):
-    task, clauses = TASKS[ref["task_id"]], ref["clauses"]
+@pytest.mark.parametrize(("ref", "task", "weather"), CASES)
+def test_the_clauses_decide_the_pair(ref, task, weather):
+    clauses = ref["clauses"]
     other = ref["blind" if ref["kind"] == "storm" else "hold"]["configs"]
     assert clauses == {
         "a": sum(c["cost"] is not None and c["cost"] <= ref["hindsight_cost"] for c in ref["configs"]) >= 3,
@@ -134,9 +161,8 @@ def test_the_clauses_decide_the_pair(ref):
     assert ref["qualifies"] is all(clauses.values())
 
 
-@pytest.mark.parametrize("ref", REFS, ids=lambda r: r["task_id"])
-def test_every_stored_plan_replays_to_its_grade_against_the_anchor(ref):
-    task = TASKS[ref["task_id"]]
+@pytest.mark.parametrize(("ref", "task", "weather"), CASES)
+def test_every_stored_plan_replays_to_its_grade_against_the_anchor(ref, task, weather):
     for mode in ("rolling", "blind", "hold"):
         if mode not in ref:
             continue
@@ -154,10 +180,9 @@ def test_every_stored_plan_replays_to_its_grade_against_the_anchor(ref):
     assert outcome(first) == outcome(second) == ref["naive"] and first.plan == second.plan
 
 
-@pytest.mark.parametrize("ref", REFS, ids=lambda r: r["task_id"])
-def test_every_stored_plan_keeps_its_open_ships_clear_on_the_view_it_was_solved_on(ref):
+@pytest.mark.parametrize(("ref", "task", "weather"), CASES)
+def test_every_stored_plan_keeps_its_open_ships_clear_on_the_view_it_was_solved_on(ref, task, weather):
     """Under forecast relief only the frozen windows may break a rule on the re-planner's view."""
-    task = TASKS[ref["task_id"]]
     for mode in ("rolling", "blind", "hold"):
         if mode not in ref:
             continue

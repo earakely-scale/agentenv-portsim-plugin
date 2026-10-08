@@ -1,6 +1,6 @@
-"""The wind tasks, on the synthetic wind pack: a wind week's steps against its marine week's (portsim-wind, a trigger
-per watch with the added ones, the forecast last in every bulletin, the gale gone, the opening ending with the wind, the
-wind rules), the portsim-wind bundle, `tasks generate --wind`, and `setup` registering portsim-wind on the gateway."""
+"""The wind tasks: a wind week's steps against its marine week's (portsim-wind, a trigger per watch with the added ones,
+the forecast last in every bulletin, the gale gone, the opening ending with the wind, the wind rules), the portsim-wind
+bundle, `tasks generate --wind`, and `setup` registering portsim-wind on the gateway."""
 
 import json
 from importlib.resources import files
@@ -14,9 +14,8 @@ from agent_env.bundle.plan import check_bundle
 from agent_env.bundle.resolve import resolve_bundle
 from agent_env.env import Env
 from agent_env.task_step.registry import get_task_step_registry
-from berth_core import TaskPack, rules, situation
+from berth_core import rules, situation
 from click.testing import CliRunner
-from wind_fixtures import BUST_TASK, OTHER_TASK, PACK_DIR, REFERENCES, STORM_TASK, use
 
 from agentenv_portsim import cli, marine, tasks, wind
 from agentenv_portsim.cli import portsim
@@ -27,8 +26,15 @@ from agentenv_portsim.wind import WindWeek
 ROOT = Path(__file__).resolve().parents[3]
 BUNDLE = files("agentenv_portsim.bundles") / "portsim-wind"
 LIVE_BUNDLE = files("agentenv_portsim.bundles") / "portsim-live"
-PACK = TaskPack(PACK_DIR)
-REFS = {r["task_id"]: r for r in map(json.loads, REFERENCES.read_text().splitlines())}
+PACK = wind.pack()
+REFS = {r["task_id"]: r for r in wind.references()}
+TASK_ID = "dock-24B-w07x1-busy-0-e12"
+WEEK = "dock-24B-w06x1-busy-0-e15"
+QUALIFYING = ["dock-24B-w06x1-busy-0-e15", "dock-24B-w07x1-busy-0-e08", "dock-24B-w07x1-busy-0-e12",
+              "dock-36A-w05x1-busy-0-e09", "dock-36A-w05x1-busy-0-e14", "dock-36A-w06x1-busy-0-e07",
+              "dock-36A-w06x1-busy-0-e12", "dock-36A-w17x1-busy-0-e00", "dock-36A-w17x1-busy-0-e12",
+              "dock-36A-w37x1-busy-0-e00", "dock-36A-w37x1-busy-0-e12", "dock-24B-w37x1-standard-0-e01",
+              "dock-36A-w06x1-standard-0-e07", "dock-36A-w10x1-standard-0-e12", "dock-36A-w35x1-standard-0-e03"]
 OPENING = "\n\nIt is watch 0, Monday 00:00. Confirm berth windows with confirm_berths, then call advance."
 WIND_RULES = "\n".join([
     "How the week runs:",
@@ -61,13 +67,8 @@ WIND_RULES = "\n".join([
     "ends; if you stop before the last watch, the rest of the week runs on the windows you confirmed.",
 ])
 WATCHES = [(1, ["extra-0", "tug_outage-7", "pilot_shortage-8", "forecast-10"]), (2, ["emergency-6", "forecast-11"]),
-           (3, ["late-2", "forecast-12"]), (4, ["forecast-13"]), (5, ["late-3", "crane_outage-5", "forecast-14"]),
-           (6, ["forecast-15"]), (7, ["bunching-4", "forecast-16"])]
-
-
-@pytest.fixture(autouse=True)
-def fixtures(monkeypatch):
-    use(monkeypatch)
+           (3, ["late-2", "forecast-12"]), (4, ["forecast-13"]), (5, ["forecast-14"]),
+           (6, ["late-3", "crane_outage-5", "forecast-15"]), (7, ["forecast-16"]), (8, ["bunching-4", "forecast-17"])]
 
 
 def wind_steps(task_id: str, episode_cap_usd: float = 5.0) -> list[dict]:
@@ -92,26 +93,26 @@ def snapshot(root: Path) -> dict[str, bytes]:
 
 
 def test_a_wind_week_is_its_marine_week_on_portsim_wind_with_the_forecast_last_in_every_bulletin():
-    task, steps = PACK.get(STORM_TASK), wind_steps(STORM_TASK)
+    task, steps = PACK.get(TASK_ID), wind_steps(TASK_ID)
     v3 = marine_steps("dock-24B-w07x1-busy-0")
     assert [s["id"] for s in steps] == [s["id"] for s in v3]
     assert {s.get("env_id") for s in steps} == {"portsim-wind", None}
     assert steps[1]["directives"] == [{"service": "portsim-wind", "uri": "urn:portsim:live-load/v1",
-                                       "args": {"task_id": STORM_TASK}}]
+                                       "args": {"task_id": TASK_ID}}]
     assert steps[7]["directives"][0]["service"] == "portsim-wind" and steps[4]["env_ids"] == ["portsim-wind"]
     assert steps[5] == {**v3[5], "env_id": "portsim-wind"}
     watches = steps[3]["triggers"]
     assert [(t["id"], [a["args"]["event_id"] for a in t["actions"]]) for t in watches] == [
         (f"watch-{k}", events) for k, events in WATCHES]
-    assert [w.hour for w in schedule(task)] == REFS[STORM_TASK]["watch_hours"] == [0, 30, 42, 54, 72, 84, 90, 120]
-    assert REFS[STORM_TASK]["added_watches"] == [72]
+    assert [w.hour for w in schedule(task)] == REFS[TASK_ID]["watch_hours"] == [0, 30, 42, 54, 60, 72, 84, 90, 120]
+    assert REFS[TASK_ID]["added_watches"] == [60, 72]
     forecasts = [e for e in task.disruptions if e["type"] == "forecast"]
     assert [bulletin[-1]["args"] for bulletin in actions(steps)] == [
         {"event_id": f"forecast-{task.disruptions.index(e)}", "name": "Barcelona Port Control", "text": wind.notice(e)}
         for e in forecasts[1:]]
     assert actions(steps)[0][-1]["args"]["text"] == (
         "Wind forecast issued Tue 03:00 (ECMWF, adjusted to the Dique Sur anemometer), to hour 90: above 25 kn hours "
-        "75–85, peak 32 kn; above 30 kn 77–80.")
+        "84–91, peak 30 kn.")
     news = [(a["args"]["name"], a["args"]["text"]) for bulletin in actions(steps) for a in bulletin[:-1]]
     assert news == [(a["args"]["name"], a["args"]["text"]) for bulletin in actions(v3) for a in bulletin
                     if not a["args"]["event_id"].startswith("gale-")]
@@ -119,18 +120,19 @@ def test_a_wind_week_is_its_marine_week_on_portsim_wind_with_the_forecast_last_i
                for bulletin in actions(steps) for a in bulletin)
 
 
-def test_a_bust_week_keeps_the_gales_watch_for_its_forecast():
-    steps = wind_steps(BUST_TASK)
-    assert [[a["args"]["event_id"] for a in bulletin] for bulletin in actions(steps)] == [
-        ["extra-0", "tug_outage-7", "pilot_shortage-8", "forecast-10"], ["emergency-6", "forecast-11"],
-        ["late-2", "forecast-12"], ["late-3", "crane_outage-5", "forecast-13"], ["forecast-14"],
-        ["bunching-4", "forecast-15"]]
-    assert REFS[BUST_TASK]["added_watches"] == []
+def test_a_week_keeps_the_gales_watch_for_its_forecast():
+    task_id = "dock-24B-w07x1-busy-0-e08"
+    assert [[a["args"]["event_id"] for a in bulletin] for bulletin in actions(wind_steps(task_id))] == [
+        ["forecast-10"], ["extra-0", "tug_outage-7", "pilot_shortage-8", "forecast-11"], ["forecast-12"],
+        ["emergency-6", "forecast-13"], ["late-2", "forecast-14"], ["late-3", "crane_outage-5", "forecast-15"],
+        ["forecast-16"], ["bunching-4", "forecast-17"]]
+    assert REFS[task_id]["watch_hours"] == [0, 24, 30, 36, 42, 54, 84, 90, 120]
+    assert REFS[task_id]["added_watches"] == [24, 36]
 
 
 def test_the_wind_opening_ends_with_the_wind_and_the_rules_are_the_wind_rules():
-    task = PACK.get(STORM_TASK)
-    play = next(s for s in wind_steps(STORM_TASK) if s["id"] == "play")
+    task = PACK.get(TASK_ID)
+    play = next(s for s in wind_steps(TASK_ID) if s["id"] == "play")
     view = wind.known(task, ["closure-1", "forecast-9"])
     assert play["prompt"] == (situation(view) + "\n\n" + marine.section(view) + "\n\n" + wind.section(view) + OPENING)
     assert play["prompt"].endswith("\n- Observed since hour 0: no hour above 25 kn." + OPENING)
@@ -156,8 +158,8 @@ def test_the_wind_bundle_installs_week_and_wiring_noplay_and_the_live_verifier(l
     assert entries[BundleKind.ARTIFACT, "portsim-live-verifier"].type == "file"
     assert BUNDLE.joinpath("artifacts/portsim-live-verifier/verify.py").read_bytes() == LIVE_BUNDLE.joinpath(
         "artifacts/portsim-live-verifier/verify.py").read_bytes()
-    assert wind.task_ids()[0] == STORM_TASK
-    week = wind_steps(STORM_TASK)
+    assert wind.task_ids()[0] == WEEK
+    week = wind_steps(WEEK)
     assert bundled("week") == week
     assert bundled("wiring-noplay") == [s for s in week if s["id"] not in ("deploy-agent", "play")]
     registry = get_task_step_registry()
@@ -172,15 +174,15 @@ def test_the_wind_bundle_installs_week_and_wiring_noplay_and_the_live_verifier(l
 def test_generate_wind_writes_the_qualifying_wind_weeks_the_live_verifier_and_the_readme(tmp_path, local_stores):
     out = tmp_path / "wind"
     names = tasks.generate("dock-v1-eval", out, wind=True)
-    assert names == [t.task_id for t in PACK.tasks if t.task_id in wind.task_ids()] == [STORM_TASK, BUST_TASK]
+    assert names == [t.task_id for t in PACK.tasks if t.task_id in wind.task_ids()] == QUALIFYING
     written = snapshot(out)
     assert sorted(written) == sorted(["README.md", "artifacts/portsim-live-verifier/verify.py",
                                       *(f"tasks/{n}.json" for n in names)])
     assert written["artifacts/portsim-live-verifier/verify.py"] == LIVE_BUNDLE.joinpath(
         "artifacts/portsim-live-verifier/verify.py").read_bytes()
     assert written["README.md"].decode() == (
-        "PortSim wind dock-v1-eval: 2 weeks, each played in watches by the portsim-llm agent on portsim-wind, with the "
-        "port's pilots and tugs in real Barcelona wind and the forecast at every watch, and graded by "
+        "PortSim wind dock-v1-eval: 15 weeks, each played in watches by the portsim-llm agent on portsim-wind, with "
+        "the port's pilots and tugs in real Barcelona wind and the forecast at every watch, and graded by "
         "portsim-live-verifier.\n\nThe prompts are derived from PortSimEnv's dock-v1 task packs (CC BY-SA 4.0). "
         "Contains data from the Port de Barcelona open data portal. Contains modified ECMWF open data (CC BY 4.0, © "
         "ECMWF) and wind windows derived from the Servei Meteorològic de Catalunya's (Meteocat) XEMA station Y7.\n")
@@ -188,11 +190,12 @@ def test_generate_wind_writes_the_qualifying_wind_weeks_the_live_verifier_and_th
         assert json.loads(written[f"tasks/{name}.json"]) == wind_steps(name)
     parsed = parse_bundle(out)
     check_bundle(resolve_bundle(parsed))
-    assert sum(e.kind is BundleKind.TASK for e in parsed.entries) == 2
-    tasks.generate("dock-v1-eval", tmp_path / "two", task_ids=[OTHER_TASK, BUST_TASK], episode_cap_usd=0.75,
-                   live=True, wind=True)
-    assert sorted(p.name for p in (tmp_path / "two/tasks").iterdir()) == [f"{BUST_TASK}.json", f"{OTHER_TASK}.json"]
-    assert json.loads((tmp_path / f"two/tasks/{OTHER_TASK}.json").read_text()) == wind_steps(OTHER_TASK, 0.75)
+    assert sum(e.kind is BundleKind.TASK for e in parsed.entries) == 15
+    other = "dock-36A-w35x1-standard-0-e03"
+    tasks.generate("dock-v1-eval", tmp_path / "two", task_ids=[other, TASK_ID], episode_cap_usd=0.75, live=True,
+                   wind=True)
+    assert sorted(p.name for p in (tmp_path / "two/tasks").iterdir()) == [f"{TASK_ID}.json", f"{other}.json"]
+    assert json.loads((tmp_path / f"two/tasks/{other}.json").read_text()) == wind_steps(other, 0.75)
 
 
 @pytest.mark.parametrize(("args", "out"), [([], "results/bundles/dock-v1-eval-wind"),
@@ -201,10 +204,10 @@ def test_generate_wind_writes_to_out_or_results_bundles(tmp_path, monkeypatch, a
     monkeypatch.chdir(tmp_path)
     result = CliRunner().invoke(portsim, ["tasks", "generate", "--pack", "dock-v1-eval", "--wind", *args])
     assert result.exit_code == 0, result.output
-    assert result.output == (f"Wrote 2 tasks into {out}; play one with: agent-env run {out} --task {STORM_TASK} "
+    assert result.output == (f"Wrote 15 tasks into {out}; play one with: agent-env run {out} --task {WEEK} "
                              "--model <litellm model id>\n")
-    assert sorted(p.name for p in (tmp_path / out / "tasks").iterdir()) == [f"{STORM_TASK}.json", f"{BUST_TASK}.json"]
-    assert json.loads((tmp_path / out / f"tasks/{STORM_TASK}.json").read_text()) == bundled("week")
+    assert sorted(p.name for p in (tmp_path / out / "tasks").iterdir()) == sorted(f"{n}.json" for n in QUALIFYING)
+    assert json.loads((tmp_path / out / f"tasks/{WEEK}.json").read_text()) == bundled("week")
 
 
 @pytest.mark.parametrize(("args", "message"), [
