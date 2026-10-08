@@ -1,17 +1,20 @@
-"""Play a live week through `agent-env run` with no model spend: the task deploys the env (portsim-live, or
-portsim-marine) on the gateway and portsim-llm on local Docker, and tests/fake_litellm.py, on this machine, answers the
-agent with a reference policy's turns (the naive online policy, or the stored plans of the rolling re-planner), at one
-turn per watch. It fails unless each watch's trigger fired once, the agent never saw port_notice, every bulletin came
-with the first tool result after its advance and no other, get_time read the watch's hour and held still between turns,
-data/get held the week as played in process, and the week scored the policy's stored reward. On portsim-marine the
-opening and every get_situation must also carry the pilots and tugs as the port knows them at that watch.
+"""Play a live week through `agent-env run` with no model spend: the task deploys the env (portsim-live,
+portsim-marine or portsim-wind) on the gateway and portsim-llm on local Docker, and tests/fake_litellm.py, on this
+machine, answers the agent with a reference policy's turns (the naive online policy, or the stored plans of the rolling
+re-planner), at one turn per watch. It fails unless each watch's trigger fired once, the agent never saw port_notice,
+every bulletin came with the first tool result after its advance and no other, get_time read the watch's hour and held
+still between turns, data/get held the week as played in process, and the week scored the policy's stored reward. On
+portsim-marine the opening and every get_situation must also carry the pilots and tugs as the port knows them at that
+watch; on portsim-wind the situation in each must end with the pilots and tugs and then the wind as the port knows
+them then.
 
 Run it from the checkout after `agent-env portsim setup --agent`, with the dev extra installed:
 
-    PYTHONPATH=tests python scripts/live_e2e.py [--env portsim-marine] [--task ID] [--policy rolling]
+    PYTHONPATH=tests python scripts/live_e2e.py [--env portsim-marine|portsim-wind] [--task ID] [--policy rolling]
         [--double-advance WATCH] [--out week.json]
 
-The bundle's `week` task plays the default week; another week is written as a one-task bundle in a temporary folder.
+The bundle's `week` task plays the default week (on portsim-wind, the first qualifying wind week); another week is
+written as a one-task bundle in a temporary folder.
 """
 
 import argparse
@@ -28,8 +31,8 @@ from pathlib import Path
 from berth_core import plan_from_list, plan_to_list
 from fake_litellm import FakeLiteLLM
 
-from agentenv_portsim import marine, tasks, world
-from agentenv_portsim.schedule import LIVE_ENV, MARINE_ENV, NOTICE_TOOL, schedule, virtual_time
+from agentenv_portsim import marine, tasks, wind, world
+from agentenv_portsim.schedule import LIVE_ENV, MARINE_ENV, NOTICE_TOOL, WIND_ENV, schedule, virtual_time
 from agentenv_portsim.sweep import context, trajectory
 
 TASK = "dock-24B-w07x1-busy-0"
@@ -90,6 +93,12 @@ def pilots_and_tugs(task, watches: list, k: int) -> str:
     return marine.section(world.known(task, [n.event_id for w in watches[:k + 1] for n in w.notices]))
 
 
+def wind_tail(task, watches: list, k: int) -> str:
+    """How the situation at watch k ends on portsim-wind: the pilots and tugs, then the wind, as known then."""
+    view = wind.known(task, [n.event_id for w in watches[:k + 1] for n in w.notices])
+    return "\n\n" + marine.section(view) + "\n\n" + wind.section(view)
+
+
 def held(data: dict) -> dict:
     """data/get's week but the call counts, which only the env's middleware makes."""
     return {"plan": data["plan"], "notices": [{k: v for k, v in n.items() if k != "call"} for n in data["notices"]],
@@ -133,6 +142,8 @@ def check(task, fake: FakeLiteLLM, ctx: dict, env: str, expected: dict, played: 
     opening = next(m["content"] for m in record["messages"] if m["role"] == "user")
     if env == MARINE_ENV and pilots_and_tugs(task, watches, 0) not in opening:
         problems.append("the opening lacks the pilots and tugs")
+    if env == WIND_ENV and not opening.endswith(tasks.LIVE_OPENING.format(situation=wind_tail(task, watches, 0))):
+        problems.append("the opening doesn't end with the pilots and tugs and the wind")
     watch, times, delivered, due = 0, {}, [], []
     for name, result in calls:
         if name == "get_time":
@@ -141,6 +152,10 @@ def check(task, fake: FakeLiteLLM, ctx: dict, env: str, expected: dict, played: 
         if (name == "get_situation" and env == MARINE_ENV
                 and not result["situation"].endswith("\n\n" + pilots_and_tugs(task, watches, watch))):
             problems.append(f"get_situation in watch {watch} lacks the pilots and tugs as known then")
+        if (name == "get_situation" and env == WIND_ENV
+                and not result["situation"].endswith(wind_tail(task, watches, watch))):
+            problems.append(f"get_situation in watch {watch} doesn't end with the pilots and tugs and the wind as "
+                            "known then")
         if result["messages"] != due:
             problems.append(f"{name} in watch {watch} carried {result['messages']}, not {due}")
         if due:
@@ -178,18 +193,20 @@ def check(task, fake: FakeLiteLLM, ctx: dict, env: str, expected: dict, played: 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.partition("\n\n")[0])
-    parser.add_argument("--env", choices=[LIVE_ENV, MARINE_ENV], default=LIVE_ENV, help="the env to play on")
-    parser.add_argument("--task", default=TASK, help="the one-week task to play")
+    parser.add_argument("--env", choices=[LIVE_ENV, MARINE_ENV, WIND_ENV], default=LIVE_ENV, help="the env to play on")
+    parser.add_argument("--task", help="the one-week task to play; default: the bundle's week")
     parser.add_argument("--policy", choices=["naive", "rolling"], default="naive",
                         help="the reference policy the stand-in model plays")
     parser.add_argument("--double-advance", type=int, metavar="WATCH",
                         help="skip this watch with a double advance; the policy must change nothing there")
     parser.add_argument("--out", type=Path, help="write the week's data/get here")
     args = parser.parse_args()
-    on_marine = args.env == MARINE_ENV
-    pack, references, week = ((marine.pack().tasks, marine.references(), marine.MarineWeek) if on_marine
+    on_marine, on_wind = args.env == MARINE_ENV, args.env == WIND_ENV
+    pack, references, week = ((wind.pack().tasks, wind.references(), wind.WindWeek) if on_wind
+                              else (marine.pack().tasks, marine.references(), marine.MarineWeek) if on_marine
                               else (tasks.pack_tasks("dock-v1-eval"), tasks.live_references(), world.Week))
-    [task] = [t for t in pack if t.task_id == args.task]
+    default = wind.task_ids()[0] if on_wind else TASK
+    [task] = [t for t in pack if t.task_id == (args.task or default)]
     reference = next(r for r in references if r["task_id"] == task.task_id)
     plans = reference["rolling"]["plans"]
     policy = world.naive if args.policy == "naive" else lambda w: plan_from_list(plans[w.watch])
@@ -198,8 +215,9 @@ def main() -> None:
     expected = {k: v for k, v in reference[args.policy].items() if k != "plans"}
     with tempfile.TemporaryDirectory() as tmp:
         bundle, name = args.env, "week"
-        if task.task_id != TASK:
-            tasks.generate("dock-v1-eval", Path(tmp), task_ids=[task.task_id], live=True, marine=on_marine)
+        if task.task_id != default:
+            tasks.generate("dock-v1-eval", Path(tmp), task_ids=[task.task_id], live=True, marine=on_marine,
+                           wind=on_wind)
             bundle, name = tmp, task.task_id
         with PausingFake(turns, host="0.0.0.0") as fake:
             port = fake.url.rpartition(":")[2]
