@@ -52,7 +52,8 @@ Data licensed under CC BY-SA 4.0 (data/LICENSE), not under the Apache License:
   the other traffic in each week's rules is derived from the Port of Barcelona's 2024 calls of every
   ship type, generator/raw/Barcelona_2024.csv in
   https://github.com/alberto-santini/berth-allocation-problems at commit 8e726a4, licensed under
-  CC BY-SA 4.0 and not included here.
+  CC BY-SA 4.0 and not included here; manifest.json records its sha256, how it was derived and the
+  public sources of the pools and rules.
 - data/marine/references.jsonl: rolling and naive reference plans and costs computed from
   data/dock-v1-marine/.
 - src/agentenv_portsim/bundles/portsim-marine/tasks/: prompts and notices taken from
@@ -72,4 +73,5 @@ contributors (ODbL)".
 
 Contains data from the Port de Barcelona open data portal (https://opendata.portdebarcelona.cat/),
 licensed under CC BY-SA 4.0. The task packs are a database Adithya S Kolavi derived from it and shared
-under the same licence.
+under the same licence; the marine pack adds the port's other 2024 traffic, derived here from the same
+portal's calls and shared under the same licence.
