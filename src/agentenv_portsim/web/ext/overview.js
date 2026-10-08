@@ -64,6 +64,12 @@ function board(episodes) {
   })).sort((a, b) => b.mean - a.mean);
 }
 
+function capsText(caps) {
+  const values = new Set(caps.values());
+  if (values.size === 1) return `model spend capped at $${[...values][0]} an episode`;
+  return `model spend capped per episode at ${[...caps].map(([m, c]) => `$${c} for ${nameOf(m)}`).join(", ")}`;
+}
+
 function showcase(groups) {
   const first = groups[0];
   if (!first) return null;
@@ -85,9 +91,9 @@ export async function overviewPage({ app, setCrumbs, isCurrent, sortableTable })
       and replays watch by watch: the virtual clock, the bulletins as they arrive, the windows as they freeze. <b>v1</b>
       plans the week in one go, as PortSimEnv does.</p>
       <ul class="ps-glossary muted small">
-        <li><b>Week</b>: one task, a quay with its ships and what goes wrong. <b>Reward</b>: 1.0 for the optimum in hindsight, under 0.2 for a plan that breaks a rule, 0 for no plan.</li>
-        <li><b>Watch</b> (v2): the time between two news bulletins. The agent re-plans each watch; a window starting within 6 hours is frozen.</li>
-        <li><b>Optimum</b>, <b>rolling</b>, <b>naive</b>: the best plan CP-SAT finds in hindsight, a CP-SAT re-planner that only knows what has been announced, and a policy that pushes ships later. <b>Regret</b>: cost above the optimum.</li>
+        <li><b>Week</b>: one task, a quay with its ships and what goes wrong; a v1 task can span up to three weeks (<code>x2</code>, <code>x3</code> in its id), a v2 week is always one. <b>Reward</b>: 1.0 for the optimum in hindsight, under 0.2 for a plan that breaks a rule, 0 for no plan.</li>
+        <li><b>Watch</b> (v2): watch 0 opens the week at hour 0, and a new watch starts at each news bulletin. The agent re-plans each watch; a window starting within 6 hours is frozen.</li>
+        <li><b>Optimum</b>, <b>rolling</b>, <b>naive</b>: the best plan CP-SAT finds in hindsight, a CP-SAT re-planner that only knows what has been announced, and a simple policy that pushes ships later (in v2, it keeps each confirmed window that still fits and moves the rest). <b>Regret</b>: cost above the optimum.</li>
       </ul>
       <p class="muted small">Port of Barcelona twin © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a> (ODbL) · terrain: Terrain Tiles (AWS) · tasks: Port de Barcelona open data, CC BY-SA 4.0.</p>
       <dl class="kv">${LINKS.map(([k, href, what]) => `<dt><a class="ext" href="${href}" target="_blank" rel="noopener">${k} ↗</a></dt><dd class="muted">${what}</dd>`).join("")}</dl>
@@ -109,7 +115,7 @@ export async function overviewPage({ app, setCrumbs, isCurrent, sortableTable })
       runs: own,
       boards: board(own.flatMap((r) => episodes.get(r.run).map((e) => ({ ...e, run: r.run })))),
       failed: own.flatMap((r) => r.failed),
-      caps: [...new Set(own.map((r) => r.episode_cap_usd))].sort((a, b) => a - b),
+      caps: new Map(own.flatMap((r) => r.models.map((m) => [m, r.episode_cap_usd]))),
     };
   }).filter((g) => g.runs.length && g.boards.length);
 
@@ -124,7 +130,7 @@ export async function overviewPage({ app, setCrumbs, isCurrent, sortableTable })
 
   app.querySelector("#ps-runs").innerHTML = groups.length
     ? groups.map((g) => `<section class="ps-run">
-        <div class="sec-head"><h2>${g.v} · ${escapeHtml(g.name)}</h2><span class="muted small">${escapeHtml(g.what)} · env ${escapeHtml(g.env)} · model spend capped at ${g.caps.map((c) => `$${c}`).join(" to ")} an episode</span></div>
+        <div class="sec-head"><h2>${g.v} · ${escapeHtml(g.name)}</h2><span class="muted small">${escapeHtml(g.what)} · env ${escapeHtml(g.env)} · ${escapeHtml(capsText(g.caps))}</span></div>
         <table class="tbl click"><thead><tr><th>Model</th><th class="num">Weeks</th><th class="num">Mean reward</th><th class="num">${g.env === "portsim-live" ? "Reached the end" : "Submitted"}</th><th class="num">Feasible</th><th class="num">Optimal</th></tr></thead>
         <tbody>${g.boards.map((b) => `<tr data-row="${escapeHtml(b.model)}" data-env="${escapeHtml(g.env)}" title="List ${escapeHtml(nameOf(b.model))}'s weeks"><td><span title="${escapeHtml(b.model)}">${escapeHtml(nameOf(b.model))}</span></td><td class="num">${b.weeks}${b.n > b.weeks ? ` (${b.n} runs)` : ""}</td><td class="num"><b>${fmtNum(b.mean, 3)}</b></td><td class="num">${fmtPct(b.submitted)}</td><td class="num">${fmtPct(b.feasible)}</td><td class="num">${b.optimal}/${b.n}</td></tr>`).join("")}</tbody></table>
         <p class="muted small">From the sweep${g.runs.length > 1 ? "s" : ""} ${g.runs.map((r) => `<code>${escapeHtml(r.run)}</code>`).join(", ")}.</p>
