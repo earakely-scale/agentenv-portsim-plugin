@@ -1,0 +1,11 @@
+{
+  "ecmwf": {
+    "note": "Synthetic fixture: invented forecasts, no ECMWF data."
+  },
+  "y7": {
+    "note": "Synthetic fixture: invented wind, no Meteocat data."
+  },
+  "calibration": {
+    "note": "Synthetic fixture: no calibration."
+  }
+}
