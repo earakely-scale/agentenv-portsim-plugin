@@ -2,7 +2,8 @@ agentenv-portsim
 Copyright 2026 the agentenv-portsim contributors
 
 This product is licensed under the Apache License, Version 2.0 (LICENSE), except for the data
-listed below, which is licensed under CC BY-SA 4.0 (data/LICENSE).
+listed below, which is licensed under CC BY-SA 4.0 (data/LICENSE), and the weather in the wind data,
+which keeps its sources' terms (below and data/LICENSE).
 
 This product includes PortSimEnv v1 by Adithya S Kolavi, part of FineEnvs
 (https://github.com/adithya-s-k/FineEnvs, 07-simulation-environments/portsim-v1, commit b0f4c2f),
@@ -27,6 +28,8 @@ licensed under the Apache License, Version 2.0. Derived from it:
   after the freeze line.
 - scripts/marine_references.py: solves with scripts/live_references.py's solve(), adapted from
   optimal_plan as above, adding a cumulative constraint for the port's pilots and one for its tugs.
+- scripts/wind_references.py: solves with scripts/live_references.py's solve(), adapted from
+  optimal_plan as above, and scripts/marine_references.py's pilot and tug constraints.
 - src/agentenv_portsim/web/upstream/: PortSimEnv's viewer, copied unchanged from
   envs/berth_planning/openenv/berth_openenv/web/.
 - src/agentenv_portsim/web/ext/index.html: adapted from that viewer's index.html (its import map,
@@ -58,10 +61,21 @@ Data licensed under CC BY-SA 4.0 (data/LICENSE), not under the Apache License:
   data/dock-v1-marine/.
 - src/agentenv_portsim/bundles/portsim-marine/tasks/: prompts and notices taken from
   data/dock-v1-marine/.
+- data/dock-v1-wind/: weeks of data/dock-v1-marine/ moved into the weather weeks of
+  data/wind/weather.jsonl; manifest.json records how, with the public sources of the wind rules and the
+  pins of the weather's sources. The weather in it keeps its sources' terms (below).
+- data/wind/references.jsonl: hindsight, rolling, blind, hold and naive reference plans and costs
+  computed from data/dock-v1-wind/.
+- src/agentenv_portsim/bundles/portsim-wind/tasks/: prompts and notices taken from data/dock-v1-wind/;
+  the forecast notices keep their sources' terms (below).
+- tests/wind/fixtures/: weeks of data/dock-v1-marine/ in synthetic weather; no reading or forecast in
+  them is real.
 - data/published/dock-eval50/index.json: the published dock-eval50 results, copied unchanged from
   results/rollouts/dock-eval50/index.json.
 - tests/viewer/runs/: episodes recorded on dock-v1 tasks; their transcripts hold the task text.
 - tests/viewer/marine_runs/: a week played on data/dock-v1-marine/ by two scripted policies; their
+  transcripts hold the task text.
+- tests/viewer/wind_runs/: a week played on tests/wind/fixtures/ by two scripted policies; their
   transcripts hold the task text.
 - assets/live-week.gif: a recorded live week on the viewer; it also shows the 3D twin (below).
 
@@ -70,6 +84,32 @@ download it from PortSimEnv's public bucket. It is © OpenStreetMap contributors
 Open Database License 1.0 (https://www.openstreetmap.org/copyright), with terrain from Terrain Tiles on
 AWS (twin/SOURCES.md). Images and videos rendered from it carry the attribution "© OpenStreetMap
 contributors (ODbL)".
+
+The weather in data/wind/weather.jsonl, data/wind/weather-sources.json and data/dock-v1-wind/, and in
+the task text that shows it, is not licensed under CC BY-SA 4.0 by this product. It comes from two
+sources, under their terms (data/LICENSE sets out each file):
+
+The forecasts are modified ECMWF open data.
+  Copyright: © 2023-2026 European Centre for Medium-Range Weather Forecasts (ECMWF).
+  Source: www.ecmwf.int
+  Licence Statement: This data is published under a Creative Commons Attribution 4.0 International
+  (CC BY 4.0). https://creativecommons.org/licenses/by/4.0/
+  Disclaimer: ECMWF does not accept any liability whatsoever for any error or omission in the data,
+  their availability, or for any loss or damage arising from their use.
+  This data is based on data and products of the European Centre for Medium-Range Weather Forecasts
+  (ECMWF).
+  Modified: each run's 10 m wind at one grid point, every 3 hours to 72 hours, mapped to the Y7
+  anemometer by quantiles and rounded to whole knots.
+  Terms of use: https://apps.ecmwf.int/datasets/licences/general/
+data/wind/weather-sources.json pins each ECMWF message used (object key, byte range, sha256,
+Last-Modified); no GRIB data is included.
+
+The observed wind windows are derived from the readings of the Servei Meteorològic de Catalunya's
+(Meteocat) XEMA station Y7, Barcelona – Bocana Sud, in the Generalitat de Catalunya's open data
+portal; no reading is included, and they are used on the terms published there.
+  Font: Servei Meteorològic de Catalunya (Meteocat), estació XEMA Y7; dades extretes el 2026-10-08; finestres derivades
+  https://analisi.transparenciacatalunya.cat/d/nzvn-apee
+data/wind/weather-sources.json pins each month of readings used by its row count and sha256.
 
 Contains data from the Port de Barcelona open data portal (https://opendata.portdebarcelona.cat/),
 licensed under CC BY-SA 4.0. The task packs are a database Adithya S Kolavi derived from it and shared

@@ -24,7 +24,8 @@ weather weeks from that cache.
 Every file is written atomically and a rerun fetches only what is missing. summary.json counts the work and the
 failures; `done` is written when nothing is missing, else the command exits non-zero.
 
-`build` reads only the cache (y7/pass1, weeks.json, ecmwf/) and writes, into --out (default data/):
+`build` reads only the cache (y7/pass1 and y7/pass2, whose digests must agree, weeks.json, ecmwf/) and writes, into
+--out (default data/):
 
 - wind/weather.jsonl: one line per week of weeks.json, which the storm rule must still give, in date order. The truth
   is the hours whose rule wind is above 25 kn (min_length 300) or 30 kn (min_length 0), merged across gaps of up to 2
