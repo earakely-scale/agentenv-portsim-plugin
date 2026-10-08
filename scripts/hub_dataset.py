@@ -63,6 +63,15 @@ def episode_rows(sweep_dir: Path, live: bool, by_id: dict) -> list[dict]:
     return rows
 
 
+def reference_row(r: dict) -> dict:
+    flat = {"task_id": r["task_id"], "qualifies": r["qualifies"], "optimal_cost": r["optimal_cost"],
+            "unavoidable_cost": r["unavoidable_cost"], "watch_hours": r["watch_hours"]}
+    for policy in ("rolling", "naive"):
+        flat |= {f"{policy}_{k}": r[policy][k] for k in ("cost", "reward", "feasible", "excused_cost")}
+    return flat | {"rolling_plans": json.dumps(r["rolling"]["plans"]), "configs": json.dumps(r["configs"]),
+                   "solver": json.dumps(r["solver"])}
+
+
 def write(rows: list[dict], path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     pq.write_table(pa.Table.from_pylist(rows), path)
@@ -95,6 +104,7 @@ def main():
     tasks.generate(EVAL_PACK, args.out / "bundles/dock-v1-eval")
     (args.out / "references").mkdir(parents=True, exist_ok=True)
     shutil.copy(tasks.REFERENCES, args.out / "references/live.jsonl")
+    write([reference_row(r) for r in tasks.live_references()], args.out / "references/live.parquet")
     print(f"{len(live_ids)} v2 and {len(pack)} v1 tasks, {len(episodes['v2'])} v2 and {len(episodes['v1'])} v1 "
           f"episodes into {args.out}")
 
