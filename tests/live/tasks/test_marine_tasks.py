@@ -93,7 +93,7 @@ def test_the_marine_opening_ends_with_the_pilots_and_tugs_and_the_rules_are_the_
                               "Confirm berth windows with confirm_berths, then call advance.")
     assert play["prompt"].startswith(v2_play["prompt"].removesuffix(
         "\n\nIt is watch 0, Monday 00:00. Confirm berth windows with confirm_berths, then call advance.") + "\n\n")
-    assert "- Mon: 745565 266665 764766 354136 | 867675 286888 867888 854765" in play["prompt"].splitlines()
+    assert "- Mon: 745565 266666 764766 354136 | 867675 286888 867888 854765" in play["prompt"].splitlines()
     assert "MAERSK NUBA" not in play["prompt"] and "Tug company" not in play["prompt"]
     assert play["system_prompt"] == v2_play["system_prompt"] == tasks.live_rules(task)
     assert play["max_turns"] == 47 == 5 * len(schedule(marine_week("dock-24B-w16x1-busy-0"))) + 2

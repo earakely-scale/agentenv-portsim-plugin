@@ -96,7 +96,7 @@ async def test_get_situation_ends_with_the_pilots_and_tugs(live, tools):
     assert lines[lines.index("## Pilots and tugs") + 3] == (
         "- Your ships take 3 tugs: ships 3, 8; 2 tugs: ships 0, 2, 5, 9, 10, 15; 1 tug: ships 1, 4, 6, 7, 11, 12, 13, "
         "14.")
-    assert "- Mon: 745565 266665 764766 354136 | 867675 286888 867888 854765" in lines
+    assert "- Mon: 745565 266666 764766 354136 | 867675 286888 867888 854765" in lines
     assert lines[-1] == "- From hour 264: 7 pilots and 8 tugs free."
     assert not [line for line in lines if " out from hour " in line or "one more tug" in line]
 

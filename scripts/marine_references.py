@@ -81,8 +81,10 @@ GROUNDING = {
     "wind": {"value": "one more tug per movement inside an announced window of wind above 25 kn, except Ro-Ro ships "
                       "and ferries under 200 m and yachts", "basis": (
         f"The port's traffic ordinance, BOE-A-2023-6719 ({ORDINANCE}), 4.1.2.2: at least one tug for merchant ships "
-        "above 25 kn, and for Ro/Ro and Ro/Pax ships under 200 m from 30 kn, when no ship moves here. The extra tug "
-        "for ships that already take tugs, ferries as Ro/Pax and yachts as non-merchant ships are assumptions.")},
+        "above 25 kn, and for Ro/Ro and Ro/Pax ships under 200 m from 30 kn. PortSimEnv applies the 25 kn windows "
+        "only, so Ro-Ro ships and ferries under 200 m take no wind tug in the 30 kn hours either, hours in which none "
+        "of our ships may move. That, the extra tug for ships that already take tugs, ferries as Ro/Pax, RAW's car "
+        "carriers as merchant ships other than Ro/Ro, and yachts as non-merchant ships are assumptions.")},
     "gales": {"value": "the gales' no-movement windows hold our ships only; the other traffic keeps its 2024 hours",
               "basis": (
         f"BOE-A-2023-6719, 4.1.2.1 ({ORDINANCE}): the 25 and 30 kn thresholds start a review with the pilots, which "
@@ -93,7 +95,11 @@ GROUNDING = {
         "it berths, and one when it leaves a berth for the anchorage (90A) or the sea, so a shift between berths "
         "counts once; plus the departures of the ships alongside at hour 0, at their RAW length"), "basis": (
         "RAW. Its ETA and ETD are berthing and leaving times for container calls (PortSimEnv's data/barcelona/"
-        "SOURCE.md); for other ship types that, and 90A as the anchorage rather than a berth, are assumptions.")},
+        "SOURCE.md); for other ship types that, and 90A as the anchorage rather than a berth, are assumptions. RAW "
+        "lists a stop served by two terminal operators once per operator; it counts once. Every call that stops at "
+        "the task's quay is left out over all 264 hours, with its stops at other berths, since the quay holds only "
+        "the week's own ships; leaving out the quay's other calls, 10 to 39 movements a week, most of them the next "
+        "week's after hour 168, is an assumption.")},
     "hours": {"value": HOURS, "basis": (
         "The other traffic is counted from hour 0 to hour 264 (11 days), past every ship's planned departure; after "
         "it every pilot and tug is free.")},
@@ -136,10 +142,12 @@ def length(row: dict) -> float:
 
 
 def calls(body: bytes) -> list[list[dict]]:
-    by: dict[str, list[dict]] = defaultdict(list)
+    """RAW's stops by call. A stop served by two terminal operators has a row for each; it is one berthing."""
+    by: dict[str, dict[tuple, dict]] = defaultdict(dict)
     for row in csv.DictReader(io.StringIO(body.decode())):
-        by[row["ESCALANUM"].split("-")[0]].append(row)
-    return [sorted(stops, key=lambda r: utc(r["ETAUTC"])) for stops in by.values()]
+        stop = (row["ESCALANUM"], row["MOLLCODI"], row["ETAUTC"], row["ETDUTC"])
+        by[row["ESCALANUM"].split("-")[0]].setdefault(stop, row)
+    return [sorted(stops.values(), key=lambda r: utc(r["ETAUTC"])) for stops in by.values()]
 
 
 def moves(stops: list[dict], start: datetime) -> list[list]:
@@ -262,7 +270,8 @@ def played(task: Task, policy: world.Policy) -> dict:
 
 
 def hindsight(task: Task) -> tuple[int, Plan]:
-    plan = solve(task, {}, 0, plan_from_list(task.reference["optimal_plan"]), 8, False, extra=constraints(task, {}),
+    """On one worker: proven optima on eight differ from run to run where the week has more than one."""
+    plan = solve(task, {}, 0, plan_from_list(task.reference["optimal_plan"]), 1, False, extra=constraints(task, {}),
                  optimal=True)
     res = marine.evaluate(task, plan)
     assert res.feasible and res.cost >= task.reference["optimal_cost"], (task.task_id, res.cost)

@@ -71,17 +71,17 @@ def test_v2s_optimum_runs_short_of_tugs_at_hour_54_once_the_news_is_in():
 def test_a_tug_outage_over_a_frozen_departure_is_excused_per_ship_and_rule():
     plan = plan_from_list(EXAMPLE.reference["optimal_plan"])
     res = berth_core.evaluate(EXAMPLE, plan)
-    assert (res.ships[3].berth_hour, res.ships[3].departure) == (39, 74)
-    assert [h for r in res.ships for h in (r.berth_hour, r.departure)].count(74) == 1
-    outage = {"type": "tug_outage", "start": 74, "end": 75, "tugs": 8}
+    assert (res.ships[8].berth_hour, res.ships[8].departure) == (79, 103)
+    assert [h for r in res.ships for h in (r.berth_hour, r.departure)].count(103) == 1
+    outage = {"type": "tug_outage", "start": 103, "end": 104, "tugs": 8}
     task = replace(EXAMPLE, disruptions=EXAMPLE.disruptions + [outage],
-                   notices=EXAMPLE.notices + ["All 8 of the port's tugs are out of service at hour 74."])
+                   notices=EXAMPLE.notices + ["All 8 of the port's tugs are out of service at hour 103."])
     week = world.play(task, lambda w: plan, week=MarineWeek)
     watch = next(w for w in week.watches if any(n.event_id == "tug_outage-10" for n in w.notices))
-    assert watch.hour == 48 and 3 in week.frozen[watch.index]["ships"]
-    line = "tugs short at hour 74: your ships need 3, 0 free"
-    assert week.excused_problems == [{"event_id": "tug_outage-10", "ship": 3, "rule": "tugs", "problem": line}]
-    assert week.grade["feasible"] and week.grade["excused"] == [{"ship": 3, "problem": line}]
+    assert watch.hour == 78 and 8 in week.frozen[watch.index]["ships"]
+    line = "tugs short at hour 103: your ships need 3, 0 free"
+    assert week.excused_problems == [{"event_id": "tug_outage-10", "ship": 8, "rule": "tugs", "problem": line}]
+    assert week.grade["feasible"] and week.grade["excused"] == [{"ship": 8, "problem": line}]
     assert week.grade["cost"] == EXAMPLE.reference["optimal_cost"] and week.audit()["ok"]
     assert not world.grade_week(task, plan, (), {}, evaluate=marine.evaluate)["feasible"]
 

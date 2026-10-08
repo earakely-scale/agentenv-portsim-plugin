@@ -155,7 +155,7 @@ def test_the_section_at_hour_0_of_the_example_week():
     assert lines[4:6] == [
         "- Free for your ships after the other traffic, the cuts and the wind, pilots | tugs, each hour from 00:00 in "
         "blocks of 6 hours:",
-        "- Mon: 745565 266665 764766 354136 | 867675 286888 867888 854765"]
+        "- Mon: 745565 266666 764766 354136 | 867675 286888 867888 854765"]
     assert [line.split(":")[0] for line in lines[5:16]] == [
         "- Mon", "- Tue", "- Wed", "- Thu", "- Fri", "- Sat", "- Sun", "- +7d", "- +8d", "- +9d", "- +10d"]
     assert lines[16:] == ["- From hour 264: 7 pilots and 8 tugs free."]

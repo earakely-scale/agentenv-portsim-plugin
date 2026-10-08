@@ -156,11 +156,13 @@ def raw() -> bytes:
 
 
 @pytest.mark.network
-def test_the_other_traffic_is_raws_calls_away_from_the_quay_counted_at_each_berth():
+def test_the_other_traffic_is_raws_calls_away_from_the_quay_counted_once_at_each_berth():
     rows = list(csv.DictReader(io.StringIO(raw().decode())))
-    calls: dict[str, list[dict]] = {}
+    calls: dict[str, dict[tuple, dict]] = {}
     for r in rows:
-        calls.setdefault(r["ESCALANUM"].split("-")[0], []).append(r)
+        calls.setdefault(r["ESCALANUM"].split("-")[0], {}).setdefault(
+            (r["ESCALANUM"], r["MOLLCODI"], r["ETAUTC"], r["ETDUTC"]), r)
+    assert len(rows) - sum(map(len, calls.values())) == 116
 
     def when(text):
         return datetime.fromisoformat(text).replace(tzinfo=UTC)
@@ -173,7 +175,7 @@ def test_the_other_traffic_is_raws_calls_away_from_the_quay_counted_at_each_bert
         start = datetime.fromisoformat(task.week_start_utc.removesuffix("Z")).replace(tzinfo=UTC)
         counted = []
         for call in calls.values():
-            call = sorted(call, key=lambda r: r["ETAUTC"])
+            call = sorted(call.values(), key=lambda r: r["ETAUTC"])
             at_quay = any(r["MOLLCODI"] == task.quay for r in call)
             for i, r in enumerate(call):
                 leaves = i + 1 == len(call) or call[i + 1]["MOLLCODI"] == "90A"

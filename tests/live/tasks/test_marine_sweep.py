@@ -165,7 +165,7 @@ Spend: $3.20 known; 0 attempts with no spend recorded, $0.00 at the cap. Attempt
 | Reached done per rep | Feasible | Optimal | Mean regret | Mean excused cost | Median turns \
 | Tokens in/out per episode | Cached tokens per episode | Cost per episode | Spend |
 |---|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---|---:|---:|---:|
-| anthropic/claude-sonnet-5-5 | 3 | 3/3 | 0.705 (0.165 to 1.000) | 1.000 | 0.173 | 3 | 2 | 1 | 4.000 | 2.000 | 20 \
+| anthropic/claude-sonnet-5-5 | 3 | 3/3 | 0.705 (0.165 to 1.000) | 1.000 | 0.181 | 3 | 2 | 1 | 4.000 | 2.000 | 20 \
 | 300.0k/20.0k | 250.0k | $0.8667 | $2.60 |
 | openai/gpt-6.1-sol | 2 | 2/3 | 0.950 (0.900 to 1.000) | 1.000 | 0.190 | 2 | 2 | 1 | 1.000 | 0.000 | 20 \
 | 300.0k/20.0k | 250.0k | $0.1500 | $0.60 |
@@ -177,7 +177,7 @@ Spend: $3.20 known; 0 attempts with no spend recorded, $0.00 at the cap. Attempt
 | Task | Tier | Ships | Watches | Rolling (cost, reward) | Naive (cost, reward) | r1 | Mean |
 |---|---|---:|---:|---|---|---:|---:|
 | dock-24B-w06x1-busy-0 | busy | 17 | 4 | 87 (1.000) | 663 (0.200) | 0.950 | 0.950 |
-| dock-24B-w07x1-busy-0 | busy | 17 | 7 | 226 (1.000) | infeasible (0.141) | 0.165 | 0.165 |
+| dock-24B-w07x1-busy-0 | busy | 17 | 7 | 226 (1.000) | infeasible (0.165) | 0.165 | 0.165 |
 | dock-36A-w35x1-standard-0 | standard | 19 | 5 | 10 (1.000) | infeasible (0.179) | 1.000 | 1.000 |
 
 ### openai/gpt-6.1-sol
@@ -185,7 +185,7 @@ Spend: $3.20 known; 0 attempts with no spend recorded, $0.00 at the cap. Attempt
 | Task | Tier | Ships | Watches | Rolling (cost, reward) | Naive (cost, reward) | r1 | Mean |
 |---|---|---:|---:|---|---|---:|---:|
 | dock-24B-w06x1-busy-0 | busy | 17 | 4 | 87 (1.000) | 663 (0.200) | 1.000 | 1.000 |
-| dock-24B-w07x1-busy-0 | busy | 17 | 7 | 226 (1.000) | infeasible (0.141) | – | – |
+| dock-24B-w07x1-busy-0 | busy | 17 | 7 | 226 (1.000) | infeasible (0.165) | – | – |
 | dock-36A-w35x1-standard-0 | standard | 19 | 5 | 10 (1.000) | infeasible (0.179) | 0.900 | 0.900 |
 
 ## Unscored runs

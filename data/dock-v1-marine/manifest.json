@@ -6,7 +6,7 @@
     "busy": 9,
     "standard": 9
   },
-  "sha256": "b1e5ba1cc098c742fd0a45e53ec09dd72ce3bf837a3164e6daf1e814b157e256",
+  "sha256": "90ec3aa8726b755c36ae98170b83a57a4db16ab5746e5b5b4e1ea44da4918187",
   "weeks": [
     5,
     6,
@@ -59,7 +59,7 @@
     },
     "wind": {
       "value": "one more tug per movement inside an announced window of wind above 25 kn, except Ro-Ro ships and ferries under 200 m and yachts",
-      "basis": "The port's traffic ordinance, BOE-A-2023-6719 (https://www.boe.es/diario_boe/txt.php?id=BOE-A-2023-6719), 4.1.2.2: at least one tug for merchant ships above 25 kn, and for Ro/Ro and Ro/Pax ships under 200 m from 30 kn, when no ship moves here. The extra tug for ships that already take tugs, ferries as Ro/Pax and yachts as non-merchant ships are assumptions."
+      "basis": "The port's traffic ordinance, BOE-A-2023-6719 (https://www.boe.es/diario_boe/txt.php?id=BOE-A-2023-6719), 4.1.2.2: at least one tug for merchant ships above 25 kn, and for Ro/Ro and Ro/Pax ships under 200 m from 30 kn. PortSimEnv applies the 25 kn windows only, so Ro-Ro ships and ferries under 200 m take no wind tug in the 30 kn hours either, hours in which none of our ships may move. That, the extra tug for ships that already take tugs, ferries as Ro/Pax, RAW's car carriers as merchant ships other than Ro/Ro, and yachts as non-merchant ships are assumptions."
     },
     "gales": {
       "value": "the gales' no-movement windows hold our ships only; the other traffic keeps its 2024 hours",
@@ -67,7 +67,7 @@
     },
     "other_traffic": {
       "value": "every 2024 call in RAW of a ship of 45 m or more that doesn't stop at the task's quay: a movement each time it berths, and one when it leaves a berth for the anchorage (90A) or the sea, so a shift between berths counts once; plus the departures of the ships alongside at hour 0, at their RAW length",
-      "basis": "RAW. Its ETA and ETD are berthing and leaving times for container calls (PortSimEnv's data/barcelona/SOURCE.md); for other ship types that, and 90A as the anchorage rather than a berth, are assumptions."
+      "basis": "RAW. Its ETA and ETD are berthing and leaving times for container calls (PortSimEnv's data/barcelona/SOURCE.md); for other ship types that, and 90A as the anchorage rather than a berth, are assumptions. RAW lists a stop served by two terminal operators once per operator; it counts once. Every call that stops at the task's quay is left out over all 264 hours, with its stops at other berths, since the quay holds only the week's own ships; leaving out the quay's other calls, 10 to 39 movements a week, most of them the next week's after hour 168, is an assumption."
     },
     "hours": {
       "value": 264,
@@ -92,7 +92,7 @@
   },
   "calibration": {
     "hours": 8784,
-    "movements": 18079,
+    "movements": 17963,
     "over_pool_percent": {
       "pilots": 0.25,
       "tugs": 0.01
