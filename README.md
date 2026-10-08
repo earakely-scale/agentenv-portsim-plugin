@@ -7,22 +7,22 @@
 [![Dataset on Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97%20Dataset-tasks%20and%20runs-yellow)](https://huggingface.co/datasets/earakely-scale/PortSimEnv-AgentEnv)
 
 <p align="center">
-  <a href="https://github.com/earakely-scale/agentenv-portsim-plugin/releases/tag/replays-2026-10-07"><img src="assets/live-port.webp" width="100%" alt="GPT-6.1 Sol plays a live week at the Port of Barcelona on AgentEnv: the virtual clock runs, bulletins arrive, and the agent re-plans watch by watch on PortSimEnv's 3D quay"></a>
+  <a href="https://github.com/earakely-scale/agentenv-portsim-plugin/releases/tag/replays-2026-10-08"><img src="assets/marine-port.webp" width="100%" alt="GPT-6.1 Sol plays a marine week at the Port of Barcelona on AgentEnv: bulletins arrive on the virtual clock, the tug company and the pilot station announce cuts, and the watch panel counts the pilots and tugs free for the quay's ships each hour"></a>
 </p>
-<p align="center"><sub><b>The live port:</b> GPT-6.1 Sol runs a week at APM Terminals Barcelona as it unfolds on AgentEnv's virtual clock. A closure, an emergency, late ships, a crane outage, a gale and bunched arrivals come in as bulletins; it re-plans each watch and ends at the hindsight optimum (reward 1.0). Replayed on PortSimEnv's 3D viewer; <a href="https://github.com/earakely-scale/agentenv-portsim-plugin/releases/tag/replays-2026-10-07">full films</a>. Twin © OpenStreetMap contributors (ODbL).</sub></p>
+<p align="center"><sub><b>The marine port (v3):</b> GPT-6.1 Sol runs a week at APM Terminals Barcelona as it unfolds on AgentEnv's virtual clock, with the port's pilots and tugs shared with the rest of its real 2024 traffic. A closure, an emergency, late ships, a crane outage, a gale and bunched arrivals come in as bulletins, and the tug company and the pilot station announce cuts from hour 54; it moves one ship with the last 2 free tugs, re-plans each watch and ends at the hindsight optimum (reward 1.0), where v2's naive re-plan is infeasible. Replayed on PortSimEnv's 3D viewer; <a href="https://github.com/earakely-scale/agentenv-portsim-plugin/releases/tag/replays-2026-10-08">full film</a>. Twin © OpenStreetMap contributors (ODbL).</sub></p>
 
 <details open>
-<summary><b>How a live task is built</b>: the task's steps, and the watch loop inside <code>play</code> (details in <a href="#the-live-port">The live port</a>)</summary>
+<summary><b>How a live or marine task is built</b>: the task's steps, and the watch loop inside <code>play</code> (details in <a href="#the-live-port">The live port</a> and <a href="#the-marine-port">The marine port</a>)</summary>
 
 ```mermaid
 flowchart TD
   subgraph setup["1 · Set up the week"]
     direction LR
-    deploy["<b>deploy_env</b><br/>portsim-live behind<br/>the AgentEnv gateway"] --> load["<b>apply_server_config</b><br/>live-load: the week<br/>as known at hour 0"] --> hide["<b>modify_env_tool_access</b><br/>hide port_notice<br/>from the agent"] --> watches["<b>register_env_triggers</b><br/>one trigger per watch"] --> agent["<b>deploy_agent</b><br/>portsim-llm"] --> clock["<b>sync_env_clock</b><br/>Mon 00:00, rate 0"]
+    deploy["<b>deploy_env</b><br/>portsim-live or portsim-marine<br/>behind the AgentEnv gateway"] --> load["<b>apply_server_config</b><br/>live-load: the week<br/>as known at hour 0"] --> hide["<b>modify_env_tool_access</b><br/>hide port_notice<br/>from the agent"] --> watches["<b>register_env_triggers</b><br/>one trigger per watch"] --> agent["<b>deploy_agent</b><br/>portsim-llm"] --> clock["<b>sync_env_clock</b><br/>Mon 00:00, rate 0"]
   end
   subgraph play["2 · prompt_agent play: one conversation, watch by watch"]
     direction LR
-    plan["get_situation<br/>check_plan · confirm_berths<br/>3 planning calls a watch,<br/>6-hour freeze"] --> advance["<b>advance</b><br/>the clock jumps to the<br/>next bulletin; ships berth<br/>and sail on their windows"] --> trigger{{"trigger watch-k<br/>calls port_notice:<br/>ships, harbour master,<br/>terminal ops, line desk"}} -->|"news arrives with<br/>the next tool result"| plan
+    plan["get_situation<br/>check_plan · confirm_berths<br/>3 planning calls a watch,<br/>6-hour freeze"] --> advance["<b>advance</b><br/>the clock jumps to the<br/>next bulletin; ships berth<br/>and sail on their windows"] --> trigger{{"trigger watch-k<br/>calls port_notice:<br/>ships, harbour master,<br/>terminal ops, line desk;<br/>v3: tug company, pilot station"}} -->|"news arrives with<br/>the next tool result"| plan
   end
   subgraph finish["3 · Grade the week"]
     direction LR
@@ -45,7 +45,7 @@ open-source framework for building RL environments. It is built on **PortSimEnv*
 grader and the 3D viewer come from it, and a week planned in one go plays here exactly as it does there. Read about it
 in the article [Simulation RL Environments, part 1](https://huggingface.co/spaces/FineEnvs/simulation-rl-environments),
 or play an episode by hand in the [PortSimEnv Space](https://huggingface.co/spaces/FineEnvs/PortSimEnv). The live
-week is new here.
+week (v2) and the marine port (v3) are new here.
 
 **Contents:** [What's in it](#whats-in-it) · [Run it yourself](#run-it-yourself) · [Tasks](#tasks) ·
 [Play a model](#play-a-model) · [The environment](#the-environment) · [Grading](#grading) ·
@@ -67,7 +67,8 @@ week is new here.
     company and the pilot station announce cuts ([The marine port](#the-marine-port)).
 - **1,100 weeks to play.** They come from the port's 2024 container calls at two quays, 24B (APM Terminals
   Barcelona) and 36A (Terminal Catalunya, BEST), in four tiers from standard to extreme: 50 eval weeks and 1,050
-  train weeks, with no week in both. 15 of the eval weeks are live weeks, and the same 15 are marine weeks ([Tasks](#tasks)).
+  train weeks, with no week in both. 15 of the eval weeks are live weeks, and the same 15 are marine weeks
+  ([Tasks](#tasks)).
 - **A deterministic grade, with no judge.** A valid plan scores 0.2 + 0.8·e^(−gap/0.5) against the optimum, so the
   optimum scores 1.0. A plan that breaks a rule scores under 0.2, and no plan scores 0. A live week is graded on the
   windows the agent confirmed, against the week as it really happened ([Grading](#grading)).
@@ -79,8 +80,9 @@ week is new here.
   - `view` and `record` replay runs on a 3D twin of the quay and film them ([Watch a run](#watch-a-run)).
 - **On the Hugging Face Hub.** The dataset
   [earakely-scale/PortSimEnv-AgentEnv](https://huggingface.co/datasets/earakely-scale/PortSimEnv-AgentEnv) holds the
-  tasks as runnable bundles (the 50 eval weeks and the 15 live weeks), the live references and every recorded run.
-  The [Space](https://huggingface.co/spaces/earakely-scale/PortSimEnv-AgentEnv) replays the runs in 3D.
+  weeks as tables and as runnable bundles (the 50 eval weeks, the 15 live weeks and the 15 marine weeks), the live
+  and marine references and every recorded run. The
+  [Space](https://huggingface.co/spaces/earakely-scale/PortSimEnv-AgentEnv) replays the runs in 3D.
 - **Results.** GPT-6.1 Sol and Claude Sonnet 5.5 on ten weeks planned in one go
   ([the comparison with upstream's eval](#the-comparison-with-the-published-eval)), on all 15 live weeks
   ([the first live results](#the-first-live-results)) and on the 15 marine weeks ([marine results](#marine-results)).
@@ -323,6 +325,11 @@ happened. The live port runs on the AgentEnv gateway: the gateway's virtual cloc
 deliver the news, and a per-role rule hides the tool they deliver it through. The `portsim` env and its tasks are
 unchanged.
 
+<p align="center">
+  <a href="https://github.com/earakely-scale/agentenv-portsim-plugin/releases/tag/replays-2026-10-07"><img src="assets/live-port.webp" width="100%" alt="GPT-6.1 Sol plays a live week at the Port of Barcelona on AgentEnv: the virtual clock runs, bulletins arrive, and the agent re-plans watch by watch on PortSimEnv's 3D quay"></a>
+</p>
+<p align="center"><sub><b>The live port (v2):</b> GPT-6.1 Sol runs the same week as it unfolds on AgentEnv's virtual clock, without pilots and tugs. A closure, an emergency, late ships, a crane outage, a gale and bunched arrivals come in as bulletins; it re-plans each watch and ends at the hindsight optimum (reward 1.0). <a href="https://github.com/earakely-scale/agentenv-portsim-plugin/releases/tag/replays-2026-10-07">Full films</a>. Twin © OpenStreetMap contributors (ODbL).</sub></p>
+
 ### How a live week runs
 
 - **Watches.** A week is played in watches: watch 0 at hour 0, then one per news bulletin, 2 to 9 watches in all.
@@ -550,10 +557,9 @@ ferries, cruise ships, tankers, car carriers and the container ships at other qu
 and the pilot station announce cuts to the pools, and a gale makes each movement take one more tug. The `portsim`
 and `portsim-live` envs and their tasks are unchanged.
 
-<p align="center">
-  <a href="https://github.com/earakely-scale/agentenv-portsim-plugin/releases/tag/replays-2026-10-08"><img src="assets/marine-port.webp" width="100%" alt="GPT-6.1 Sol plays a marine week: the tug company and the pilot station announce cuts, and the watch panel counts the pilots and tugs free for the quay's ships each hour"></a>
-</p>
-<p align="center"><sub><b>The marine port:</b> GPT-6.1 Sol plays the live port's film week with the port's pilots and tugs. On Tuesday 06:00 the tug company and the pilot station announce cuts from hour 54; at hour 54 it moves one ship with the last 2 free tugs, and it ends at the marine hindsight optimum (reward 1.0), where v2's naive re-plan is infeasible. <a href="https://github.com/earakely-scale/agentenv-portsim-plugin/releases/tag/replays-2026-10-08">Full film</a>. Twin © OpenStreetMap contributors (ODbL).</sub></p>
+The animation at the top of this page is a marine week: GPT-6.1 Sol plays the live port's film week with the port's
+pilots and tugs and ends at the marine hindsight optimum
+([full film](https://github.com/earakely-scale/agentenv-portsim-plugin/releases/tag/replays-2026-10-08)).
 
 GPT-6.1 Sol averages 0.905 on the 15 marine weeks and Claude Sonnet 5.5 0.932 on 14 of them, against 1.000 for the
 rolling re-planner and 0.187 for v2's naive policy, which knows nothing of pilots and tugs
@@ -721,7 +727,9 @@ the 15 weeks.
 *GPT-6.1 Sol plays the live week `dock-24B-w07x1-busy-0` (sweep `live-pilot-gpt`, reward 1.0), replayed on
 PortSimEnv's viewer. Port of Barcelona twin © OpenStreetMap contributors (ODbL) · terrain: Terrain Tiles (AWS).
 Task text CC BY-SA 4.0.* Full-length films of this week and of a v1 week are in the release
-[replays-2026-10-07](https://github.com/earakely-scale/agentenv-portsim-plugin/releases/tag/replays-2026-10-07).
+[replays-2026-10-07](https://github.com/earakely-scale/agentenv-portsim-plugin/releases/tag/replays-2026-10-07), and
+of the same week on the marine port in
+[replays-2026-10-08](https://github.com/earakely-scale/agentenv-portsim-plugin/releases/tag/replays-2026-10-08).
 
 Recorded runs replay on PortSimEnv's own viewer, by Adithya S Kolavi: the 3D twin of the quay, with ships, tugs and
 cranes acting out each plan, the dock chart, every plan the model checked, confirmed or submitted, the grade and the
@@ -752,8 +760,8 @@ agent-env portsim record --sweep live-pilot-gpt --model openai/gpt-6.1-sol --tas
   the panel reads "Advancing to watch N…"; when the clock gets there, the watch's bulletins arrive in the transcript,
   the panel and the chart. After the last step the week plays out. `--gif` also writes an 800 px GIF; the one above
   is a take with `--size 1280x720 --step-seconds 1 --hours-per-second 16`. `--layout scene` films the 3D quay alone,
-  with the watch panel over it; the animation at the top of this page is a take with `--layout scene --view quayside
-  --size 1024x576 --step-seconds 0.9 --hours-per-second 15`, encoded as WebP. It needs Chrome or Chromium and ffmpeg; a
+  with the watch panel over it; the animations on this page are takes with `--layout scene --view quayside`, encoded
+  as WebP, the live port's with `--size 1024x576 --step-seconds 0.9 --hours-per-second 15`. It needs Chrome or Chromium and ffmpeg; a
   minute of 1080p at 30 fps takes about 4 minutes to film.
 - First use downloads the 3D twin, 4.2 MB of OpenStreetMap data (ODbL 1.0) that isn't stored here, from
   PortSimEnv's public bucket into `~/.cache/agentenv-portsim/` (`$XDG_CACHE_HOME/agentenv-portsim/` if that is set),
