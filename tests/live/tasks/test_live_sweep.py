@@ -191,7 +191,7 @@ Sweeps: `live-pilot` (anthropic/claude-sonnet-5-5, openai/gpt-6.1-sol; 2 tasks, 
 Harness: portsim-llm. References: the rolling CP-SAT re-planner and the naive online policy, played on the same weeks \
 (data/live/references.jsonl).
 
-Spend: $5.90 known; 1 attempts with no spend recorded, $6.00 at the cap. Attempts: 6, retries: 1. Unscored runs: 1 of \
+Spend: $5.90 known; 1 attempt with no spend recorded, $6.00 at the cap. Attempts: 6, retries: 1. Unscored runs: 1 of \
 5.
 
 ## Per model

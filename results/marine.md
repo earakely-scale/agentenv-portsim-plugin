@@ -3,7 +3,7 @@
 Sweeps: `marine-pilot-sonnet` (anthropic/claude-sonnet-5-5; 2 tasks, k=1, episode cap $3.5); `marine-pilot-gpt` (openai/gpt-6.1-sol; 2 tasks, k=1, episode cap $1.5); `marine-sonnet` (anthropic/claude-sonnet-5-5; 13 tasks, k=1, episode cap $3.5); `marine-gpt` (openai/gpt-6.1-sol; 13 tasks, k=1, episode cap $1.5).
 Harness: portsim-llm. References: the rolling CP-SAT re-planner and the naive online policy, played on the same weeks with pilots and tugs (data/marine/references.jsonl).
 
-Spend: $8.32 known; 1 attempts with no spend recorded, $3.50 at the cap. Attempts: 33, retries: 3. Unscored runs: 1 of 30.
+Spend: $8.32 known; 1 attempt with no spend recorded, $3.50 at the cap. Attempts: 33, retries: 3. Unscored runs: 1 of 30.
 
 ## Per model
 

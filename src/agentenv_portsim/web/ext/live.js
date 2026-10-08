@@ -156,7 +156,6 @@ function gradeRows(gradeEl, ro) {
 export function renderLive(root, ro, task, { onStep, horizon }) {
   const { live } = ro;
   const steps = ro.steps.map((s, k) => ({ ...s, last: k === ro.steps.length - 1 }));
-  const last = live.watches.length - 1;
   const stepOf = new Map(steps.map((s, k) => [s.call_id, k]));
   const outputs = new Map(ro.messages.filter((m) => m.role === "tool").map((m) => [m.tool_call_id, m]));
   const callEls = new Map();
@@ -170,7 +169,7 @@ export function renderLive(root, ro, task, { onStep, horizon }) {
     if (!weeks.has(key)) weeks.set(key, step.task);
     return weeks.get(key);
   };
-  const watchLabel = (step) => `Watch ${step.watch}${step.last ? ` of ${last}` : ""}`;
+  const watchLabel = (step) => `Watch ${step.watch}${step.last ? " (the last)" : ""}`;
 
   root.innerHTML = "";
   let turn = 0;

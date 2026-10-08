@@ -39,7 +39,7 @@ function columns(live) {
     { k: "result", label: "Result", get: (e) => e.end_reason, html: resultHtml, sort: (e) => (e.submitted ? 1 : 0) + (e.feasible ? 1 : 0) + (optimal(e) ? 1 : 0) },
     { k: "cost", label: "Cost", get: (e) => (e.feasible ? e.cost : "–"), sort: (e) => (e.feasible ? e.cost : null), num: true },
     { k: "optimal_cost", label: "Optimum", get: (e) => e.optimal_cost, num: true, opt: true },
-    { k: "naive_cost", label: "Naive", get: (e) => e.naive_cost, num: true, opt: true },
+    { k: "naive_cost", label: "Naive", get: (e) => e.naive_cost ?? (live ? "infeasible" : null), sort: (e) => e.naive_cost, num: true, opt: true, title: "The naive policy's cost; infeasible when its plan breaks a rule" },
   ];
   if (live) {
     cols.push({ k: "rolling_cost", label: "Rolling", get: (e) => e.rolling_cost, num: true, opt: true, title: "Cost of the rolling CP-SAT re-planner on the same week" });
@@ -75,9 +75,10 @@ function showcase(groups) {
   const first = groups[0];
   if (!first) return null;
   const order = first.boards.map((b) => b.model);
-  return first.boards.flatMap((b) => b.eps).sort((a, b) =>
+  const best = first.boards.flatMap((b) => b.eps).sort((a, b) =>
     optimal(b) - optimal(a) || (b.watches || 0) - (a.watches || 0) || a.task_id.localeCompare(b.task_id)
     || order.indexOf(a.model) - order.indexOf(b.model))[0];
+  return best && { ...best, group: first };
 }
 
 export async function overviewPage({ app, setCrumbs, isCurrent, sortableTable }) {
@@ -95,7 +96,8 @@ export async function overviewPage({ app, setCrumbs, isCurrent, sortableTable })
       <ul class="ps-glossary muted small">
         <li><b>Week</b>: one task, a quay with its ships and what goes wrong; a v1 task can span up to three weeks (<code>x2</code>, <code>x3</code> in its id), a v2 or v3 week is always one. <b>Reward</b>: 1.0 for the optimum in hindsight, under 0.2 for a plan that breaks a rule, 0 for no plan.</li>
         <li><b>Watch</b> (v2, v3): watch 0 opens the week at hour 0, and a new watch starts at each news bulletin. The agent re-plans each watch; a window starting within 6 hours is frozen.</li>
-        <li><b>Optimum</b>, <b>rolling</b>, <b>naive</b>: the best plan CP-SAT finds in hindsight, a CP-SAT re-planner that only knows what has been announced, and a simple policy that pushes ships later (in v2, it keeps each confirmed window that still fits and moves the rest). <b>Regret</b>: cost above the optimum.</li>
+        <li><b>Pilots and tugs</b> (v3): a pilot is the local mariner who boards to guide a ship in or out, and tugs are the boats that push and pull it alongside. Each berthing and departure takes them in its hour, from 7 pilots and 8 tugs the quay shares with the port's other 2024 traffic; an hour our ships need more than are free is short, which breaks a rule. Sweeps named <code>…-pilot-…</code> are small first batches, not pilots.</li>
+        <li><b>Optimum</b>, <b>rolling</b>, <b>naive</b>: the best plan CP-SAT finds in hindsight, a CP-SAT re-planner that only knows what has been announced, and a simple policy that pushes ships later (in v2 and v3, it keeps each confirmed window that still fits and moves the rest, knowing nothing of pilots and tugs). <b>Regret</b>: cost above the optimum.</li>
       </ul>
       <p class="muted small">Port of Barcelona twin © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a> (ODbL) · terrain: Terrain Tiles (AWS) · tasks: Port de Barcelona open data, CC BY-SA 4.0.</p>
       <dl class="kv">${LINKS.map(([k, href, what]) => `<dt><a class="ext" href="${href}" target="_blank" rel="noopener">${k} ↗</a></dt><dd class="muted">${what}</dd>`).join("")}</dl>
@@ -117,6 +119,7 @@ export async function overviewPage({ app, setCrumbs, isCurrent, sortableTable })
       runs: own,
       boards: board(own.flatMap((r) => episodes.get(r.run).map((e) => ({ ...e, run: r.run })))),
       failed: own.flatMap((r) => r.failed),
+      weeks: new Set(own.flatMap((r) => episodes.get(r.run).map((e) => e.task_id))).size,
       caps: new Map(own.flatMap((r) => r.models.map((m) => [m, r.episode_cap_usd]))),
     };
   }).filter((g) => g.runs.length && g.boards.length);
@@ -125,8 +128,8 @@ export async function overviewPage({ app, setCrumbs, isCurrent, sortableTable })
   if (start) {
     const sec = app.querySelector(".ps-start");
     sec.hidden = false;
-    sec.innerHTML = `<b>Start here:</b> ${escapeHtml(nameOf(start.model))} plays the ${start.watches ? "live " : ""}week
-      <code>${escapeHtml(start.task_id)}</code>${start.watches ? ` over ${start.watches} watches` : ""} and scores
+    sec.innerHTML = `<b>Start here:</b> ${escapeHtml(nameOf(start.model))} plays the ${start.group.v} week
+      <code>${escapeHtml(start.task_id)}</code> (${escapeHtml(start.group.name)})${start.watches ? ` over ${start.watches} watches` : ""} and scores
       ${fmtNum(start.reward, 3)}. <a href="${runHref(start.run, start.model, start.task_id)}">▶ Replay it</a>`;
   }
 
@@ -134,7 +137,7 @@ export async function overviewPage({ app, setCrumbs, isCurrent, sortableTable })
     ? groups.map((g) => `<section class="ps-run">
         <div class="sec-head"><h2>${g.v} · ${escapeHtml(g.name)}</h2><span class="muted small">${escapeHtml(g.what)} · env ${escapeHtml(g.env)} · ${escapeHtml(capsText(g.caps))}</span></div>
         <table class="tbl click"><thead><tr><th>Model</th><th class="num">Weeks</th><th class="num">Mean reward</th><th class="num">${g.env !== "portsim" ? "Reached the end" : "Submitted"}</th><th class="num">Feasible</th><th class="num">Optimal</th></tr></thead>
-        <tbody>${g.boards.map((b) => `<tr data-row="${escapeHtml(b.model)}" data-env="${escapeHtml(g.env)}" title="List ${escapeHtml(nameOf(b.model))}'s weeks"><td><span title="${escapeHtml(b.model)}">${escapeHtml(nameOf(b.model))}</span></td><td class="num">${b.weeks}${b.n > b.weeks ? ` (${b.n} runs)` : ""}</td><td class="num"><b>${fmtNum(b.mean, 3)}</b></td><td class="num">${fmtPct(b.submitted)}</td><td class="num">${fmtPct(b.feasible)}</td><td class="num">${b.optimal}/${b.n}</td></tr>`).join("")}</tbody></table>
+        <tbody>${g.boards.map((b) => `<tr data-row="${escapeHtml(b.model)}" data-env="${escapeHtml(g.env)}" title="List ${escapeHtml(nameOf(b.model))}'s weeks"><td><span title="${escapeHtml(b.model)}">${escapeHtml(nameOf(b.model))}</span></td><td class="num">${b.weeks}${b.weeks < g.weeks ? ` of ${g.weeks}` : ""}${b.n > b.weeks ? ` (${b.n} runs)` : ""}</td><td class="num"><b>${fmtNum(b.mean, 3)}</b></td><td class="num">${fmtPct(b.submitted)}</td><td class="num">${fmtPct(b.feasible)}</td><td class="num">${b.optimal}/${b.n}</td></tr>`).join("")}</tbody></table>
         <p class="muted small">From the sweep${g.runs.length > 1 ? "s" : ""} ${g.runs.map((r) => `<code>${escapeHtml(r.run)}</code>`).join(", ")}.</p>
         ${g.failed.length ? `<ul class="viol">${g.failed.map((f) => `<li>${escapeHtml(nameOf(f.model))} on ${escapeHtml(f.task_id)} does not replay: ${escapeHtml(f.error)}</li>`).join("")}</ul>` : ""}
       </section>`).join("")
