@@ -9,7 +9,7 @@
 <p align="center">
   <a href="https://github.com/earakely-scale/agentenv-portsim-plugin/releases/tag/replays-2026-10-08"><img src="assets/marine-port.webp" width="100%" alt="GPT-6.1 Sol plays a marine week at the Port of Barcelona on AgentEnv: bulletins arrive on the virtual clock, the tug company and the pilot station announce cuts, and the watch panel counts the pilots and tugs free for the quay's ships each hour"></a>
 </p>
-<p align="center"><sub><b>The marine port (v3):</b> GPT-6.1 Sol runs a week at APM Terminals Barcelona as it unfolds on AgentEnv's virtual clock, with the port's pilots and tugs shared with the rest of its real 2024 traffic. A closure, an emergency, late ships, a crane outage, a gale and bunched arrivals come in as bulletins, and the tug company and the pilot station announce cuts from hour 54; it moves one ship with the last 2 free tugs, re-plans each watch and ends at the hindsight optimum (reward 1.0), where v2's naive re-plan is infeasible. Replayed on PortSimEnv's 3D viewer; <a href="https://github.com/earakely-scale/agentenv-portsim-plugin/releases/tag/replays-2026-10-08">full film</a>. Twin © OpenStreetMap contributors (ODbL).</sub></p>
+<p align="center"><sub><b>The marine port (v3):</b> GPT-6.1 Sol runs a week at APM Terminals Barcelona as it unfolds on AgentEnv's virtual clock, with the port's pilots and tugs shared with the rest of its real 2024 traffic. The week opens with a quay closure; an unscheduled call, an emergency, late ships, a crane outage, a gale and bunched arrivals come in as bulletins, and on Tuesday 06:00 the tug company and the pilot station announce 2 tugs and 2 pilots out from hour 54. At hour 54 it moves one ship with the last 2 free tugs; it re-plans each watch and ends at the hindsight optimum (reward 1.0), where v2's naive re-plan breaks the rules. Replayed on PortSimEnv's 3D viewer; <a href="https://github.com/earakely-scale/agentenv-portsim-plugin/releases/tag/replays-2026-10-08">full film</a>. Twin © OpenStreetMap contributors (ODbL).</sub></p>
 
 <details open>
 <summary><b>How a live or marine task is built</b>: the task's steps, and the watch loop inside <code>play</code> (details in <a href="#the-live-port">The live port</a> and <a href="#the-marine-port">The marine port</a>)</summary>
@@ -328,7 +328,7 @@ unchanged.
 <p align="center">
   <a href="https://github.com/earakely-scale/agentenv-portsim-plugin/releases/tag/replays-2026-10-07"><img src="assets/live-port.webp" width="100%" alt="GPT-6.1 Sol plays a live week at the Port of Barcelona on AgentEnv: the virtual clock runs, bulletins arrive, and the agent re-plans watch by watch on PortSimEnv's 3D quay"></a>
 </p>
-<p align="center"><sub><b>The live port (v2):</b> GPT-6.1 Sol runs the same week as it unfolds on AgentEnv's virtual clock, without pilots and tugs. A closure, an emergency, late ships, a crane outage, a gale and bunched arrivals come in as bulletins; it re-plans each watch and ends at the hindsight optimum (reward 1.0). <a href="https://github.com/earakely-scale/agentenv-portsim-plugin/releases/tag/replays-2026-10-07">Full films</a>. Twin © OpenStreetMap contributors (ODbL).</sub></p>
+<p align="center"><sub><b>The live port (v2):</b> GPT-6.1 Sol runs the same week as it unfolds on AgentEnv's virtual clock, without pilots and tugs. The week opens with a quay closure; an unscheduled call, an emergency, late ships, a crane outage, a gale and bunched arrivals come in as bulletins; it re-plans each watch and ends at the hindsight optimum (reward 1.0). <a href="https://github.com/earakely-scale/agentenv-portsim-plugin/releases/tag/replays-2026-10-07">Full films</a>. Twin © OpenStreetMap contributors (ODbL).</sub></p>
 
 ### How a live week runs
 
@@ -711,9 +711,10 @@ and `marine-*`, for $8.32 recorded ([`results/marine.md`](results/marine.md)):
   checking them; `check_plan` then reported `pilots short at hour 161: your ships need 2, 1 free`, but that was the
   watch's third planning call, and it advanced with the short hour in its plan. Without that week its mean is 0.957,
   its live-port mean.
-- Claude Sonnet 5.5's unscored week is `dock-36A-w10x1-standard-0`. On both attempts the model's second reply never
-  came: after one tool call, the request ran through the agent's 15-minute request timeout and its retries, and the
-  sweep was stopped there. These two attempts recorded no spend. GPT-6.1 Sol scored 1.0 on that week.
+- Claude Sonnet 5.5's unscored week is `dock-36A-w10x1-standard-0`. On the first attempt the model's second reply
+  never came: after one tool call, the request ran through the agent's 15-minute request timeout, and the run ended
+  after 904 s without a recorded instance or spend. The second attempt was stopped by hand with the sweep, after
+  217 s, before recording its spend, so the report counts it at its $3.50 cap. GPT-6.1 Sol scored 1.0 on that week.
 - Two other attempts lost the provider's stream in their first turn and passed on retry.
 
 On the same 14 weeks, Claude Sonnet 5.5 averaged 0.901 on the live port. With one run per week, neither model's change
@@ -790,8 +791,8 @@ heavy lifting; this repository adds PortSimEnv. Each piece maps to a framework c
 ## Repository layout
 
 ```
-src/agentenv_portsim/   the env (server.py), the agent-env portsim commands (cli.py), the eval and live tasks
-                        (tasks.py) and the sweep and its reports (sweep.py)
+src/agentenv_portsim/   the env (server.py), the agent-env portsim commands (cli.py), the eval, live and marine
+                        tasks (tasks.py) and the sweep and its reports (sweep.py)
                         the live env (live.py), the live week (world.py) and its reveal schedule (schedule.py)
                         the marine week, its pilots and tugs (marine.py)
                         the run records as the viewer reads them (episodes.py), view.py, record.py, and the
@@ -825,7 +826,7 @@ docker build -t agentenv-portsim-env .   # the env image, for this machine's pla
 .venv/bin/python -m agentenv_portsim.server   # on :18765, with the packs in data/
 ```
 
-Besides the env, agent, sweep, live and viewer tests, the tests hold `portsim` to upstream's env, without calling a
+Besides the env, agent, sweep, live, marine and viewer tests, the tests hold `portsim` to upstream's env, without calling a
 model:
 
 1. **Regrade.** The 202 plans submitted in upstream's published eval grade to their published reward, and every

@@ -235,10 +235,14 @@ def _money(row: dict, cap: float) -> str:
     return f"${row['cost_usd']:.4f}" if row["cost_usd"] is not None else f"no spend recorded, counted as ${cap:.2f}"
 
 
+def _attempts(n: int) -> str:
+    return f"{n} attempt{'' if n == 1 else 's'}"
+
+
 def _spend(rows: list[dict], cap: float) -> str:
     unknown = sum(r["cost_usd"] is None for r in rows)
     known = sum(r["cost_usd"] or 0.0 for r in rows)
-    return f"${known:.2f} spent" + (f", {unknown} attempts with no spend recorded (${unknown * cap:.2f} at the cap)"
+    return f"${known:.2f} spent" + (f", {_attempts(unknown)} with no spend recorded (${unknown * cap:.2f} at the cap)"
                                     if unknown else "")
 
 
@@ -410,7 +414,7 @@ class Pooled:
             "Sweeps: " + "; ".join(f"`{s.name}` ({', '.join(s.models)}; {len(s.tasks)} tasks, k={s.k}, episode cap "
                                    f"${s.episode_cap_usd:g})" for s in self.sweeps) + ".",
             harness, "",
-            f"Spend: ${known:.2f} known; {unknown} attempts with no spend recorded, ${at_cap:.2f} at the cap. "
+            f"Spend: ${known:.2f} known; {_attempts(unknown)} with no spend recorded, ${at_cap:.2f} at the cap. "
             f"Attempts: {attempts}, retries: {attempts - sum(bool(rs) for rs in self.runs.values())}. "
             f"Unscored runs: {unscored} of {len(self.runs)}.",
         ]
