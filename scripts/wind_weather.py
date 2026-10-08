@@ -355,7 +355,7 @@ def point(message: bytes, grid: str, init: datetime, step: int, param: str) -> f
 
 
 def fetch_step(bucket: Bucket, grid: str, init: datetime, step: int) -> dict | None:
-    """The step's two messages, None if the archive lacks the step, a param None if the step lacks it."""
+    """The step's two messages, None if the archive lacks the step or its GRIB file, a param None if the step lacks it."""
     k = key(grid, init, step)
     index = bucket.get(f"/{k}.index")
     if index is None:
@@ -373,7 +373,7 @@ def fetch_step(bucket: Bucket, grid: str, init: datetime, step: int) -> dict | N
         offset, length = found[param]
         got = bucket.get(f"/{k}.grib2", offset, length)
         if got is None:
-            raise Failure(f"{param}: HTTP 404 for a message the index lists")
+            return None
         body, modified = got
         out[param] = {"key": f"{k}.grib2", "offset": offset, "length": length,
                       "sha256": hashlib.sha256(body).hexdigest(), "last_modified": iso(modified),
