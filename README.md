@@ -310,7 +310,7 @@ happened. The live port runs on the AgentEnv gateway: the gateway's virtual cloc
 deliver the news, and a per-role rule hides the tool they deliver it through. The `portsim` env and its tasks are
 unchanged.
 
-No model has played the live weeks yet.
+GPT-6.1 Sol and Claude Sonnet 5.5 have played all 15 live weeks: see [The first live results](#the-first-live-results).
 
 ### How a live week runs
 
@@ -539,7 +539,14 @@ ferries, cruise ships, tankers, car carriers and the container ships at other qu
 and the pilot station announce cuts to the pools, and a gale makes each movement take one more tug. The `portsim`
 and `portsim-live` envs and their tasks are unchanged.
 
-No model has played the marine weeks yet.
+<p align="center">
+  <a href="https://github.com/earakely-scale/agentenv-portsim-plugin/releases/tag/replays-2026-10-08"><img src="assets/marine-port.webp" width="100%" alt="GPT-6.1 Sol plays a marine week: the tug company and the pilot station announce cuts, and the watch panel counts the pilots and tugs free for the quay's ships each hour"></a>
+</p>
+<p align="center"><sub><b>The marine port:</b> GPT-6.1 Sol plays the live port's film week with the port's pilots and tugs. On Tuesday 06:00 the tug company and the pilot station announce cuts from hour 54; at hour 54 it moves one ship with the last 2 free tugs, and it ends at the marine hindsight optimum (reward 1.0), where v2's naive re-plan is infeasible. <a href="https://github.com/earakely-scale/agentenv-portsim-plugin/releases/tag/replays-2026-10-08">Full film</a>. Twin © OpenStreetMap contributors (ODbL).</sub></p>
+
+GPT-6.1 Sol averages 0.905 on the 15 marine weeks and Claude Sonnet 5.5 0.932 on 14 of them, against 1.000 for the
+rolling re-planner and 0.187 for v2's naive policy, which knows nothing of pilots and tugs
+([Marine results](#marine-results)).
 
 ### The rules and their sources
 
@@ -674,7 +681,27 @@ PYTHONPATH=tests .venv/bin/python scripts/live_e2e.py --env portsim-marine --tas
 
 ### Marine results
 
-Results: to come, from the marine sweep (`sweep report --marine`, `results/marine.md`).
+GPT-6.1 Sol and Claude Sonnet 5.5 played the 15 marine weeks once each on local Docker, in sweeps `marine-pilot-*`
+and `marine-*`, for $8.32 recorded ([`results/marine.md`](results/marine.md)):
+
+| Model | Weeks scored | Mean reward (95% CI) | Rolling reference | Naive reference | Feasible | Optimal weeks | Median turns | Cost per episode |
+|---|---:|---|---:|---:|---:|---:|---:|---:|
+| GPT-6.1 Sol | 15 of 15 | 0.905 (0.790 to 0.977) | 1.000 | 0.187 | 14 of 15 | 7 | 14 | $0.08 |
+| Claude Sonnet 5.5 | 14 of 15 | 0.932 (0.886 to 0.971) | 1.000 | 0.187 | 14 of 14 | 5 | 11 | $0.45 |
+
+- Every scored run reached the end of its week and passed the validity audit, and none needed an excuse.
+- GPT-6.1 Sol's infeasible week is `dock-24B-w35x1-busy-0` (0.171). At its last watch it confirmed windows before
+  checking them; `check_plan` then reported `pilots short at hour 161: your ships need 2, 1 free`, but that was the
+  watch's third planning call, and it advanced with the short hour in its plan. Without that week its mean is 0.957,
+  its live-port mean.
+- Claude Sonnet 5.5's unscored week is `dock-36A-w10x1-standard-0`. On both attempts the model's second reply never
+  came: after one tool call, the request ran through the agent's 15-minute request timeout and its retries, and the
+  sweep was stopped there. These two attempts recorded no spend. GPT-6.1 Sol scored 1.0 on that week.
+- Two other attempts lost the provider's stream in their first turn and passed on retry.
+
+On the same 14 weeks, Claude Sonnet 5.5 averaged 0.901 on the live port. With one run per week, neither model's change
+from the live port is beyond noise. The naive policy, which knows nothing of pilots and tugs, is infeasible in 9 of
+the 15 weeks.
 
 ## Watch a run
 
