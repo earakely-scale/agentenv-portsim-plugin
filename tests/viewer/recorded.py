@@ -65,13 +65,14 @@ def _tool(week: Week, name: str, args: dict) -> str:
     return out
 
 
-def _episode(sweep: str, week: Week, ref: dict, model: str, policies: dict, out: Path) -> dict:
+def _episode(sweep: str, week: Week, ref: dict, model: str, policies: dict, out: Path,
+             rules: str = tasks.LIVE_RULES) -> dict:
     """Each watch: check and confirm the windows the policy changes, then advance. Writes the transcript under ``out``
     and returns the attempt's row, as a live sweep records them."""
     key, policy = policies[model]
     task = week.task
     record = {"model": model, "messages": [
-        {"role": "system", "content": tasks.live_rules(task)},
+        {"role": "system", "content": tasks.live_rules(task, rules)},
         {"role": "user", "content": tasks.LIVE_OPENING.format(situation=week.situation()["situation"])}],
         "steps": [], "final": {"submitted": False, "plan": None}, "reward": 0.0,
         "usage": {"input_tokens": 0, "output_tokens": 0}, "turns": 0, "end_reason": None, "errors": []}
@@ -137,7 +138,7 @@ def wind_fixture() -> tuple[TaskPack, dict[str, dict]]:
 
 def wind_run(root: Path, task_ids: tuple[str, ...] = (WIND_TASK,)) -> None:
     out, (pack, refs) = root / WIND_RUN, wind_fixture()
-    rows = [_episode(WIND_RUN, WindWeek(pack.get(t)), refs[t], model, WIND_POLICIES, out)
+    rows = [_episode(WIND_RUN, WindWeek(pack.get(t)), refs[t], model, WIND_POLICIES, out, tasks.WIND_RULES)
             for model in WIND_POLICIES for t in task_ids]
     _sweep(out, {"name": WIND_RUN, "models": list(WIND_POLICIES), "tasks": list(task_ids), "k": 1,
                  "episode_cap_usd": 5.0, "live": True, "wind": True}, rows)
