@@ -90,6 +90,17 @@ def test_the_board_ranks_models_by_their_mean_over_weeks_with_each_tier_and_port
     assert "At the anchor" in table[0] and table[2].startswith("| Kimi K3 | Fireworks | 2 of 2 | **0.750**")
 
 
+def test_the_summary_weighs_every_week_alike_and_leaves_out_a_model_missing_a_version():
+    played = [("v4", "a", 0.5, 15), ("v3", "a", 1.0, 15), ("v2", "a", 1.0, 30), ("v4", "b", 0.9, 15),
+              ("v3", "b", 0.9, 15), ("v2", "b", 0.9, 15), ("v4", "c", 1.0, 15), ("v1", "a", 0.0, 10)]
+    rows = [{"version": v, "model": m, "model_name": m.upper(), "provider": "P", "mean_reward": mean, "weeks": weeks,
+             "feasible": weeks} for v, m, mean, weeks in played]
+    head, _, first, second = hub.summary_markdown(rows).splitlines()
+    assert "v4, the wind port" in head and "All weeks" in head
+    assert first.startswith("| B | P | 0.900 | 0.900 | 0.900 | **0.900** | 45 of 45")
+    assert second.startswith("| A | P | 0.500 | 1.000 | 1.000 | **0.875** | 60 of 60")
+
+
 def test_the_card_carries_each_versions_board_between_its_markers():
     text = hub.card_text(PLUGIN, {"v4": "| Kimi K3 |"})
     assert "<!-- board:v4 -->\n\n| Kimi K3 |\n\n<!-- /board:v4 -->" in text

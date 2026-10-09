@@ -114,54 +114,55 @@ port (v4), the marine port (v3) and the live week (v2) are new here.
   from the dataset and `agent-env hf publish` publishes your own runs. The
   [Space](https://huggingface.co/spaces/earakely-scale/PortSimEnv-AgentEnv) replays the runs in 3D
   ([On the Hugging Face Hub](#on-the-hugging-face-hub)).
-- **Results.** Twelve models on the 15 wind weeks ([the model board](#the-model-board)), and GPT-6.1 Sol and Claude
-  Sonnet 5.5 on the 15 wind weeks ([wind results](#wind-results)), on the 15 marine weeks
+- **Results.** Twelve models on the 15 live, 15 marine and 15 wind weeks ([the model board](#the-model-board)), and
+  GPT-6.1 Sol and Claude Sonnet 5.5 first on the 15 wind weeks ([wind results](#wind-results)), on the 15 marine weeks
   ([marine results](#marine-results)), on all 15 live weeks
   ([the first live results](#the-first-live-results)) and on ten weeks planned in one go
   ([the comparison with upstream's eval](#the-comparison-with-the-published-eval)).
 
 ## The model board
 
-Twelve models play every wind week once, on the same harness (`portsim-llm`, [Play a model](#play-a-model)) with the
-same prompts, tools and limits, through Scale's LiteLLM proxy: Claude Opus, Sonnet and Haiku 5.5 on Anthropic's API;
-GPT-6 Astra, GPT-6.1 Sol and GPT-6 Luna on the Responses API, served by Azure OpenAI; Kimi K3, GLM-5.3, GLM-5.3-Flash,
-Qwen3.8-2.4T and DeepSeek V4.1 Flash on Fireworks; and Qwen3.8-27B on Groq, with Groq's limit of 16,384 output tokens
-a reply. Four of them are the open models of [upstream's eval](#the-comparison-with-the-published-eval), which ran them
-on other providers through the Hugging Face router; the same weights can score differently on another provider.
+Twelve models play every live, marine and wind week once, 540 runs, on the same harness (`portsim-llm`,
+[Play a model](#play-a-model)) with the same prompts, tools and limits, through Scale's LiteLLM proxy: Claude Opus,
+Sonnet and Haiku 5.5 on Anthropic's API; GPT-6 Astra, GPT-6.1 Sol and GPT-6 Luna on the Responses API, served by Azure
+OpenAI; Kimi K3, GLM-5.3, GLM-5.3-Flash, Qwen3.8-2.4T and DeepSeek V4.1 Flash on Fireworks; and Qwen3.8-27B on Groq,
+with Groq's limit of 16,384 output tokens a reply. Four of them are the open models of
+[upstream's eval](#the-comparison-with-the-published-eval), which ran them on other providers through the Hugging Face
+router; the same weights can score differently on another provider. Mean reward on each version and over all 45 weeks:
 
-**v4, the wind port** (15 weeks; on them the forecast-following re-planner scores 1.000, the blind one 0.237 and the
-naive policy 0.183):
+| Model | Provider | v4, the wind port | v3, the marine port | v2, the live port | All weeks | Feasible weeks |
+|---|---|---:|---:|---:|---:|---:|
+| GPT-6 Astra | Azure OpenAI | 0.896 | 0.956 | 0.984 | **0.945** | 44 of 45 |
+| Claude Opus 5.5 | Anthropic | 0.906 | 0.951 | 0.976 | **0.944** | 45 of 45 |
+| Claude Sonnet 5.5 | Anthropic | 0.888 | 0.932 | 0.904 | **0.908** | 45 of 45 |
+| GPT-6.1 Sol | Azure OpenAI | 0.745 | 0.905 | 0.957 | **0.869** | 41 of 45 |
+| Claude Haiku 5.5 | Anthropic | 0.583 | 0.639 | 0.694 | **0.639** | 44 of 45 |
+| Qwen3.8-2.4T | Fireworks | 0.662 | 0.519 | 0.686 | **0.622** | 28 of 45 |
+| DeepSeek V4.1 Flash | Fireworks | 0.480 | 0.598 | 0.754 | **0.611** | 28 of 45 |
+| GLM-5.3 | Fireworks | 0.468 | 0.593 | 0.748 | **0.603** | 28 of 45 |
+| GLM-5.3-Flash | Fireworks | 0.328 | 0.461 | 0.470 | **0.420** | 18 of 45 |
+| Kimi K3 | Fireworks | 0.249 | 0.446 | 0.465 | **0.386** | 18 of 45 |
+| GPT-6 Luna | Azure OpenAI | 0.320 | 0.287 | 0.335 | **0.314** | 36 of 45 |
+| Qwen3.8-27B | Groq | 0.090 | 0.073 | 0.055 | **0.073** | 0 of 45 |
 
-| Model | Provider | Weeks | Mean reward (95% CI) | Standard | Busy | Reached the end | Feasible | At the anchor | Median turns | Cost per episode |
-|---|---|---:|---|---:|---:|---:|---:|---:|---:|---:|
-| Claude Opus 5.5 | Anthropic | 15 of 15 | **0.906** (0.845 to 0.961) | 0.926 | 0.902 | 15 | 15 | 5 | 17 | $0.94 |
-| GPT-6 Astra | Azure OpenAI | 15 of 15 | **0.896** (0.780 to 0.979) | 0.923 | 0.889 | 15 | 14 | 9 | 25 | $0.95 |
-| Claude Sonnet 5.5 | Anthropic | 15 of 15 | **0.888** (0.807 to 0.953) | 0.802 | 0.909 | 15 | 15 | 3 | 17 | $0.80 |
-| GPT-6.1 Sol | Azure OpenAI | 15 of 15 | **0.745** (0.576 to 0.890) | 0.869 | 0.714 | 15 | 12 | 4 | 23 | $0.15 |
-| Qwen3.8-2.4T | Fireworks | 15 of 15 | **0.662** (0.460 to 0.837) | 0.926 | 0.596 | 14 | 10 | 5 | 30 | $1.30 |
-| Claude Haiku 5.5 | Anthropic | 15 of 15 | **0.583** (0.460 to 0.708) | 0.373 | 0.636 | 15 | 14 | 1 | 18 | $0.05 |
-| DeepSeek V4.1 Flash | Fireworks | 15 of 15 | **0.480** (0.256 to 0.701) | 0.903 | 0.374 | 10 | 7 | 3 | 22 | $0.24 |
-| GLM-5.3 | Fireworks | 15 of 15 | **0.468** (0.277 to 0.661) | 0.457 | 0.471 | 13 | 7 | 3 | 29 | $1.02 |
-| GLM-5.3-Flash | Fireworks | 15 of 15 | **0.328** (0.209 to 0.460) | 0.309 | 0.332 | 15 | 5 | 0 | 21 | $0.09 |
-| GPT-6 Luna | Azure OpenAI | 15 of 15 | **0.320** (0.220 to 0.455) | 0.261 | 0.335 | 15 | 13 | 0 | 32 | $0.03 |
-| Kimi K3 | Fireworks | 15 of 15 | **0.249** (0.159 to 0.374) | 0.457 | 0.197 | 15 | 5 | 0 | 23 | $1.34 |
-| Qwen3.8-27B | Groq | 15 of 15 | **0.090** (0.064 to 0.119) | 0.139 | 0.078 | 13 | 0 | 0 | 33 | $1.38 |
+- **GPT-6 Astra and Claude Opus 5.5 share the top,** within each other's CIs in every version; Claude Sonnet 5.5 is
+  level with them on the wind and marine weeks and below them on the live ones. Opus and Sonnet broke no rule in any
+  of their 45 weeks, Astra in one.
+- **The best open models score like a small closed one, but break far more rules.** Qwen3.8-2.4T, DeepSeek V4.1 Flash
+  and GLM-5.3 average within noise of Claude Haiku 5.5, but Haiku keeps 44 of its 45 weeks feasible and each of them
+  28. The rule breaks are overlapping berths, more cranes than the quay has, ships berthed before they arrive and ships
+  left without a window; a wind window is broken in 6 of the 180 wind runs.
+- **The wind port is the hardest:** eight of the twelve models score lower at each step from the live port to the
+  marine port to the wind port.
+- **Every model checks its drafts; not every model heeds the check.** Confirming windows straight after a check that
+  reported problems runs from at most 5% of the time (Claude Opus 5.5) to 94% or more (Qwen3.8-27B).
+- **Qwen3.8-27B,** the one model small enough to fine-tune cheaply, never found a valid plan.
 
-- Claude Opus 5.5, GPT-6 Astra and Claude Sonnet 5.5 lead within each other's CIs. Opus and Sonnet broke no rule in
-  any week, Astra one.
-- Qwen3.8-2.4T is the best open model, ahead of Claude Haiku 5.5. The other open models break a rule in 8 to 15 of
-  their weeks, mostly overlapping berths, more cranes than the quay has, or ships left unplanned; a wind window is
-  broken in 6 of the 180 runs.
-- What separates the models is less how often they check a draft than whether they heed the check: confirming
-  windows straight after a check that reported problems ranges from 2% of the time (Claude Opus 5.5) to 94%
-  (Qwen3.8-27B).
-- One run per model and week, so the CIs, a bootstrap over the weeks, are wide. The ten new models' wind weeks
-  recorded $137 of model spend; [results/wind.md](results/wind.md) counts every attempt.
-
-The board is on the Hub as the dataset's `results` table and as `results/v4.json` in the shape of PortSimEnv's
-article data, and every run, with its transcript, is in `v4_episodes` and replays in the
-[Space](https://huggingface.co/spaces/earakely-scale/PortSimEnv-AgentEnv). The marine and live weeks follow for the
-same twelve models.
+[results/board.md](results/board.md) has each version's table, what breaks, checking and heeding, cost, how it was run
+and the caveats. One run per model and week, so the CIs, a bootstrap over the weeks, are wide. The board is on the Hub
+as the dataset's `results` table and as `results/v2.json` to `results/v4.json`, in the shape of PortSimEnv's article
+data; every run, with its transcript, is in `v2_episodes` to `v4_episodes` and replays in the
+[Space](https://huggingface.co/spaces/earakely-scale/PortSimEnv-AgentEnv).
 
 ## Run it yourself
 
@@ -170,7 +171,7 @@ You need [Docker](https://docs.docker.com/get-docker/), running and usable witho
 
 ```bash
 uv tool install agentenv-framework \
-    --with "agentenv-portsim @ git+https://github.com/earakely-scale/agentenv-portsim-plugin@v0.4.2"
+    --with "agentenv-portsim @ git+https://github.com/earakely-scale/agentenv-portsim-plugin@v0.4.3"
 agent-env portsim setup              # build the env image for this machine; register the envs "portsim", "portsim-live", "portsim-marine" and "portsim-wind"
 agent-env run portsim --task smoke   # load a task, submit its optimal plan, grade it
 ```
@@ -187,7 +188,7 @@ runs on the Hugging Face router, with a token that can make calls to Inference P
 agent-env portsim setup --agent        # also builds and registers portsim-llm, the agent that plays the model
 export HF_TOKEN=hf_...                  # with "Make calls to Inference Providers", on an account with credits
 export LITELLM_BASE_URL=https://router.huggingface.co/v1 LITELLM_API_KEY=$HF_TOKEN
-agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.4.2 --task dock-36A-w06x1-standard-0-e07 \
+agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.4.3 --task dock-36A-w06x1-standard-0-e07 \
     --model zai-org/GLM-5.3-Flash:baseten   # the shortest wind week, 4 watches
 ```
 
@@ -1175,7 +1176,7 @@ PortSimEnv's 3D viewer; both are in one
 plugin depends on [agentenv-hf](https://github.com/earakely-scale/agentenv-hf-plugin), an agent-env plugin that
 publishes bundles and their runs as Hub datasets and runs bundles from them, so installing this plugin adds
 `agent-env hf run` and `agent-env hf publish`. Each release tags the dataset with the plugin's version; the commands
-below pin `v0.4.2`.
+below pin `v0.4.3`.
 
 ### The dataset
 
@@ -1184,8 +1185,8 @@ Two kinds of tables share it, all parquet, all in the split `eval`:
 | Version | PortSim's tables (rows) | agentenv-hf's tables (rows) | Bundle |
 |---|---|---|---|
 | v4, the wind port | `v4_tasks` (15), the default; `v4_episodes` (180); `v4_references` (15) | `dock-v1-eval-wind_tasks` (15), `dock-v1-eval-wind_episodes` (180) | `bundles/dock-v1-eval-wind` |
-| v3, the marine port | `v3_tasks` (15), `v3_episodes` (29), `v3_references` (18) | `dock-v1-eval-marine_tasks` (15), `dock-v1-eval-marine_episodes` (29) | `bundles/dock-v1-eval-marine` |
-| v2, the live port | `v2_tasks` (15), `v2_episodes` (30), `v2_references` (18) | `dock-v1-eval-live_tasks` (15), `dock-v1-eval-live_episodes` (30) | `bundles/dock-v1-eval-live` |
+| v3, the marine port | `v3_tasks` (15), `v3_episodes` (180), `v3_references` (18) | `dock-v1-eval-marine_tasks` (15), `dock-v1-eval-marine_episodes` (180) | `bundles/dock-v1-eval-marine` |
+| v2, the live port | `v2_tasks` (15), `v2_episodes` (180), `v2_references` (18) | `dock-v1-eval-live_tasks` (15), `dock-v1-eval-live_episodes` (180) | `bundles/dock-v1-eval-live` |
 | v1 | `v1_tasks` (50), `v1_episodes` (20) | `dock-v1-eval_tasks` (50), `dock-v1-eval_episodes` (20) | `bundles/dock-v1-eval` |
 
 - **PortSim's tables** carry what this README describes. A task row holds the system prompt and the situation
@@ -1220,12 +1221,12 @@ string, GPT-6.1 Sol a list). PortSim's other columns that hold JSON (`watches`, 
 import json
 from datasets import load_dataset
 
-weeks = load_dataset("earakely-scale/PortSimEnv-AgentEnv", "v4_tasks", split="eval", revision="v0.4.2")
+weeks = load_dataset("earakely-scale/PortSimEnv-AgentEnv", "v4_tasks", split="eval", revision="v0.4.3")
 print(weeks[0]["situation"])                        # what the agent gets at hour 0
 for watch in json.loads(weeks[0]["watches"]):       # what arrives later, Port Control's forecast included
     print(watch["hour"], [n["from"] for n in watch["notices"]])
 
-runs = load_dataset("earakely-scale/PortSimEnv-AgentEnv", "v4_episodes", split="eval", revision="v0.4.2")
+runs = load_dataset("earakely-scale/PortSimEnv-AgentEnv", "v4_episodes", split="eval", revision="v0.4.3")
 print(runs[0]["reward"], len(runs[0]["messages"]))  # the grade, and the transcript as chat messages
 ```
 
@@ -1239,7 +1240,7 @@ which part carries which terms, as does this README's [Licence and credits](#lic
 
 ### The Space
 
-The Space serves `agent-env portsim view` ([Watch a run](#watch-a-run)) from the plugin's `v0.4.2` tag over the
+The Space serves `agent-env portsim view` ([Watch a run](#watch-a-run)) from the plugin's `v0.4.3` tag over the
 dataset's `runs/`, which it downloads when it starts: every recorded run of the four versions, replayed from its
 records, with no model called. A link opens one run, such as
 [GPT-6.1 Sol's wind film week](https://earakely-scale-portsimenv-agentenv.hf.space/viewer/#/run/wind-pilot-gpt/openai%2Fgpt-6.1-sol/dock-24B-w37x1-standard-0-e01).
@@ -1247,9 +1248,9 @@ records, with no model called. A link opens one run, such as
 ### Run a bundle from the Hub
 
 ```bash
-agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.4.2 --task dock-36A-w06x1-standard-0-e07 \
+agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.4.3 --task dock-36A-w06x1-standard-0-e07 \
     --model zai-org/GLM-5.3-Flash:baseten          # the default bundle: dock-v1-eval-wind (v4)
-agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.4.2 --bundle dock-v1-eval-marine \
+agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.4.3 --bundle dock-v1-eval-marine \
     --task dock-24B-w07x1-busy-0 --model zai-org/GLM-5.3-Flash:baseten   # v3; dock-v1-eval-live is v2, dock-v1-eval v1
 ```
 
@@ -1257,7 +1258,7 @@ agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.4.2 --bundle dock-v1-eval
   `~/.cache/agentenv-hf/earakely-scale/PortSimEnv-AgentEnv/<commit>`. Without `--bundle` it runs the card's default,
   `dock-v1-eval-wind`.
 - The card's `agentenv` table names what each bundle needs: the plugin,
-  `agentenv-portsim @ git+https://github.com/earakely-scale/agentenv-portsim-plugin@v0.4.2`, and the setup command,
+  `agentenv-portsim @ git+https://github.com/earakely-scale/agentenv-portsim-plugin@v0.4.3`, and the setup command,
   `agent-env portsim setup --agent`. `hf run` checks that the plugin is installed and, if it isn't, stops with the
   `agent-env plugin add` command; it never installs or runs anything the card names. It checks the plugin by name,
   not by version, so an older install passes and has to be upgraded to this release first. If an env or the agent

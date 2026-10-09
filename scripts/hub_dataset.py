@@ -15,7 +15,7 @@ agentenv-hf's check for keys and token shapes before anything is written, and --
 on top of the commit it read, removing what the build no longer writes.
 
     uv run python scripts/hub_dataset.py --out build/hub/dataset
-    uv run python scripts/hub_dataset.py --out build/hub/dataset --repo earakely-scale/PortSimEnv-AgentEnv --tag v0.4.2
+    uv run python scripts/hub_dataset.py --out build/hub/dataset --repo earakely-scale/PortSimEnv-AgentEnv --tag v0.4.3
 """
 
 import argparse
@@ -47,7 +47,7 @@ WEATHER = ROOT / "data/wind/weather.jsonl"
 SPLIT = "eval"
 BOARD = ["gpt", "sonnet", "opus", "haiku", "astra", "luna", "kimi", "glm", "glmflash", "qwen2t", "qwen27b", "dsflash"]
 SWEEPS = [f"{env}-{stage}{model}{replay}" for env in ("wind", "marine", "live") for model in BOARD
-          for stage in ("pilot-", "") for replay in ("", "-2")]  # -2: replays of runs that used up their attempts
+          for stage in ("pilot-", "") for replay in ("", "-2", "-3")]  # replays of runs left unscored
 SWEEPS.append("g2")
 BUNDLES = {"v4": f"{EVAL_PACK}-wind", "v3": f"{EVAL_PACK}-marine", "v2": f"{EVAL_PACK}-live", "v1": EVAL_PACK}
 REFERENCE_FILES = {"v4": ("wind", wind.REFERENCES), "v3": ("marine", marine.REFERENCES),
@@ -63,7 +63,9 @@ NAMES = {
     "fireworks_ai/deepseek-v4p1-flash": "DeepSeek V4.1 Flash",
 }
 PROVIDERS = {"anthropic": "Anthropic", "openai": "Azure OpenAI", "fireworks_ai": "Fireworks", "groq": "Groq"}
-BOARD_TABLE = re.compile(r"(<!-- board:(v\d) -->\n).*?(\n<!-- /board:\2 -->)", re.S)
+BOARD_TABLE = re.compile(r"(<!-- board:(v\d|all) -->\n).*?(\n<!-- /board:\2 -->)", re.S)
+LIVE_VERSIONS = ("v4", "v3", "v2")
+VERSION_NAMES = {"v4": "the wind port", "v3": "the marine port", "v2": "the live port"}
 MESSAGES = pa.field("messages", pa.list_(tables.MESSAGE))
 
 
@@ -230,6 +232,29 @@ def board_markdown(version: str, rows: list[dict], weeks: int) -> str:
     return "\n".join(lines)
 
 
+def summary_markdown(rows: list[dict]) -> str:
+    """Each model on every live version: its mean on each and over all their weeks, each week weighing the same, best
+    first; only models that played all of them."""
+    by: dict[str, dict[str, dict]] = {}
+    for r in rows:
+        if r["version"] in LIVE_VERSIONS:
+            by.setdefault(r["model"], {})[r["version"]] = r
+    full = {m: v for m, v in by.items() if set(v) == set(LIVE_VERSIONS)}
+
+    def mean(v: dict) -> float:
+        return sum(r["mean_reward"] * r["weeks"] for r in v.values()) / sum(r["weeks"] for r in v.values())
+
+    lines = ["| Model | Provider | " + " | ".join(f"{v}, {VERSION_NAMES[v]}" for v in LIVE_VERSIONS)
+             + " | All weeks | Feasible weeks |", "|---|---|" + "---:|" * (len(LIVE_VERSIONS) + 2)]
+    for v in sorted(full.values(), key=lambda v: -mean(v)):
+        first = v[LIVE_VERSIONS[0]]
+        lines.append(" | ".join([
+            f"| {first['model_name']}", first["provider"], *(f"{v[x]['mean_reward']:.3f}" for x in LIVE_VERSIONS),
+            f"**{mean(v):.3f}**",
+            f"{sum(r['feasible'] for r in v.values())} of {sum(r['weeks'] for r in v.values())}"]) + " |")
+    return "\n".join(lines)
+
+
 def raw_lines(pack_dir: Path) -> dict[str, str]:
     return {json.loads(line)["task_id"]: line for line in (pack_dir / "tasks.jsonl").read_text().splitlines()}
 
@@ -316,6 +341,7 @@ def build(sweeps: list[str], runs_dir: Path, out: Path, plugin: str) -> dict[str
                 if path.is_file() and rel.parts[0] not in ("logs", "bundle"):
                     files[f"runs/{d.name}/{rel.as_posix()}"] = path.read_bytes()
     files["results/board.parquet"] = table_bytes(board_rows)
+    boards["all"] = summary_markdown(board_rows)
     return files | {"README.md": card_text(plugin, boards).encode()}
 
 
@@ -350,7 +376,7 @@ def main():
     ap.add_argument("--plugin-ref", default=f"v{VERSION}",
                     help="The plugin tag the card's bundles pin, for agent-env hf run.")
     ap.add_argument("--repo", help="Push the folder to this dataset repo after writing it.")
-    ap.add_argument("--tag", help="Tag the pushed commit, e.g. v0.4.2.")
+    ap.add_argument("--tag", help="Tag the pushed commit, e.g. v0.4.3.")
     ap.add_argument("--message", default="Publish PortSimEnv on AgentEnv")
     args = ap.parse_args()
     plugin = f"agentenv-portsim @ git+https://github.com/earakely-scale/agentenv-portsim-plugin@{args.plugin_ref}"

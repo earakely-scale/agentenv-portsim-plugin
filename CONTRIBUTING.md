@@ -138,10 +138,10 @@ is its card, and `hub/space/` is the Space (README, [On the Hugging Face Hub](RE
 The script needs:
 
 - **The recorded sweeps** under `results/runs`: by default every sweep in `SWEEPS` that has been run, the model
-  board's `<env>-[pilot-]<model>[-2]` sweeps for the wind, marine and live weeks and `g2`; name others on the command
-  line. It also needs the agent-env store they wrote their runs to, from which agentenv-hf reads each run's record and
-  trajectory. Neither is in git: `results/runs/` is ignored, and the store is agent-env's
-  (`~/.local/state/agent-env` by default).
+  board's `<env>-[pilot-]<model>[-2|-3]` sweeps for the wind, marine and live weeks (`-2` and `-3` replay runs left
+  unscored) and `g2`; name others on the command line. It also needs the agent-env store they wrote their runs to,
+  from which agentenv-hf reads each run's record and trajectory. Neither is in git: `results/runs/` is ignored, and
+  the store is agent-env's (`~/.local/state/agent-env` by default).
 - **A model on the board** needs its price in the agent's `PRICES`, its name in `NAMES` in `scripts/hub_dataset.py`
   and in `web/ext/overview.js`, and its slug in `BOARD`.
 - **An `hf` login with write access** to the dataset and the Space: `hf auth login` (or
@@ -163,8 +163,8 @@ A release goes in this order:
 
    ```bash
    uv run python scripts/hub_dataset.py --out build/hub/dataset
-   uv run python scripts/hub_dataset.py --out build/hub/dataset --repo earakely-scale/PortSimEnv-AgentEnv --tag v0.4.2 \
-       --message "v0.4.2: ..."
+   uv run python scripts/hub_dataset.py --out build/hub/dataset --repo earakely-scale/PortSimEnv-AgentEnv --tag v0.4.3 \
+       --message "v0.4.3: ..."
    ```
 
    The first writes the folder and prints each table's row count. Every file goes through agentenv-hf's scan for this
