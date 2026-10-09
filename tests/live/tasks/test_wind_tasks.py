@@ -73,7 +73,7 @@ WATCHES = [(1, ["extra-0", "tug_outage-7", "pilot_shortage-8", "forecast-10"]), 
 
 def wind_steps(task_id: str, episode_cap_usd: float = 5.0) -> list[dict]:
     return tasks.live_steps(PACK.get(task_id), episode_cap_usd, env="portsim-wind", week=WindWeek,
-                            rules=tasks.WIND_RULES)
+                            rules=tasks.WIND_RULES, max_turns=52)
 
 
 def marine_steps(task_id: str) -> list[dict]:
@@ -139,7 +139,7 @@ def test_the_wind_opening_ends_with_the_wind_and_the_rules_are_the_wind_rules():
     assert "MAERSK NUBA" not in play["prompt"] and "Tug company" not in play["prompt"]
     assert play["system_prompt"] == rules(task, 3).split("\n\nTools:\n")[0] + "\n\n" + WIND_RULES
     assert tasks.WIND_RULES == WIND_RULES and tasks.live_rules(task, tasks.WIND_RULES) == play["system_prompt"]
-    assert play["max_turns"] == 47
+    assert play["max_turns"] == 52 == 5 * 10 + 2
 
 
 def test_the_wind_rules_are_the_live_rules_with_two_sentences_changed():

@@ -95,7 +95,8 @@ def test_a_wind_sweep_plays_the_wind_bundle_and_records_live_rows(fake):
     assert (out / "bundle/README.md").read_text().startswith("PortSim wind dock-v1-eval: 1 weeks, each played in "
                                                              "watches by the portsim-llm agent on portsim-wind")
     assert json.loads((out / f"bundle/tasks/{STORM_TASK}.json").read_text()) == tasks.live_steps(
-        wind.pack().get(STORM_TASK), 5.0, env="portsim-wind", week=wind.WindWeek, rules=tasks.WIND_RULES)
+        wind.pack().get(STORM_TASK), 5.0, env="portsim-wind", week=wind.WindWeek, rules=tasks.WIND_RULES,
+        max_turns=52)
     calls = [json.loads(line) for line in (fake / "calls.jsonl").read_text().splitlines()]
     assert calls == [["run", str((out / "bundle").absolute()), "--task", STORM_TASK, "--dry-run"],
                      ["run", str((out / "bundle").absolute()), "--task", STORM_TASK, "--model", SONNET]]

@@ -28,6 +28,7 @@ PUBLISHED_HOURS = 9
 WARNING_HOURS = range(12, 168, 12)
 WARNING_SPAN = 36
 HOURLY = ("no_move", "moves", "pilots", "tugs")
+SHARED = ("moves", "pilots", "tugs")
 
 
 def pack_dir() -> Path:
@@ -218,25 +219,41 @@ class WindWeek(MarineWeek):
         """Each ship is excused the (ship, rule) problems and the cost that the target (the week as known, the truth
         once done) adds over the week as known at its last watch before it froze, the whole plan evaluated on both;
         a ship never frozen compares with the last watch reached. An hourly rule is charged only at an hour it broke
-        then, so a warning that never blew doesn't stand for wind no forecast showed."""
+        then, so a warning that never blew doesn't stand for wind no forecast showed. A problem ships share, an
+        overlap or a pool short at an hour, is judged for each as the ship decided last saw it: that decision put
+        them together, on the latest news."""
         now = {r.ship: r for r in self.evaluate(self.task if self.done else self.view, self.plan).ships}
         first: dict[int, int] = {}
         for k, f in enumerate(self.frozen):
             for s in f["ships"]:
                 first.setdefault(s, k)
-        groups: dict[int, list[int]] = defaultdict(list)
-        for s in self.plan:
-            groups[first[s] - 1 if s in first else self.watch].append(s)
-        problems, cost = set(), {}
-        for j, ships in sorted(groups.items()):
+        decided = {s: first[s] - 1 if s in first else self.watch for s in self.plan}
+        seen: dict[int, set[tuple[str, int | None]]] = {}
+        cost = {}
+        for j in sorted(set(decided.values())):
             view = known(self.task, [e["event_id"] for e in self.log if e["watch"] <= j])
             before = {r.ship: r for r in self.evaluate(view, self.plan).ships}
-            for s in ships:
-                seen = {_key(p) for p in before[s].problems}
-                charged = {world.rule(p) for p in now[s].problems if _key(p) in seen}
-                problems |= {(s, world.rule(p)) for p in now[s].problems if world.rule(p) not in charged}
+            for s in (s for s in self.plan if decided[s] == j):
+                seen[s] = {_key(p) for p in before[s].problems}
                 if now[s].cost > before[s].cost:
                     cost[s] = now[s].cost - before[s].cost
+        sharing: dict[tuple[str, int | None], list[int]] = defaultdict(list)
+        for s in self.plan:
+            for p in now[s].problems:
+                if _key(p)[0] in SHARED:
+                    sharing[_key(p)].append(s)
+
+        def was_seen(s: int, key: tuple[str, int | None]) -> bool:
+            rule, _ = key
+            if rule.startswith("ship "):
+                other = int(rule.split()[1])
+                return key in seen[s] if decided[s] >= decided[other] else (f"ship {s}", None) in seen[other]
+            return key in seen[max(sharing[key], key=decided.__getitem__) if rule in SHARED else s]
+
+        problems = set()
+        for s in self.plan:
+            charged = {world.rule(p) for p in now[s].problems if was_seen(s, _key(p))}
+            problems |= {(s, world.rule(p)) for p in now[s].problems if world.rule(p) not in charged}
         return problems, cost
 
 

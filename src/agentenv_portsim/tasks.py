@@ -23,6 +23,7 @@ from .schedule import (
     NOTICE_TOOL,
     PLANNING_CALLS,
     WIND_ENV,
+    WIND_MAX_TURNS,
     schedule,
     triggers,
 )
@@ -116,7 +117,7 @@ def live_rules(task: Task, rules: str = LIVE_RULES) -> str:
 
 
 def live_steps(task: Task, episode_cap_usd: float, hf_bill_to: str | None = None, *, env: str = LIVE_ENV,
-               week: type[Week] = Week, rules: str = LIVE_RULES) -> list[dict]:
+               week: type[Week] = Week, rules: str = LIVE_RULES, max_turns: int = MAX_TURNS) -> list[dict]:
     watches = schedule(task)
     return [
         {"id": "deploy", "type": "deploy_env", "env_id": env},
@@ -131,7 +132,7 @@ def live_steps(task: Task, episode_cap_usd: float, hf_bill_to: str | None = None
         {"id": "clock", "type": "sync_env_clock", "env_id": env, "virtual_time": task.week_start_utc,
          "virtual_seconds_per_real_second": 0, "tolerate_missing_sync_time": False},
         {"id": "play", "type": "prompt_agent", "prompt_id": task.task_id, "system_prompt": live_rules(task, rules),
-         "prompt": LIVE_OPENING.format(situation=week(task).situation()["situation"]), "max_turns": MAX_TURNS,
+         "prompt": LIVE_OPENING.format(situation=week(task).situation()["situation"]), "max_turns": max_turns,
          "model_params": {"max_tokens": 32000}, "timeout_seconds": 7200},
         {"id": "end-week", "type": "apply_server_config", "env_id": env,
          "directives": [{"service": env, "uri": END_WEEK_URI, "args": {}}]},
@@ -186,7 +187,8 @@ def generate(pack: str, out: Path, *, task_ids: list[str] | None = None, episode
         _write(out / "artifacts/portsim-verifier/verify.py", VERIFIER.read_bytes())
     for task in chosen:
         if wind:
-            task_steps = live_steps(task, episode_cap_usd, hf_bill_to, env=WIND_ENV, week=WindWeek, rules=WIND_RULES)
+            task_steps = live_steps(task, episode_cap_usd, hf_bill_to, env=WIND_ENV, week=WindWeek, rules=WIND_RULES,
+                                    max_turns=WIND_MAX_TURNS)
         elif marine:
             task_steps = live_steps(task, episode_cap_usd, hf_bill_to, env=MARINE_ENV, week=marine_weeks.MarineWeek)
         else:

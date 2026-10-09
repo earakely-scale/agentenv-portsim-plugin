@@ -155,7 +155,7 @@ def test_the_clauses_decide_the_pair(ref, task, weather):
     assert clauses == {
         "a": sum(c["cost"] is not None and c["cost"] <= ref["hindsight_cost"] for c in ref["configs"]) >= 3,
         "b": sum(c["reward"] is not None and c["reward"] <= 0.9 for c in other) >= 3,
-        "c": len(ref["watch_hours"]) <= 9,
+        "c": len(ref["watch_hours"]) <= 10,
         "d": not any(w["start"] <= b.end < w["end"] for b in task.blocks if b.kind == "alongside"
                      for w in task.rules["no_moves"] if w["min_length"] == 0)}
     assert ref["qualifies"] is all(clauses.values())

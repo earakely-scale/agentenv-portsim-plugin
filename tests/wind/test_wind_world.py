@@ -13,7 +13,7 @@ from wind_fixtures import BUST_TASK, DATA, PACK_DIR, REFERENCES, STORM_TASK, WEA
 
 from agentenv_portsim import marine, wind, world
 from agentenv_portsim.marine import MarineWeek
-from agentenv_portsim.schedule import FREEZE_HOURS, LEADS, MAX_TURNS, ONE_WEEK, SPEAKERS, schedule
+from agentenv_portsim.schedule import FREEZE_HOURS, LEADS, MAX_TURNS, ONE_WEEK, SPEAKERS, WIND_MAX_TURNS, schedule
 from agentenv_portsim.wind import WindWeek
 
 V3 = marine.pack()
@@ -41,7 +41,7 @@ def to_watch(week: world.Week, k: int) -> None:
 
 def test_the_forecast_party_is_port_control_with_the_freeze_lines_lead():
     assert (SPEAKERS["forecast"], LEADS["forecast"]) == ("Barcelona Port Control", FREEZE_HOURS)
-    assert MAX_TURNS == 47
+    assert (MAX_TURNS, WIND_MAX_TURNS) == (47, 52)
     assert (world.Week.notice_excuse, MarineWeek.notice_excuse, WindWeek.notice_excuse) == (True, True, False)
 
 

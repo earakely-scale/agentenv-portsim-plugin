@@ -101,7 +101,7 @@ def test_ships_frozen_at_different_watches_held_to_the_same_hour_are_excused_the
     assert w.excuses()[1] == {3: 24, 16: 25}
 
 
-def test_a_ship_held_into_a_later_frozen_one_is_excused_unless_the_later_one_was_warned():
+def test_a_ship_held_into_a_later_frozen_one_is_excused_for_both_unless_the_later_one_was_warned():
     unforecast = week(STANDARD, range(57, 63))
     assert (froze(unforecast, 3), froze(unforecast, 5), froze(unforecast, 6)) == (1, 2, 2)
     overlaps = [(3, "overlaps ship 5 (NIKOLAS) in sections 21-25 during hours 62-63"),
@@ -111,8 +111,24 @@ def test_a_ship_held_into_a_later_frozen_one_is_excused_unless_the_later_one_was
     held = (7, "berths at hour 58, inside the no-movement window 57-63")
     assert unforecast.grade["feasible"] and problems(unforecast.grade["excused"]) == overlaps + [held]
     warned = week(STANDARD, range(57, 63), episodes=lambda init: [(58, 62, 28)] if init >= 30 else [])
-    assert problems(warned.grade["excused"]) == overlaps[:2]
-    assert problems(warned.grade["violations"]) == overlaps[2:] + [held]
+    assert problems(warned.grade["excused"]) == []
+    assert problems(warned.grade["violations"]) == overlaps + [held]
+
+
+def test_an_overlap_is_judged_as_the_ship_decided_last_saw_it():
+    """CMA CGM ADONIS froze on runs that held it alongside to hour 96, into ASIAN MOON's berth at 92; ASIAN MOON was
+    decided later, on runs that ended the blow at 89. It blew to 95: the overlap is excused for both."""
+    w = week(APRIL, (), range(89, 95), lambda init: [(89, 95, 34)] if init <= 36 else [(89, 89, 34)])
+    assert (froze(w, 11), froze(w, 14)) == (3, 4)
+    for k, seen in ((2, True), (3, False)):
+        view = wind.known(w.task, [e["event_id"] for e in w.log if e["watch"] <= k])
+        assert any(p.startswith("overlaps ship 14 ") for r in w.evaluate(view, w.plan).ships if r.ship == 11
+                   for p in r.problems) == seen
+    assert w.grade["feasible"] and w.grade["reward"] == 1.0 and problems(w.grade["excused"]) == [
+        (11, "overlaps ship 14 (ASIAN MOON) in sections 2-5 during hours 92-95"),
+        (13, "berths at hour 91, inside the no-movement window 89-95"),
+        (14, "berths at hour 92, inside the no-movement window 89-95"),
+        (14, "overlaps ship 11 (CMA CGM ADONIS) in sections 2-5 during hours 92-95")]
 
 
 def test_a_tug_hour_shared_by_ships_frozen_at_different_watches_is_excused_for_both():

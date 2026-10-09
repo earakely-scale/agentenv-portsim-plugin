@@ -28,6 +28,8 @@ BARRIER_SECONDS = 60
 MAX_TURNS = TURNS_PER_WATCH * 9 + 2
 """Every week gets the turns of the longest (9 watches), so the turns-left note doesn't reveal how many
 bulletins are coming."""
+WIND_MAX_TURNS = TURNS_PER_WATCH * 10 + 2
+"""Every wind week gets the turns of the longest wind week (10 watches), for the same reason."""
 LEADS = {"late": 24, "bunching": 24, "extra": 24, "priority": 24, "emergency": 12, "crane_outage": 24, "gale": 24,
          "tug_outage": 24, "pilot_shortage": 24, "forecast": FREEZE_HOURS}
 SPEAKERS = {"bunching": "Ship agents", "gale": "Harbour master", "emergency": "Harbour master",
