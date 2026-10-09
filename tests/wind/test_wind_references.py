@@ -85,7 +85,7 @@ def test_the_data_pack_is_its_references_in_schedule_order_and_every_week_qualif
     pairs = [(r["schedule"], r["weather"]) for r in REAL_REFS]
     assert [t.task_id for t in TaskPack(REAL_DIR).tasks] == [r["task_id"] for r in REAL_REFS] == wind.task_ids()
     assert pairs == sorted(pairs, key=lambda p: (ids.index(p[0]), p[1])) and len(set(pairs)) == 15
-    assert all(r["qualifies"] for r in REAL_REFS) and {r["kind"] for r in REAL_REFS} == {"storm"}
+    assert all(r["qualifies"] for r in REAL_REFS) and {r["kind"] for r in REAL_REFS} == {"storm", "bust"}
 
 
 @pytest.mark.parametrize(("pack_dir", "refs", "weather", "summary", "deal"), [
@@ -93,8 +93,8 @@ def test_the_data_pack_is_its_references_in_schedule_order_and_every_week_qualif
                                            "quays": {"24B": 2, "36A": 1}},
                  {"screened": 4, "qualifying": 2, "dealt": 3, "gate": 12}, id="fixture"),
     pytest.param(REAL_DIR, REAL_REFS, DATA / "wind/weather.jsonl", {
-        "tasks": 15, "tiers": {"busy": 11, "standard": 4}, "weeks": [5, 6, 7, 10, 17, 35, 37],
-        "quays": {"24B": 4, "36A": 11}}, {"screened": 240, "qualifying": 21, "dealt": 15, "gate": 12}, id="data")])
+        "tasks": 15, "tiers": {"busy": 12, "standard": 3}, "weeks": [5, 6, 7, 16, 17, 35, 37],
+        "quays": {"24B": 7, "36A": 8}}, {"screened": 240, "qualifying": 26, "dealt": 15, "gate": 12}, id="data")])
 def test_the_manifest(pack_dir, refs, weather, summary, deal):
     manifest = json.loads((pack_dir / "manifest.json").read_text())
     body = (pack_dir / "tasks.jsonl").read_bytes()

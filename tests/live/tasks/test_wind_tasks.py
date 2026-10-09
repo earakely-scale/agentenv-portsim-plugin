@@ -28,13 +28,13 @@ BUNDLE = files("agentenv_portsim.bundles") / "portsim-wind"
 LIVE_BUNDLE = files("agentenv_portsim.bundles") / "portsim-live"
 PACK = wind.pack()
 REFS = {r["task_id"]: r for r in wind.references()}
-TASK_ID = "dock-24B-w07x1-busy-0-e12"
+TASK_ID = "dock-24B-w07x1-busy-0-e04"
 WEEK = "dock-24B-w06x1-busy-0-e15"
-QUALIFYING = ["dock-24B-w06x1-busy-0-e15", "dock-24B-w07x1-busy-0-e08", "dock-24B-w07x1-busy-0-e12",
+QUALIFYING = ["dock-24B-w06x1-busy-0-e15", "dock-24B-w07x1-busy-0-e04", "dock-24B-w07x1-busy-0-e08",
+              "dock-24B-w07x1-busy-0-e09", "dock-24B-w16x1-busy-0-e12", "dock-24B-w35x1-busy-0-e00",
               "dock-36A-w05x1-busy-0-e09", "dock-36A-w05x1-busy-0-e14", "dock-36A-w06x1-busy-0-e07",
-              "dock-36A-w06x1-busy-0-e12", "dock-36A-w17x1-busy-0-e00", "dock-36A-w17x1-busy-0-e12",
-              "dock-36A-w37x1-busy-0-e00", "dock-36A-w37x1-busy-0-e12", "dock-24B-w37x1-standard-0-e01",
-              "dock-36A-w06x1-standard-0-e07", "dock-36A-w10x1-standard-0-e12", "dock-36A-w35x1-standard-0-e03"]
+              "dock-36A-w06x1-busy-0-e12", "dock-36A-w17x1-busy-0-e12", "dock-36A-w37x1-busy-0-e12",
+              "dock-24B-w37x1-standard-0-e01", "dock-36A-w06x1-standard-0-e07", "dock-36A-w35x1-standard-0-e03"]
 OPENING = "\n\nIt is watch 0, Monday 00:00. Confirm berth windows with confirm_berths, then call advance."
 WIND_RULES = "\n".join([
     "How the week runs:",
@@ -68,7 +68,8 @@ WIND_RULES = "\n".join([
 ])
 WATCHES = [(1, ["extra-0", "tug_outage-7", "pilot_shortage-8", "forecast-10"]), (2, ["emergency-6", "forecast-11"]),
            (3, ["late-2", "forecast-12"]), (4, ["forecast-13"]), (5, ["forecast-14"]),
-           (6, ["late-3", "crane_outage-5", "forecast-15"]), (7, ["forecast-16"]), (8, ["bunching-4", "forecast-17"])]
+           (6, ["late-3", "crane_outage-5", "forecast-15"]), (7, ["forecast-16"]), (8, ["bunching-4", "forecast-17"]),
+           (9, ["forecast-18"])]
 
 
 def wind_steps(task_id: str, episode_cap_usd: float = 5.0) -> list[dict]:
@@ -104,15 +105,16 @@ def test_a_wind_week_is_its_marine_week_on_portsim_wind_with_the_forecast_last_i
     watches = steps[3]["triggers"]
     assert [(t["id"], [a["args"]["event_id"] for a in t["actions"]]) for t in watches] == [
         (f"watch-{k}", events) for k, events in WATCHES]
-    assert [w.hour for w in schedule(task)] == REFS[TASK_ID]["watch_hours"] == [0, 30, 42, 54, 60, 72, 84, 90, 120]
-    assert REFS[TASK_ID]["added_watches"] == [60, 72]
+    assert [w.hour for w in schedule(task)] == REFS[TASK_ID]["watch_hours"] == [0, 30, 42, 54, 60, 72, 84, 90, 120,
+                                                                                132]
+    assert REFS[TASK_ID]["added_watches"] == [60, 72, 132]
     forecasts = [e for e in task.disruptions if e["type"] == "forecast"]
     assert [bulletin[-1]["args"] for bulletin in actions(steps)] == [
         {"event_id": f"forecast-{task.disruptions.index(e)}", "name": "Barcelona Port Control", "text": wind.notice(e)}
         for e in forecasts[1:]]
     assert actions(steps)[0][-1]["args"]["text"] == (
         "Wind forecast issued Tue 03:00 (ECMWF, adjusted to the Dique Sur anemometer), to hour 90: above 25 kn hours "
-        "84–91, peak 30 kn.")
+        "81–86, peak 32 kn; above 30 kn 83–85.")
     news = [(a["args"]["name"], a["args"]["text"]) for bulletin in actions(steps) for a in bulletin[:-1]]
     assert news == [(a["args"]["name"], a["args"]["text"]) for bulletin in actions(v3) for a in bulletin
                     if not a["args"]["event_id"].startswith("gale-")]

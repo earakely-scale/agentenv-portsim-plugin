@@ -789,8 +789,9 @@ Only this changes from the marine week:
   so a watch's forecast is from the run that started 12 hours before it, unless that run is missing:
   `Wind forecast issued Thu 15:00 (ECMWF, adjusted to the Dique Sur anemometer), to hour 150: above 25 kn hours 127–130, peak 26 kn.`
 - **Forecast watches.** v3's watches stay, and a watch is added at 00:00 or 12:00 when the run out by then shows an
-  hour above 25 or 30 kn, 6 to 42 hours ahead, that the run at the watch before didn't. The 15 wind weeks have 4 to 9
-  watches, 7 at the median, 29 of them added. The turns stay 47, so they don't give the count away.
+  hour above 25 or 30 kn, 6 to 42 hours ahead, that the run at the watch before didn't. The 15 wind weeks have 4 to 10
+  watches, 8 at the median, 29 of them added. Every wind week gets 52 turns, those of 10 watches, so they don't give
+  the count away; v2 and v3 keep 47.
 - **The week as known** keeps only the latest forecast. Its no-movement windows are the wind observed so far, in the
   hours before the watch, and the forecast's windows from the watch on, and the wind tug follows them too: the agent
   plans on the forecast, and the grade scores what blew. `get_situation` and the opening end with a wind section after
@@ -799,8 +800,10 @@ Only this changes from the marine week:
   as known at watch k−1, its news and its forecast; a ship never frozen, with the last watch reached. A rule break or a
   cost that the week adds to that, as known now or, once it ends, as it happened, is excused, once. So wind that no
   forecast had shown by then, and later news, are waived; wind that the forecast showed then and that blew is
-  charged, as an ignored warning; and a false alarm withdrawn after the freeze leaves no waiver. v2's per-notice
-  excuse is off here, so nothing is waived twice, and until the week ends a ship not yet frozen is never excused.
+  charged, as an ignored warning; and a false alarm withdrawn after the freeze leaves no waiver. A problem ships
+  share, an overlap or pilots, tugs or the move limit short at an hour, is judged for each of them as the ship decided
+  last saw it: that decision put them together, on the latest news. v2's per-notice excuse is off here, so nothing is
+  waived twice, and until the week ends a ship not yet frozen is never excused.
 
 The example week `dock-24B-w37x1-standard-0-e01` is the marine week `dock-24B-w37x1-standard-0` (15 ships) in the
 wind of 2023-W10, from Monday 6 March 2023. It blew above 25 kn from hour 122 to 135 and from 191 to 192, and above
@@ -853,7 +856,7 @@ re-planner's 252.
   4 solver configurations. It is the task's `optimal_cost`, with the hindsight plan as the reference plan. The agent's
   cost is net of its excuses, while hindsight pays for all the wind, so following the forecast can cost less than
   hindsight; anchored on hindsight alone, a plan clearly worse than the re-planner's would still score 1.0. The anchor
-  is below the hindsight optimum in 4 of the 15 weeks.
+  is below the hindsight optimum in 5 of the 15 weeks.
 - **The references.** `data/wind/references.jsonl` plays every wind week through the same week model and grader as the
   env:
   - **Hindsight:** CP-SAT with the whole week known, in the wind that blew, proven optimal.
@@ -871,53 +874,50 @@ A marine week and a weather week make a wind week when:
   reachable on what the agent could know;
 - (b) the blind re-planner, in a bust week the hold one, scores 0.9 or less in at least 3 of 4, so the forecast
   matters;
-- (c) the week has 9 watches or fewer, which the 47 turns cover;
+- (c) the week has 10 watches or fewer, which the 52 turns cover;
 - (d) no ship alongside at hour 0 is due to leave inside a window above 30 kn.
 
-`scripts/wind_references.py screen` plays all 240 pairs of the 15 marine weeks and the 16 weather weeks; 21 qualify,
-on 11 of the marine weeks. `deal` then picks the tasks, with a gate of 12. In round 1 the i-th marine week, in
+`scripts/wind_references.py screen` plays all 240 pairs of the 15 marine weeks and the 16 weather weeks; 26 qualify,
+on 13 of the marine weeks. `deal` then picks the tasks, with a gate of 12. In round 1 the i-th marine week, in
 `data/marine/references.jsonl` order, takes the first qualifying storm week no other has, looking from the i-th storm
-week on, in date order and wrapping: 8 tasks. Each bust week then goes to the first marine week it qualifies on; none
-does. Below the gate, round 2 has each marine week in turn take another qualifying storm week, one another marine week
-may already have, up to 15. The 15 wind weeks, all storm weeks:
+week on, in date order and wrapping: 8 tasks. Each bust week then goes to the first marine week it qualifies on:
+2023-W44 to `dock-24B-w07x1-busy-0`. Below the gate, round 2 has each marine week in turn take another qualifying
+storm week, one another marine week may already have, up to 15. The 15 wind weeks, 14 storm weeks and one false alarm:
 
 | Wind week | Weather week | Watches (added at) | v3 optimum | Hindsight | Anchor | Floor | Rolling | Blind | Naive |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
 | `dock-24B-w06x1-busy-0-e15` | 2025-W52 | 6 (72, 96) | 87 | 139 | 125 | 48 | 1.000 | 0.176 | 0.202 |
+| `dock-24B-w07x1-busy-0-e04` | 2023-W44, false alarm | 10 (60, 72, 132) | 226 | 226 | 226 | 177 | 1.000 | 1.000; hold 0.845 | 0.165 |
 | `dock-24B-w07x1-busy-0-e08` | 2024-W44 | 9 (24, 36) | 226 | 231 | 231 | 177 | 1.000 | 0.188 | 0.165 |
-| `dock-24B-w07x1-busy-0-e12` | 2025-W03 | 9 (60, 72) | 226 | 226 | 226 | 177 | 1.000 | 0.188 | 0.141 |
+| `dock-24B-w07x1-busy-0-e09` | 2024-W46 | 10 (24, 36, 48) | 226 | 239 | 231 | 177 | 1.000 | 0.176 | 0.201 |
+| `dock-24B-w16x1-busy-0-e12` | 2025-W03 | 10 (60) | 1365 | 1998 | 1981 | 737 | 1.000 | 0.163 | 0.188 |
+| `dock-24B-w35x1-busy-0-e00` | 2023-W06 | 10 (24, 36) | 1238 | 1467 | 1467 | 947 | 1.000 | 0.171 | 0.200 |
 | `dock-36A-w05x1-busy-0-e09` | 2024-W46 | 7 (24, 36) | 406 | 406 | 406 | 369 | 1.000 | 0.193 | 0.163 |
 | `dock-36A-w05x1-busy-0-e14` | 2025-W43 | 6 (60) | 406 | 406 | 406 | 369 | 1.000 | 0.193 | 0.163 |
 | `dock-36A-w06x1-busy-0-e07` | 2024-W18 | 7 (12) | 40 | 40 | 40 | 0 | 1.000 | 0.192 | 0.184 |
 | `dock-36A-w06x1-busy-0-e12` | 2025-W03 | 9 (60, 72, 84) | 40 | 40 | 40 | 0 | 1.000 | 0.192 | 0.176 |
-| `dock-36A-w17x1-busy-0-e00` | 2023-W06 | 6 (24) | 152 | 180 | 180 | 142 | 1.000 | 0.186 | 0.186 |
-| `dock-36A-w17x1-busy-0-e12` | 2025-W03 | 8 (48, 60, 72) | 152 | 206 | 162 | 142 | 1.000 | 0.179 | 0.179 |
-| `dock-36A-w37x1-busy-0-e00` | 2023-W06 | 9 (24, 36) | 36 | 157 | 143 | 150 | 0.191 | 0.183 | 0.157 |
+| `dock-36A-w17x1-busy-0-e12` | 2025-W03 | 8 (48, 60, 72) | 152 | 206 | 162 | 142 | 1.000 | 0.171 | 0.179 |
 | `dock-36A-w37x1-busy-0-e12` | 2025-W03 | 8 (60) | 36 | 113 | 113 | 108 | 1.000 | 0.174 | 0.183 |
 | `dock-24B-w37x1-standard-0-e01` | 2023-W10 | 5 (108) | 229 | 359 | 252 | 200 | 1.000 | 0.187 | 0.201 |
 | `dock-36A-w06x1-standard-0-e07` | 2024-W18 | 4 (12) | 14 | 14 | 14 | 0 | 1.000 | 0.192 | 0.200 |
-| `dock-36A-w10x1-standard-0-e12` | 2025-W03 | 6 (48, 60, 72, 84) | 39 | 55 | 55 | 40 | 1.000 | 0.181 | 0.163 |
 | `dock-36A-w35x1-standard-0-e03` | 2023-W35 | 8 (120, 132, 144) | 10 | 10 | 10 | 0 | 1.000 | 0.189 | 0.179 |
 
-On average the rolling re-planner scores 0.946, the blind one 0.186, infeasible in all 15, and v2's naive policy
-0.176, infeasible in 12. The wind raises the hindsight optimum above v3's in 8 of the 15 weeks.
+On average the rolling re-planner scores 1.000, the blind one 0.183 on the 14 storm weeks, infeasible in all 14, and
+v2's naive policy 0.183, infeasible in 10. The wind raises the hindsight optimum above v3's in 8 of the 15 weeks.
 
-- **No bust week qualifies,** so every wind week is a storm week. 2023-W44's false alarm adds watches: more than 9 on
-  11 of the 15 marine weeks. On the other four, the rolling re-planner misses the hindsight optimum on three (119
-  against 87, 206 against 152, 282 to 306 against 229), and holding every warning costs nothing on the fourth (1.0 in
-  all four configurations). 2025-W14's false alarm costs nothing to hold on 12 of the 15 marine weeks and scores above
-  0.9 on two more; on the last, `dock-24B-w06x1-busy-0`, the re-planner misses the optimum (160 to 192 against 87).
-- **2025-W03 (`e12`) serves 5 of the 15 weeks:** round 1 gives it to `dock-36A-w17x1-busy-0`, and round 2, which may
-  reuse a weather week, to four more. Five storm weeks qualify on no marine week: 2023-W34, 2023-W50, 2024-W13,
+- **The false alarm.** In 2023-W44 every forecast delivered from Tuesday 03:00 to Wednesday 21:00 showed wind above 25 kn on
+  Thursday morning, about hours 80 to 87, and some above 30 kn from 83 to 85; later runs moved the warnings to
+  Thursday night and Friday. None of it blew: Y7 stayed under 25 kn until Saturday evening, then went above it in
+  hours 139–140 and 152–154. On `dock-24B-w07x1-busy-0` the re-planner that follows the latest forecast reaches the
+  optimum, 226, and the one that holds every window any forecast showed pays 242, 0.845. Ignoring the forecast costs
+  nothing here, so this week tests the other side: letting a warning go.
+- **2023-W44 qualifies on one marine week of 15.** On the other 14 its warnings add more than 10 watches on 5,
+  holding every warning scores above 0.9 on 8, and the re-planner misses the hindsight optimum on 5; some fail more
+  than one way. Holding 2025-W14's false alarm scores above 0.9 on 14 of the 15 marine weeks; on the last,
+  `dock-24B-w06x1-busy-0`, the re-planner misses the optimum.
+- **2025-W03 (`e12`) serves 4 of the 15 weeks:** round 1 gives it to `dock-24B-w16x1-busy-0`, and round 2, which may
+  reuse a weather week, to three more. Five storm weeks qualify on no marine week: 2023-W34, 2023-W50, 2024-W13,
   2024-W47 and 2024-W49, where ignoring the forecast never costs enough for (b).
-- **The anchor can fall below the floor.** On `dock-36A-w37x1-busy-0-e00` it is 143, under the floor of 150: the
-  excuses take the re-planner's cost below what no plan can avoid in the wind that blew. Reward v3 divides the gap by
-  `max(0, optimum − floor) + 100`, which there is 100.
-- **One rolling reference is infeasible.** On the same week the re-planner's first configuration ends at 0.191, and its
-  other three at 143, 148 and 148, which is enough for (a). MSC ATHOS froze when the forecast held it alongside to hour
-  51 with wind above 30 kn; a later forecast, above 30 kn only to hour 45, let the re-planner berth CMA CGM FORT
-  BOURBON beside it at 45, and the wind held MSC ATHOS to 48. Each ship is compared with the forecast at its last
-  chance to move, which for MSC ATHOS already showed it held into that berth, so the overlap is charged to it.
 - **An infeasible week's partial credit can differ from the marine port's.** With no wind at all, a feasible wind week
   grades exactly as its marine week (`tests/wind/test_wind_excuse.py`). In an infeasible one, the whole-plan excuse can
   also waive later news's effect on a ship frozen earlier, which v2's per-notice excuse charged, so the share of clean
@@ -952,7 +952,7 @@ agent-env run portsim-wind --task wiring-noplay    # no model: no window confirm
 agent-env run portsim-wind --task week --model anthropic/claude-sonnet-5-5   # dock-24B-w06x1-busy-0-e15, 6 watches
 agent-env portsim tasks generate --pack dock-v1-eval --wind   # the 15 wind weeks in results/bundles/dock-v1-eval-wind
 agent-env portsim sweep run --wind --name wind-pilot --models anthropic/claude-sonnet-5-5 \
-    --tasks dock-24B-w37x1-standard-0-e01,dock-36A-w17x1-busy-0-e12 --cap-usd 6
+    --tasks dock-24B-w37x1-standard-0-e01,dock-24B-w07x1-busy-0-e04 --cap-usd 6
 agent-env portsim sweep report --wind wind-pilot   # results/wind.md
 ```
 

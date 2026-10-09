@@ -3,22 +3,22 @@
   "split": "eval",
   "tasks": 15,
   "tiers": {
-    "busy": 11,
-    "standard": 4
+    "busy": 12,
+    "standard": 3
   },
-  "sha256": "c9602860464d117382a3da0ac493d8c83dbdaf0f310160ae34cd48508607b8b7",
+  "sha256": "4362816b3657373063afab2f06c97cf76f941cb4e5b2b593b0a754e4ba9da0c9",
   "weeks": [
     5,
     6,
     7,
-    10,
+    16,
     17,
     35,
     37
   ],
   "quays": {
-    "24B": 4,
-    "36A": 11
+    "24B": 7,
+    "36A": 8
   },
   "source": "dock-v1-marine's qualified weeks, each moved into a weather week of weather.jsonl: the wind observed at the anemometer and the forecasts as delivered, from the sources under ecmwf, y7 and calibration",
   "marine": {
@@ -75,6 +75,32 @@
       ]
     },
     {
+      "task_id": "dock-24B-w07x1-busy-0-e04",
+      "schedule": "dock-24B-w07x1-busy-0",
+      "weather": "e04",
+      "kind": "bust",
+      "iso_week": "2023-W44",
+      "added_watches": [
+        60,
+        72,
+        132
+      ],
+      "windows": [
+        {
+          "start": 139,
+          "end": 140,
+          "min_length": 300,
+          "unvalidated": 1.0
+        },
+        {
+          "start": 152,
+          "end": 154,
+          "min_length": 300,
+          "unvalidated": 1.0
+        }
+      ]
+    },
+    {
       "task_id": "dock-24B-w07x1-busy-0-e08",
       "schedule": "dock-24B-w07x1-busy-0",
       "weather": "e08",
@@ -106,14 +132,63 @@
       ]
     },
     {
-      "task_id": "dock-24B-w07x1-busy-0-e12",
+      "task_id": "dock-24B-w07x1-busy-0-e09",
       "schedule": "dock-24B-w07x1-busy-0",
+      "weather": "e09",
+      "kind": "storm",
+      "iso_week": "2024-W46",
+      "added_watches": [
+        24,
+        36,
+        48
+      ],
+      "windows": [
+        {
+          "start": 38,
+          "end": 42,
+          "min_length": 300,
+          "unvalidated": 1.0
+        },
+        {
+          "start": 55,
+          "end": 66,
+          "min_length": 300,
+          "unvalidated": 1.0
+        },
+        {
+          "start": 223,
+          "end": 226,
+          "min_length": 300,
+          "unvalidated": 1.0
+        },
+        {
+          "start": 259,
+          "end": 262,
+          "min_length": 300,
+          "unvalidated": 1.0
+        },
+        {
+          "start": 57,
+          "end": 62,
+          "min_length": 0,
+          "unvalidated": 1.0
+        },
+        {
+          "start": 223,
+          "end": 226,
+          "min_length": 0,
+          "unvalidated": 1.0
+        }
+      ]
+    },
+    {
+      "task_id": "dock-24B-w16x1-busy-0-e12",
+      "schedule": "dock-24B-w16x1-busy-0",
       "weather": "e12",
       "kind": "storm",
       "iso_week": "2025-W03",
       "added_watches": [
-        60,
-        72
+        60
       ],
       "windows": [
         {
@@ -133,6 +208,55 @@
           "end": 96,
           "min_length": 0,
           "unvalidated": 1.0
+        }
+      ]
+    },
+    {
+      "task_id": "dock-24B-w35x1-busy-0-e00",
+      "schedule": "dock-24B-w35x1-busy-0",
+      "weather": "e00",
+      "kind": "storm",
+      "iso_week": "2023-W06",
+      "added_watches": [
+        24,
+        36
+      ],
+      "windows": [
+        {
+          "start": 6,
+          "end": 7,
+          "min_length": 300,
+          "unvalidated": 0.0
+        },
+        {
+          "start": 11,
+          "end": 18,
+          "min_length": 300,
+          "unvalidated": 0.0
+        },
+        {
+          "start": 31,
+          "end": 53,
+          "min_length": 300,
+          "unvalidated": 0.0
+        },
+        {
+          "start": 58,
+          "end": 60,
+          "min_length": 300,
+          "unvalidated": 0.0
+        },
+        {
+          "start": 12,
+          "end": 13,
+          "min_length": 0,
+          "unvalidated": 0.0
+        },
+        {
+          "start": 38,
+          "end": 48,
+          "min_length": 0,
+          "unvalidated": 0.0
         }
       ]
     },
@@ -266,54 +390,6 @@
       ]
     },
     {
-      "task_id": "dock-36A-w17x1-busy-0-e00",
-      "schedule": "dock-36A-w17x1-busy-0",
-      "weather": "e00",
-      "kind": "storm",
-      "iso_week": "2023-W06",
-      "added_watches": [
-        24
-      ],
-      "windows": [
-        {
-          "start": 6,
-          "end": 7,
-          "min_length": 300,
-          "unvalidated": 0.0
-        },
-        {
-          "start": 11,
-          "end": 18,
-          "min_length": 300,
-          "unvalidated": 0.0
-        },
-        {
-          "start": 31,
-          "end": 53,
-          "min_length": 300,
-          "unvalidated": 0.0
-        },
-        {
-          "start": 58,
-          "end": 60,
-          "min_length": 300,
-          "unvalidated": 0.0
-        },
-        {
-          "start": 12,
-          "end": 13,
-          "min_length": 0,
-          "unvalidated": 0.0
-        },
-        {
-          "start": 38,
-          "end": 48,
-          "min_length": 0,
-          "unvalidated": 0.0
-        }
-      ]
-    },
-    {
       "task_id": "dock-36A-w17x1-busy-0-e12",
       "schedule": "dock-36A-w17x1-busy-0",
       "weather": "e12",
@@ -342,55 +418,6 @@
           "end": 96,
           "min_length": 0,
           "unvalidated": 1.0
-        }
-      ]
-    },
-    {
-      "task_id": "dock-36A-w37x1-busy-0-e00",
-      "schedule": "dock-36A-w37x1-busy-0",
-      "weather": "e00",
-      "kind": "storm",
-      "iso_week": "2023-W06",
-      "added_watches": [
-        24,
-        36
-      ],
-      "windows": [
-        {
-          "start": 6,
-          "end": 7,
-          "min_length": 300,
-          "unvalidated": 0.0
-        },
-        {
-          "start": 11,
-          "end": 18,
-          "min_length": 300,
-          "unvalidated": 0.0
-        },
-        {
-          "start": 31,
-          "end": 53,
-          "min_length": 300,
-          "unvalidated": 0.0
-        },
-        {
-          "start": 58,
-          "end": 60,
-          "min_length": 300,
-          "unvalidated": 0.0
-        },
-        {
-          "start": 12,
-          "end": 13,
-          "min_length": 0,
-          "unvalidated": 0.0
-        },
-        {
-          "start": 38,
-          "end": 48,
-          "min_length": 0,
-          "unvalidated": 0.0
         }
       ]
     },
@@ -474,39 +501,6 @@
           "start": 85,
           "end": 87,
           "min_length": 300,
-          "unvalidated": 1.0
-        }
-      ]
-    },
-    {
-      "task_id": "dock-36A-w10x1-standard-0-e12",
-      "schedule": "dock-36A-w10x1-standard-0",
-      "weather": "e12",
-      "kind": "storm",
-      "iso_week": "2025-W03",
-      "added_watches": [
-        48,
-        60,
-        72,
-        84
-      ],
-      "windows": [
-        {
-          "start": 86,
-          "end": 108,
-          "min_length": 300,
-          "unvalidated": 1.0
-        },
-        {
-          "start": 86,
-          "end": 87,
-          "min_length": 0,
-          "unvalidated": 1.0
-        },
-        {
-          "start": 92,
-          "end": 96,
-          "min_length": 0,
           "unvalidated": 1.0
         }
       ]
@@ -920,7 +914,7 @@
   },
   "deal": {
     "screened": 240,
-    "qualifying": 21,
+    "qualifying": 26,
     "dealt": 15,
     "gate": 12
   },
