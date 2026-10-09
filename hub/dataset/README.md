@@ -1,7 +1,7 @@
 ---
 license: other
 license_name: cc-by-sa-4.0-cc-by-4.0-meteocat-apache-2.0
-license_link: https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.4.3/data/LICENSE
+license_link: https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.4.4/data/LICENSE
 pretty_name: PortSimEnv on AgentEnv
 language:
 - en
@@ -78,7 +78,7 @@ agentenv:
 
 # PortSimEnv on AgentEnv
 
-[![GPT-6.1 Sol plays a wind week at the Port of Barcelona: at each watch Barcelona Port Control's forecast arrives as a bulletin, the watch panel draws its knots and windows, and the storm that blew raises whitecaps and a no-movement banner on the quay](https://raw.githubusercontent.com/earakely-scale/agentenv-portsim-plugin/v0.4.3/assets/wind-port.webp)](https://earakely-scale-portsimenv-agentenv.hf.space/viewer/#/run/wind-pilot-gpt/openai%2Fgpt-6.1-sol/dock-24B-w37x1-standard-0-e01)
+[![GPT-6.1 Sol plays a wind week at the Port of Barcelona: at each watch Barcelona Port Control's forecast arrives as a bulletin, the watch panel draws its knots and windows, and the storm that blew raises whitecaps and a no-movement banner on the quay](https://raw.githubusercontent.com/earakely-scale/agentenv-portsim-plugin/v0.4.4/assets/wind-port.webp)](https://earakely-scale-portsimenv-agentenv.hf.space/viewer/#/run/wind-pilot-gpt/openai%2Fgpt-6.1-sol/dock-24B-w37x1-standard-0-e01)
 
 <sub>GPT-6.1 Sol plays the wind week `dock-24B-w37x1-standard-0-e01`, APM Terminals Barcelona's schedule in the wind of
 the week of 6 March 2023; the film's clock shows the schedule's own 2024 dates. At each watch (see [Terms](#terms)) a
@@ -245,7 +245,7 @@ import json
 from datasets import load_dataset
 
 repo = "earakely-scale/PortSimEnv-AgentEnv"
-weeks = load_dataset(repo, "v4_tasks", split="eval", revision="v0.4.3")
+weeks = load_dataset(repo, "v4_tasks", split="eval", revision="v0.4.4")
 week = weeks[0]
 # what the agent gets at hour 0
 print(week["system_prompt"], week["situation"], sep="\n\n")
@@ -255,7 +255,7 @@ for watch in json.loads(week["watches"]):
 # the wind that blew, which the grade reads
 print(json.loads(week["wind_windows"]))
 
-episodes = load_dataset(repo, "v4_episodes", split="eval", revision="v0.4.3")
+episodes = load_dataset(repo, "v4_episodes", split="eval", revision="v0.4.4")
 # a list of chat messages: no json.loads
 messages = episodes[0]["messages"]
 call = next(c for m in messages if m["tool_calls"] for c in m["tool_calls"]
@@ -282,7 +282,7 @@ model:
 
 ```bash
 uv tool install agentenv-framework \
-    --with "agentenv-portsim @ git+https://github.com/earakely-scale/agentenv-portsim-plugin@v0.4.3"
+    --with "agentenv-portsim @ git+https://github.com/earakely-scale/agentenv-portsim-plugin@v0.4.4"
 # build the env and agent images and register them (a few minutes)
 agent-env portsim setup --agent
 # no model: grades a known optimal plan, prints "passed"
@@ -297,10 +297,10 @@ Providers" permission, on an account with credits; each task stops an episode be
 export HF_TOKEN=hf_...
 export LITELLM_BASE_URL=https://router.huggingface.co/v1 LITELLM_API_KEY=$HF_TOKEN
 # the default bundle: dock-v1-eval-wind (v4)
-agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.4.3 \
+agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.4.4 \
     --task dock-36A-w06x1-standard-0-e07 --model zai-org/GLM-5.3-Flash:baseten
 # v3; dock-v1-eval-live is v2, dock-v1-eval v1
-agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.4.3 --bundle dock-v1-eval-marine \
+agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.4.4 --bundle dock-v1-eval-marine \
     --task dock-24B-w07x1-busy-0 --model zai-org/GLM-5.3-Flash:baseten
 ```
 
@@ -312,9 +312,9 @@ question, and `--dry-run` runs nothing. Without `--bundle` it plays the card's d
 
 The open models priced for the router are `Qwen/Qwen3.8-2.4T-A95B:together`, `Qwen/Qwen3.8-27B:ovhcloud`,
 `zai-org/GLM-5.3-Flash:baseten` and `zai-org/GLM-5.3:together`; closed models go through a LiteLLM proxy (the plugin
-README's [Play a model](https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.4.3/README.md#play-a-model)).
+README's [Play a model](https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.4.4/README.md#play-a-model)).
 If a step fails, the plugin README's
-[troubleshooting](https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.4.3/README.md#run-it-yourself)
+[troubleshooting](https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.4.4/README.md#run-it-yourself)
 covers the usual causes (`agent-env` not on the PATH, port 5000 taken by macOS AirPlay).
 
 ## Replay and publish your own runs
@@ -430,7 +430,7 @@ Space reads.
 
 Twelve models, once each on every live, marine and wind week, with the same harness, prompts, tools and limits: the
 mean reward on each version and over all 45 weeks, each week weighing the same. The plugin's
-[results/board.md](https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.4.3/results/board.md) analyses
+[results/board.md](https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.4.4/results/board.md) analyses
 them.
 
 <!-- board:all -->
@@ -555,11 +555,11 @@ without calling a tool and scored 0; PortSimEnv's harness ends such an episode t
   00:00 or 12:00. The harness sees the watch count, which depends on the forecasts to come, though the agent's tools
   and turns don't. In an infeasible week the whole-plan excuse can give different partial credit from the marine
   port's. The plugin
-  README's [wind rules and their sources](https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.4.3/README.md#the-wind-rules-and-their-sources)
+  README's [wind rules and their sources](https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.4.4/README.md#the-wind-rules-and-their-sources)
   marks each assumption.
 - **v3's assumptions:** some numbers have no public source, among them the 7 pilots on duty (calibrated to the 2024
   traffic), the tugs per ship length, and the cuts. Ships don't wait for a tug: a short hour is a rule break. The
-  plugin README's [rules and their sources](https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.4.3/README.md#the-rules-and-their-sources)
+  plugin README's [rules and their sources](https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.4.4/README.md#the-rules-and-their-sources)
   marks each one. v4 keeps them.
 - **Eval weeks only:** live, marine and wind weeks are qualified from the eval pack; the training weeks are in
   PortSimEnv's dataset and play on v1.
@@ -569,8 +569,8 @@ without calling a tool and scored 0; PortSimEnv's harness ends such an episode t
 ## Licence and attribution
 
 The dataset carries several sets of terms, hence `license: other`; the plugin's
-[data/LICENSE](https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.4.3/data/LICENSE) and
-[NOTICE](https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.4.3/NOTICE) set out each file.
+[data/LICENSE](https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.4.4/data/LICENSE) and
+[NOTICE](https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.4.4/NOTICE) set out each file.
 
 **CC BY-SA 4.0: the weeks, the tables, the references and the transcripts**, except v4's weather. The weeks come from
 PortSimEnv's dock-v1 task packs, which Adithya S Kolavi built from the Port of Barcelona's 2024 container calls and

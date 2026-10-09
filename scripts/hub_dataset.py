@@ -15,7 +15,7 @@ agentenv-hf's check for keys and token shapes before anything is written, and --
 on top of the commit it read, removing what the build no longer writes.
 
     uv run python scripts/hub_dataset.py --out build/hub/dataset
-    uv run python scripts/hub_dataset.py --out build/hub/dataset --repo earakely-scale/PortSimEnv-AgentEnv --tag v0.4.3
+    uv run python scripts/hub_dataset.py --out build/hub/dataset --repo earakely-scale/PortSimEnv-AgentEnv --tag v0.4.4
 """
 
 import argparse
@@ -376,7 +376,7 @@ def main():
     ap.add_argument("--plugin-ref", default=f"v{VERSION}",
                     help="The plugin tag the card's bundles pin, for agent-env hf run.")
     ap.add_argument("--repo", help="Push the folder to this dataset repo after writing it.")
-    ap.add_argument("--tag", help="Tag the pushed commit, e.g. v0.4.3.")
+    ap.add_argument("--tag", help="Tag the pushed commit, e.g. v0.4.4.")
     ap.add_argument("--message", default="Publish PortSimEnv on AgentEnv")
     args = ap.parse_args()
     plugin = f"agentenv-portsim @ git+https://github.com/earakely-scale/agentenv-portsim-plugin@{args.plugin_ref}"

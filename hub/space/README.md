@@ -9,7 +9,7 @@ base_path: /viewer/
 pinned: true
 license: other
 license_name: cc-by-sa-4.0-cc-by-4.0-meteocat-apache-2.0
-license_link: https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.4.3/data/LICENSE
+license_link: https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.4.4/data/LICENSE
 short_description: Port of Barcelona weeks on AgentEnv, replayed in 3D
 thumbnail: https://huggingface.co/spaces/earakely-scale/PortSimEnv-AgentEnv/resolve/main/thumbnail.jpg
 tags:
@@ -77,13 +77,13 @@ the dataset:
 
 ```bash
 uv tool install agentenv-framework \
-    --with "agentenv-portsim @ git+https://github.com/earakely-scale/agentenv-portsim-plugin@v0.4.3"
+    --with "agentenv-portsim @ git+https://github.com/earakely-scale/agentenv-portsim-plugin@v0.4.4"
 agent-env portsim setup --agent        # build the env and agent images and register them (a few minutes)
 agent-env run portsim --task smoke     # no model: grades a known optimal plan, prints "passed"
 
 export HF_TOKEN=hf_...                  # with "Make calls to Inference Providers", on an account with credits
 export LITELLM_BASE_URL=https://router.huggingface.co/v1 LITELLM_API_KEY=$HF_TOKEN
-agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.4.3 --task dock-36A-w06x1-standard-0-e07 \
+agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.4.4 --task dock-36A-w06x1-standard-0-e07 \
     --model zai-org/GLM-5.3-Flash:baseten          # the default bundle: dock-v1-eval-wind (v4)
 ```
 
@@ -100,12 +100,12 @@ agent-env portsim view mine            # at http://127.0.0.1:8237/viewer/
 
 The [dataset card](https://huggingface.co/datasets/earakely-scale/PortSimEnv-AgentEnv#play-a-week-yourself) has more:
 the v3, v2 and v1 bundles and the other open models. If a step fails, see the plugin README's
-[troubleshooting](https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.4.3/README.md#run-it-yourself).
+[troubleshooting](https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.4.4/README.md#run-it-yourself).
 
 ## How this Space runs
 
-`start.sh` downloads the recorded sweeps (`runs/`) from the dataset at its `v0.4.3` tag (`--revision v0.4.3`), and
-`agent-env portsim view`, installed from the plugin's `v0.4.3` tag, serves them, replaying each v2, v3 and v4 run
+`start.sh` downloads the recorded sweeps (`runs/`) from the dataset at its `v0.4.4` tag (`--revision v0.4.4`), and
+`agent-env portsim view`, installed from the plugin's `v0.4.4` tag, serves them, replaying each v2, v3 and v4 run
 through its week from the recorded tool calls. The 3D twin is downloaded from PortSimEnv's public bucket at start.
 
 ## Licence and attribution
@@ -132,7 +132,7 @@ through its week from the recorded tool calls. The 3D twin is downloaded from Po
 - **The 3D twin:** © OpenStreetMap contributors (ODbL) · terrain: Terrain Tiles (AWS).
 - **Code:** the plugin and PortSimEnv's viewer are under the Apache License 2.0.
 
-The plugin's [NOTICE](https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.4.3/NOTICE) and
-[data/LICENSE](https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.4.3/data/LICENSE) set out each part.
+The plugin's [NOTICE](https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.4.4/NOTICE) and
+[data/LICENSE](https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.4.4/data/LICENSE) set out each part.
 This Space is independent: neither the Port de Barcelona, PortSimEnv's author, ECMWF nor Meteocat is affiliated with
 it or endorses it.

@@ -147,6 +147,19 @@ def test_an_output_the_week_does_not_give_back_stops_the_replay(runs):
         runs.live(runs.pack.get(BUSY), tampered)
 
 
+def test_a_planning_call_without_a_plan_is_refused_before_the_week_sees_it(runs):
+    messages = transcript("live-sonnet", BUSY)["messages"]
+    i = next(i for i, m in enumerate(messages) if m["role"] == "assistant" and m.get("tool_calls"))
+    bare = {"id": "bare", "name": "check_plan", "arguments": "{}"}
+    refused = [{"role": "assistant", "content": "", "tool_calls": [bare]},
+               {"role": "tool", "tool_call_id": "bare", "name": "check_plan",
+                "content": '{"error": "Error executing tool check_plan: 1 validation error for check_planArgs"}'}]
+    task = runs.pack.get(BUSY)
+    steps = [[{k: v for k, v in s.items() if k != "turn"} for s in runs.live(task, m)["steps"]]
+             for m in ([*messages[:i], *refused, *messages[i:]], messages)]
+    assert steps[0] == steps[1]
+
+
 def test_a_sweep_of_several_reps_is_a_run_per_rep(tmp_path):
     shutil.copytree(ROOT / "g2", tmp_path / "g2")
     spec = tmp_path / "g2/sweep.json"

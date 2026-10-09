@@ -171,7 +171,7 @@ You need [Docker](https://docs.docker.com/get-docker/), running and usable witho
 
 ```bash
 uv tool install agentenv-framework \
-    --with "agentenv-portsim @ git+https://github.com/earakely-scale/agentenv-portsim-plugin@v0.4.3"
+    --with "agentenv-portsim @ git+https://github.com/earakely-scale/agentenv-portsim-plugin@v0.4.4"
 agent-env portsim setup              # build the env image for this machine; register the envs "portsim", "portsim-live", "portsim-marine" and "portsim-wind"
 agent-env run portsim --task smoke   # load a task, submit its optimal plan, grade it
 ```
@@ -188,7 +188,7 @@ runs on the Hugging Face router, with a token that can make calls to Inference P
 agent-env portsim setup --agent        # also builds and registers portsim-llm, the agent that plays the model
 export HF_TOKEN=hf_...                  # with "Make calls to Inference Providers", on an account with credits
 export LITELLM_BASE_URL=https://router.huggingface.co/v1 LITELLM_API_KEY=$HF_TOKEN
-agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.4.3 --task dock-36A-w06x1-standard-0-e07 \
+agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.4.4 --task dock-36A-w06x1-standard-0-e07 \
     --model zai-org/GLM-5.3-Flash:baseten   # the shortest wind week, 4 watches
 ```
 
@@ -1176,7 +1176,7 @@ PortSimEnv's 3D viewer; both are in one
 plugin depends on [agentenv-hf](https://github.com/earakely-scale/agentenv-hf-plugin), an agent-env plugin that
 publishes bundles and their runs as Hub datasets and runs bundles from them, so installing this plugin adds
 `agent-env hf run` and `agent-env hf publish`. Each release tags the dataset with the plugin's version; the commands
-below pin `v0.4.3`.
+below pin `v0.4.4`.
 
 ### The dataset
 
@@ -1221,12 +1221,12 @@ string, GPT-6.1 Sol a list). PortSim's other columns that hold JSON (`watches`, 
 import json
 from datasets import load_dataset
 
-weeks = load_dataset("earakely-scale/PortSimEnv-AgentEnv", "v4_tasks", split="eval", revision="v0.4.3")
+weeks = load_dataset("earakely-scale/PortSimEnv-AgentEnv", "v4_tasks", split="eval", revision="v0.4.4")
 print(weeks[0]["situation"])                        # what the agent gets at hour 0
 for watch in json.loads(weeks[0]["watches"]):       # what arrives later, Port Control's forecast included
     print(watch["hour"], [n["from"] for n in watch["notices"]])
 
-runs = load_dataset("earakely-scale/PortSimEnv-AgentEnv", "v4_episodes", split="eval", revision="v0.4.3")
+runs = load_dataset("earakely-scale/PortSimEnv-AgentEnv", "v4_episodes", split="eval", revision="v0.4.4")
 print(runs[0]["reward"], len(runs[0]["messages"]))  # the grade, and the transcript as chat messages
 ```
 
@@ -1240,7 +1240,7 @@ which part carries which terms, as does this README's [Licence and credits](#lic
 
 ### The Space
 
-The Space serves `agent-env portsim view` ([Watch a run](#watch-a-run)) from the plugin's `v0.4.3` tag over the
+The Space serves `agent-env portsim view` ([Watch a run](#watch-a-run)) from the plugin's `v0.4.4` tag over the
 dataset's `runs/`, which it downloads when it starts: every recorded run of the four versions, replayed from its
 records, with no model called. A link opens one run, such as
 [GPT-6.1 Sol's wind film week](https://earakely-scale-portsimenv-agentenv.hf.space/viewer/#/run/wind-pilot-gpt/openai%2Fgpt-6.1-sol/dock-24B-w37x1-standard-0-e01).
@@ -1248,9 +1248,9 @@ records, with no model called. A link opens one run, such as
 ### Run a bundle from the Hub
 
 ```bash
-agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.4.3 --task dock-36A-w06x1-standard-0-e07 \
+agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.4.4 --task dock-36A-w06x1-standard-0-e07 \
     --model zai-org/GLM-5.3-Flash:baseten          # the default bundle: dock-v1-eval-wind (v4)
-agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.4.3 --bundle dock-v1-eval-marine \
+agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.4.4 --bundle dock-v1-eval-marine \
     --task dock-24B-w07x1-busy-0 --model zai-org/GLM-5.3-Flash:baseten   # v3; dock-v1-eval-live is v2, dock-v1-eval v1
 ```
 
@@ -1258,7 +1258,7 @@ agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.4.3 --bundle dock-v1-eval
   `~/.cache/agentenv-hf/earakely-scale/PortSimEnv-AgentEnv/<commit>`. Without `--bundle` it runs the card's default,
   `dock-v1-eval-wind`.
 - The card's `agentenv` table names what each bundle needs: the plugin,
-  `agentenv-portsim @ git+https://github.com/earakely-scale/agentenv-portsim-plugin@v0.4.3`, and the setup command,
+  `agentenv-portsim @ git+https://github.com/earakely-scale/agentenv-portsim-plugin@v0.4.4`, and the setup command,
   `agent-env portsim setup --agent`. `hf run` checks that the plugin is installed and, if it isn't, stops with the
   `agent-env plugin add` command; it never installs or runs anything the card names. It checks the plugin by name,
   not by version, so an older install passes and has to be upgraded to this release first. If an env or the agent

@@ -227,6 +227,8 @@ def replay(task: Task, messages: list[dict], week: type[Week] = Week) -> tuple[W
             at, call = calls[m["tool_call_id"]]
             if call["name"] not in TOOLS or week.done or not isinstance(args := _parsed(call["arguments"]), dict):
                 continue
+            if call["name"] in ("check_plan", "confirm_berths") and "plan" not in args:
+                continue  # the tool's input schema refused it before the week saw it
             result, plan = play(week, call["name"], args)
             if _json(result) != m["content"]:
                 raise ReplayError(f"{call['name']} {call['id']} returned {_json(result)}, recorded {m['content']}")

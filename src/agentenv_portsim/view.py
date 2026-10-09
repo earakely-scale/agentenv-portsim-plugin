@@ -2,6 +2,7 @@
 /api routes and JSON of its explorer (envs/berth_planning/openenv/berth_openenv/api.py at b0f4c2f)."""
 
 import json
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
@@ -105,6 +106,7 @@ def view_command(sweeps: tuple[str, ...], port: int, host: str):
         raise click.UsageError(f"can't serve on port {port} ({e.strerror}): pass another --port") from e
     click.echo(twin.ATTRIBUTION)
     click.echo(f"Serving {', '.join(runs.runs)} at http://{host}:{server.server_port}/viewer/ (Ctrl-C to stop)")
+    threading.Thread(target=runs.index, daemon=True).start()  # replaying every live week takes a minute; start now
     try:
         server.serve_forever()
     except KeyboardInterrupt:
