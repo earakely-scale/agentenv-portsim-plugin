@@ -187,6 +187,15 @@ async def test_arguments_that_are_not_json_are_answered_by_the_harness(play, har
     assert (data["calls_used"], summary(result)["tool_calls"], record["steps"]) == (0, 0, [])
 
 
+async def test_a_call_that_is_not_json_goes_back_into_the_history_as_an_empty_object(play):
+    result, fake = await play([turn(call("check_plan", "{")), SUBMIT], GLM)
+    [sent] = [m for m in fake.requests[1][2]["messages"] if m.get("tool_calls")]
+    assert sent["tool_calls"][0]["function"]["arguments"] == "{}"
+    record = result.native_trajectory.payload
+    assert [c["arguments"] for m in record["messages"] for c in m.get("tool_calls") or []][0] == "{"
+    assert summary(result)["submitted"] is True
+
+
 @pytest.mark.parametrize(("model", "cost"), [
     (SONNET, (500 * 2.00 + 300 * 0.20 + 200 * 1.25 * 2.00 + 400 * 10.00) / 1e6),
     (GPT, (700 * 2.00 + 300 * 0.10 + 400 * 10.00) / 1e6),
@@ -229,7 +238,22 @@ async def test_a_chat_stream_the_harness_cuts_is_charged_at_its_bound(play):
     assert s["cost_usd"] > 5 * 1000 * 0.50 / 1e6
 
 
-@pytest.mark.parametrize(("model", "requests"), [(SONNET, 5), (GPT, 4), (GLM, 4)])
+async def test_a_reply_that_fails_mid_stream_is_sent_again(play):
+    result, fake = await play([{"stream_error": "payload is not completed"}, SUBMIT], GLM)
+    record = result.native_trajectory.payload
+    assert (summary(result)["end_reason"], len(fake.requests)) == ("submitted", 2)
+    assert fake.requests[0][2]["messages"] == fake.requests[1][2]["messages"]
+    assert record["errors"] == ["APIError: payload is not completed (turn 1 sent again)"]
+    assert summary(result)["cost_usd"] > 32000 * 5 * portsim_llm.PRICES[GLM][1] / 1e6
+
+
+async def test_a_reply_that_keeps_failing_mid_stream_is_a_provider_error(play):
+    result, fake = await play([{"stream_error": "cut"}] * 3, GLM)
+    assert (result.error.code, len(fake.requests)) == ("provider_error", 3)
+    assert len(result.native_trajectory.payload["errors"]) == 3
+
+
+@pytest.mark.parametrize(("model", "requests"), [(SONNET, 5), (GPT, 4), (GLM, 9)])
 async def test_a_failing_provider_is_a_provider_error_after_the_sdk_retries(play, model, requests):
     result, fake = await play([{"status": 500}], model)
     s = summary(result)
@@ -271,7 +295,7 @@ async def test_no_model_endpoint_fails_before_any_request(harness):
 
 
 async def test_a_model_without_a_price_fails_before_any_request(play):
-    result, fake = await play([SUBMIT], "fireworks_ai/qwen3p8-2p4t-a95b")
+    result, fake = await play([SUBMIT], "fireworks_ai/minimax-m3")
     assert (result.error.code, fake.requests) == ("unpriced_model", [])
 
 

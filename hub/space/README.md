@@ -9,7 +9,7 @@ base_path: /viewer/
 pinned: true
 license: other
 license_name: cc-by-sa-4.0-cc-by-4.0-meteocat-apache-2.0
-license_link: https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.4.1/data/LICENSE
+license_link: https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.4.2/data/LICENSE
 short_description: Port of Barcelona weeks on AgentEnv, replayed in 3D
 thumbnail: https://huggingface.co/spaces/earakely-scale/PortSimEnv-AgentEnv/resolve/main/thumbnail.jpg
 tags:
@@ -28,8 +28,11 @@ datasets:
 # PortSimEnv on AgentEnv
 
 An agent runs one container quay at the Port of Barcelona for a week of 2024 that has just gone wrong, and decides
-when, where and with how many cranes every ship docks. This Space replays the recorded runs of GPT-6.1 Sol and Claude
-Sonnet 5.5 on the [AgentEnv Framework](https://www.agentenvframework.com), on a 3D twin of the quay.
+when, where and with how many cranes every ship docks. This Space replays the recorded runs on the
+[AgentEnv Framework](https://www.agentenvframework.com), on a 3D twin of the quay: twelve models on every wind week,
+once each, and GPT-6.1 Sol and Claude Sonnet 5.5 on the marine, live and v1 weeks. The twelve are Claude Opus, Sonnet
+and Haiku 5.5; GPT-6 Astra, GPT-6.1 Sol and GPT-6 Luna; Kimi K3, GLM-5.3, GLM-5.3-Flash, Qwen3.8-2.4T and DeepSeek
+V4.1 Flash on Fireworks; and Qwen3.8-27B on Groq.
 
 - **v4, the wind port:** the marine week in real Barcelona wind. Each week is moved into a real weather week of 2023
   to 2025, and the wind that blew at Meteocat's XEMA station Y7 (Bocana Sud), standing in for the Dique Sur
@@ -54,8 +57,8 @@ The overview's "Start here" opens on GPT-6.1 Sol's run of
 the week of 6 March 2023's wind (reward 0.62), the one filmed for the plugin's README
 ([full film](https://github.com/earakely-scale/agentenv-portsim-plugin/releases/tag/replays-2026-10-09)). It berths
 VIENNA EXPRESS at hour 130, inside the storm but at an hour no forecast had shown, which the grade excuses (the
-replay's grade panel lists it). Then comes one table per version, v4 first; click a model to list its weeks, and a week
-to replay it.
+replay's grade panel lists it). Then comes the model board, one table per version, v4 first; click a model to list its
+weeks, and a week to replay it. The same board is the dataset's `results` table.
 
 The dataset [earakely-scale/PortSimEnv-AgentEnv](https://huggingface.co/datasets/earakely-scale/PortSimEnv-AgentEnv)
 holds the weeks, the references, the runs and their transcripts in two kinds of tables: PortSim's own, one family per
@@ -74,13 +77,13 @@ the dataset:
 
 ```bash
 uv tool install agentenv-framework \
-    --with "agentenv-portsim @ git+https://github.com/earakely-scale/agentenv-portsim-plugin@v0.4.1"
+    --with "agentenv-portsim @ git+https://github.com/earakely-scale/agentenv-portsim-plugin@v0.4.2"
 agent-env portsim setup --agent        # build the env and agent images and register them (a few minutes)
 agent-env run portsim --task smoke     # no model: grades a known optimal plan, prints "passed"
 
 export HF_TOKEN=hf_...                  # with "Make calls to Inference Providers", on an account with credits
 export LITELLM_BASE_URL=https://router.huggingface.co/v1 LITELLM_API_KEY=$HF_TOKEN
-agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.4.1 --task dock-36A-w06x1-standard-0-e07 \
+agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.4.2 --task dock-36A-w06x1-standard-0-e07 \
     --model zai-org/GLM-5.3-Flash:baseten          # the default bundle: dock-v1-eval-wind (v4)
 ```
 
@@ -97,12 +100,12 @@ agent-env portsim view mine            # at http://127.0.0.1:8237/viewer/
 
 The [dataset card](https://huggingface.co/datasets/earakely-scale/PortSimEnv-AgentEnv#play-a-week-yourself) has more:
 the v3, v2 and v1 bundles and the other open models. If a step fails, see the plugin README's
-[troubleshooting](https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.4.1/README.md#run-it-yourself).
+[troubleshooting](https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.4.2/README.md#run-it-yourself).
 
 ## How this Space runs
 
-`start.sh` downloads the recorded sweeps (`runs/`) from the dataset at its `v0.4.1` tag (`--revision v0.4.1`), and
-`agent-env portsim view`, installed from the plugin's `v0.4.1` tag, serves them, replaying each v2, v3 and v4 run
+`start.sh` downloads the recorded sweeps (`runs/`) from the dataset at its `v0.4.2` tag (`--revision v0.4.2`), and
+`agent-env portsim view`, installed from the plugin's `v0.4.2` tag, serves them, replaying each v2, v3 and v4 run
 through its week from the recorded tool calls. The 3D twin is downloaded from PortSimEnv's public bucket at start.
 
 ## Licence and attribution
@@ -129,7 +132,7 @@ through its week from the recorded tool calls. The 3D twin is downloaded from Po
 - **The 3D twin:** © OpenStreetMap contributors (ODbL) · terrain: Terrain Tiles (AWS).
 - **Code:** the plugin and PortSimEnv's viewer are under the Apache License 2.0.
 
-The plugin's [NOTICE](https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.4.1/NOTICE) and
-[data/LICENSE](https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.4.1/data/LICENSE) set out each part.
+The plugin's [NOTICE](https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.4.2/NOTICE) and
+[data/LICENSE](https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.4.2/data/LICENSE) set out each part.
 This Space is independent: neither the Port de Barcelona, PortSimEnv's author, ECMWF nor Meteocat is affiliated with
 it or endorses it.

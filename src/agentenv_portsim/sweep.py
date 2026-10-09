@@ -53,7 +53,7 @@ PUBLISHED = {
     "fireworks_ai/glm-5p3-flash": "hf:zai-org/GLM-5.3-Flash:baseten",
     "fireworks_ai/qwen3p8-2p4t-a95b": "hf:Qwen/Qwen3.8-2.4T-A95B:together",
     "fireworks_ai/glm-5p3": "hf:zai-org/GLM-5.3:together",
-    "groq/qwen3.8-27b": "hf:Qwen/Qwen3.8-27B:cerebras|ovhcloud",
+    "groq/qwen/qwen3.8-27b": "hf:Qwen/Qwen3.8-27B:cerebras|ovhcloud",
 }
 
 

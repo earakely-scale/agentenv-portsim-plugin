@@ -120,8 +120,9 @@ def chat(i: int, turn: dict, body: dict) -> Response:
 
 class FakeLiteLLM:
     """Runs in a thread on a free port: `.url`, and `.requests` as (path, headers, body). A turn {"status": 500}
-    answers with that error; past the last turn every request gets a 500. Errors ask for a 1 ms retry delay, so the
-    SDKs' retries run at once."""
+    answers with that error, and {"stream_error": "..."} with a 200 stream that fails, as a proxy reports a provider
+    cutting a reply; past the last turn every request gets a 500. Errors ask for a 1 ms retry delay, so the SDKs'
+    retries run at once."""
 
     def __init__(self, turns: list[dict], host: str = "127.0.0.1"):
         self.turns, self.host, self.requests = turns, host, []
@@ -138,6 +139,9 @@ class FakeLiteLLM:
             if "status" in turn:
                 return JSONResponse({"error": {"message": turn.get("message", "scripted error"), "type": "fake"}},
                                     status_code=turn["status"], headers={"retry-after-ms": "1"})
+            if "stream_error" in turn:
+                error = {"error": {"message": turn["stream_error"], "type": "fake"}}
+                return Response(f"data: {json.dumps(error)}\n\n", media_type="text/event-stream")
             return build(i, turn, body)
         return endpoint
 

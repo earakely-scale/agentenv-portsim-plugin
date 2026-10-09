@@ -24,7 +24,16 @@ const enc = encodeURIComponent;
 const runHref = (run, model, task) => `#/run/${enc(run)}/${enc(model)}/${enc(task)}`;
 const optimal = (e) => (e.reward || 0) >= 0.999;
 
-export const nameOf = (model) => upstreamName(CONFIG.published[model] ?? model);
+const NAMES = {
+  "anthropic/claude-opus-5-5": "Claude Opus 5.5",
+  "anthropic/claude-haiku-5-5": "Claude Haiku 5.5",
+  "openai/gpt-6-astra": "GPT-6 Astra",
+  "openai/gpt-6-luna": "GPT-6 Luna",
+  "fireworks_ai/kimi-k3": "Kimi K3",
+  "fireworks_ai/deepseek-v4p1-flash": "DeepSeek V4.1 Flash",
+};
+
+export const nameOf = (model) => NAMES[model] ?? upstreamName(CONFIG.published[model] ?? model);
 
 function resultHtml(e) {
   if (!e.submitted) return `<span class="muted">${escapeHtml(e.end_reason || "not submitted")}</span>`;

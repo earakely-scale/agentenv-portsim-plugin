@@ -37,10 +37,19 @@ REQUEST_TIMEOUT = 900.0
 NOTES_CHARS = 8000
 MAX_TOOL_CALLS = 24
 HARNESS_CAP = "length (harness cap)"
-PRICES = {  # USD per 1M tokens: input, output, cache read. LiteLLM public price map, 2026-10-06.
+PRICES = {  # USD per 1M tokens: input, output, cache read. LiteLLM public price map, 2026-10-06 and 2026-10-09.
+    "anthropic/claude-opus-5-5": (4.00, 20.00, 0.40),
     "anthropic/claude-sonnet-5-5": (2.00, 10.00, 0.20),
+    "anthropic/claude-haiku-5-5": (0.10, 0.50, 0.01),
+    "openai/gpt-6-astra": (10.00, 50.00, 1.00),
     "openai/gpt-6.1-sol": (2.00, 10.00, 0.10),
+    "openai/gpt-6-luna": (0.10, 0.50, 0.01),
+    "fireworks_ai/kimi-k3": (3.00, 15.00, 0.30),
+    "fireworks_ai/glm-5p3": (1.40, 4.40, 0.26),
     "fireworks_ai/glm-5p3-flash": (0.15, 0.50, 0.03),
+    "fireworks_ai/qwen3p8-2p4t-a95b": (2.00, 6.00, 0.25),  # no Fireworks entry in the map: the other providers' price
+    "fireworks_ai/deepseek-v4p1-flash": (0.30, 1.20, 0.006),
+    "groq/qwen/qwen3.8-27b": (0.80, 4.00, 0.80),
     # The open models upstream evaluated, through the Hugging Face router (https://router.huggingface.co/v1): its
     # /v1/models prices for each provider, 2026-10-07, with cache reads charged as input.
     "Qwen/Qwen3.8-2.4T-A95B:together": (2.00, 6.00, 2.00),
@@ -48,6 +57,7 @@ PRICES = {  # USD per 1M tokens: input, output, cache read. LiteLLM public price
     "zai-org/GLM-5.3-Flash:baseten": (0.15, 0.50, 0.15),
     "zai-org/GLM-5.3:together": (1.40, 4.40, 1.40),
 }
+MAX_OUTPUT = {"groq/qwen/qwen3.8-27b": 16384}  # the provider's limit on one reply, under the task's max_tokens
 
 
 @dataclass(frozen=True)
@@ -271,13 +281,16 @@ class OpenAIResponsesAgent:
 
 
 class ChatAgent:
-    """OpenAI-compatible chat completions, streamed (long generations stall behind the HF router otherwise)."""
+    """OpenAI-compatible chat completions, streamed (long generations stall behind the HF router otherwise). Eight
+    retries, about 40 s of backoff: a provider's tokens-per-minute limit, like Groq's, answers 429 until its minute
+    turns. A call whose arguments aren't a JSON object goes back into the history as {}, its result saying why, since
+    Fireworks refuses a history that holds one; the record keeps what the model sent."""
 
     route = "chat"
 
     def __init__(self, model: str, tools, system: str, max_tokens: int, base_url: str, api_key: str,
                  effort: str | None = None, bill_to: str | None = None):
-        self.client = openai.AsyncOpenAI(base_url=base_url, api_key=api_key, max_retries=3, timeout=REQUEST_TIMEOUT,
+        self.client = openai.AsyncOpenAI(base_url=base_url, api_key=api_key, max_retries=8, timeout=REQUEST_TIMEOUT,
                                          default_headers={"X-HF-Bill-To": bill_to} if bill_to else None)
         self.model, self.max_tokens = model, max_tokens
         self.extra = {"reasoning_effort": effort} if effort in ("low", "medium", "high") else {}
@@ -358,7 +371,8 @@ class ChatAgent:
         msg: dict[str, Any] = {"role": "assistant", "content": text}
         if out:
             msg["tool_calls"] = [{"id": c.id, "type": "function",
-                                  "function": {"name": c.name, "arguments": c.raw or "{}"}} for c in out]
+                                  "function": {"name": c.name, "arguments": "{}" if c.error else c.raw or "{}"}}
+                                 for c in out]
         self.messages.append(msg)
         return Turn(text, think, out, stop, usage)
 
@@ -392,6 +406,14 @@ def cost(usage: dict, price: tuple[float, float, float]) -> float:
 
 PROVIDER_ERRORS = (anthropic.APIError, openai.APIError, httpx.HTTPError, httpx2.HTTPError, ProviderError)
 REFUSED = {401, 402, 403}  # the key or the account: nothing billed, and a retry gets the same answer
+STREAM_RETRIES = 2
+
+
+def mid_stream(error: BaseException) -> bool:
+    """A reply cut or failed after its stream began: the SDKs' retries end where the stream starts, and no tool has run
+    on it, so the same request can be sent again."""
+    return not isinstance(error, (anthropic.APIStatusError, openai.APIStatusError, anthropic.APIConnectionError,
+                                  openai.APIConnectionError))
 
 
 # ================================================================ episode
@@ -414,9 +436,12 @@ class Episode:
         self.failure: tuple[str, str] | None = None
         self.error: str | None = None
 
+    def describe(self, error: BaseException) -> str:
+        return f"{type(error).__name__}: {str(error).replace(self.key, '<LITELLM_API_KEY>')[:800]}"
+
     def fail(self, code: str, message: str | None = None, error: BaseException | None = None) -> None:
         if error is not None:
-            self.error = f"{type(error).__name__}: {str(error).replace(self.key, '<LITELLM_API_KEY>')[:800]}"
+            self.error = self.describe(error)
             self.record["errors"].append(self.error)
         self.failure = (code, message or self.error)
         self.record["end_reason"] = code
@@ -444,7 +469,8 @@ class Episode:
         self.record["messages"] += [{"role": "system", "content": system}, {"role": "user", "content": opening}]
         tools = await env.tools()
         self.live = any(t.name == "advance" for t in tools)
-        agent = make_agent(self.model, tools, system, config.model_params["max_tokens"], config.effort,
+        limit = config.model_params["max_tokens"]
+        agent = make_agent(self.model, tools, system, min(limit, MAX_OUTPUT.get(self.model, limit)), config.effort,
                            self.base.rstrip("/").removesuffix("/v1"), self.key, self.live, self.bill_to)
         agent.user(opening)
         async with agent.client:
@@ -468,13 +494,18 @@ class Episode:
             if self.spent + most > self.max_cost:
                 return self.fail("cost_cap", f"the next request could cost ${most:.4f}, past the ${self.max_cost:g} "
                                              f"cap with ${self.spent:.4f} spent")
-            try:
-                t = await agent.step(request)
-            except PROVIDER_ERRORS as e:
-                if getattr(e, "status_code", None) in REFUSED:
-                    return self.fail("provider_refused", error=e)
-                self.spent += most
-                return self.fail("provider_error", error=e)
+            for resend in range(STREAM_RETRIES + 1):
+                try:
+                    t = await agent.step(request)
+                    break
+                except PROVIDER_ERRORS as e:
+                    if getattr(e, "status_code", None) in REFUSED:
+                        return self.fail("provider_refused", error=e)
+                    self.spent += most
+                    if resend == STREAM_RETRIES or not mid_stream(e) or self.spent + most > self.max_cost:
+                        return self.fail("provider_error", error=e)
+                    self.record["errors"].append(f"{self.describe(e)} (turn {turn + 1} sent again)")
+                    log.warning("turn %d: the reply failed mid-stream, sending it again", turn + 1)
             self.spent += most if t.stop == HARNESS_CAP else cost(t.usage, price)
             self.cached += t.usage["cached"]
             self.written += t.usage["cache_write"]
@@ -567,7 +598,7 @@ class Episode:
         name="portsim-llm",
         description="PortSimEnv's harness loop: a model re-plans a disrupted week of berthing at a Port of Barcelona "
                     "quay through the env's tools, with upstream's prompts and limits, on agent-env's model endpoint.",
-        version="0.4.1",
+        version="0.4.2",
     ),
     config=PortSimConfig,
     extensions=(MCP_CONFIG_V1, TRAJECTORY_V1),

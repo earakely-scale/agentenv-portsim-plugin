@@ -137,9 +137,13 @@ release, from this repository: `scripts/hub_dataset.py` builds the dataset with 
 is its card, and `hub/space/` is the Space (README, [On the Hugging Face Hub](README.md#on-the-hugging-face-hub)).
 The script needs:
 
-- **The recorded sweeps** under `results/runs`, the 13 it lists in `SWEEPS` from `wind-pilot-gpt` to `g2`, and the
-  agent-env store they wrote their runs to, from which agentenv-hf reads each run's record and trajectory. Neither is
-  in git: `results/runs/` is ignored, and the store is agent-env's (`~/.local/state/agent-env` by default).
+- **The recorded sweeps** under `results/runs`: by default every sweep in `SWEEPS` that has been run, the model
+  board's `<env>-[pilot-]<model>[-2]` sweeps for the wind, marine and live weeks and `g2`; name others on the command
+  line. It also needs the agent-env store they wrote their runs to, from which agentenv-hf reads each run's record and
+  trajectory. Neither is in git: `results/runs/` is ignored, and the store is agent-env's
+  (`~/.local/state/agent-env` by default).
+- **A model on the board** needs its price in the agent's `PRICES`, its name in `NAMES` in `scripts/hub_dataset.py`
+  and in `web/ext/overview.js`, and its slug in `BOARD`.
 - **An `hf` login with write access** to the dataset and the Space: `hf auth login` (or
   `uvx --from huggingface_hub hf auth login`), or `HF_TOKEN`. `HF_TOKEN` is used before the login, so unset it if it
   holds a token without write access.
@@ -159,8 +163,8 @@ A release goes in this order:
 
    ```bash
    uv run python scripts/hub_dataset.py --out build/hub/dataset
-   uv run python scripts/hub_dataset.py --out build/hub/dataset --repo earakely-scale/PortSimEnv-AgentEnv --tag v0.4.1 \
-       --message "v0.4.1: ..."
+   uv run python scripts/hub_dataset.py --out build/hub/dataset --repo earakely-scale/PortSimEnv-AgentEnv --tag v0.4.2 \
+       --message "v0.4.2: ..."
    ```
 
    The first writes the folder and prints each table's row count. Every file goes through agentenv-hf's scan for this

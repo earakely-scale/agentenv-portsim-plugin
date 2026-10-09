@@ -66,6 +66,37 @@ def test_the_card_lists_every_bundle_for_agent_env_hf_run_with_the_wind_port_fir
     assert {"rl-environment", "agentenv"} <= set(data["tags"])
 
 
+def _run(model, task_id, reward, tier="busy", feasible=True, cost=300, reached=True, usd=0.5):
+    return {"model": model, "task_id": task_id, "difficulty": tier, "reward": reward, "feasible": feasible,
+            "cost": cost, "optimal_cost": 300, "turns": 10, "input_tokens": 1000, "output_tokens": 100,
+            "cost_usd": usd, "seconds": 60.0, "reached_end": reached}
+
+
+def test_the_board_ranks_models_by_their_mean_over_weeks_with_each_tier_and_portsim_envs_counts():
+    runs = [_run("openai/gpt-6-luna", "a", 0.2, feasible=False, cost=900, reached=False, usd=None),
+            _run("openai/gpt-6-luna", "b", 0.4, tier="standard", cost=320),
+            _run("fireworks_ai/kimi-k3", "a", 1.0), _run("fireworks_ai/kimi-k3", "a", 0.8),
+            _run("fireworks_ai/kimi-k3", "b", 0.6, tier="standard", cost=310)]
+    kimi, luna = hub.board("v4", runs)
+    assert (kimi["model_name"], kimi["provider"], kimi["weeks"], kimi["runs"]) == ("Kimi K3", "Fireworks", 2, 3)
+    assert kimi["mean_reward"] == 0.75 and kimi["ci_low"] <= 0.75 <= kimi["ci_high"]
+    assert (kimi["reward_busy"], kimi["reward_standard"], kimi["optimal"]) == (0.9, 0.6, 2)
+    assert (luna["finished"], luna["feasible"], luna["optimal"], luna["cost_usd"]) == (1, 1, 0, 0.5)
+    board = hub.board_json("v4", [kimi, luna], 2)
+    assert board["env"] == "portsim-wind" and board["board"][0]["tiers"] == {"standard": 0.6, "busy": 0.9}
+    assert {"model", "key", "n", "mean", "tiers", "submitted", "feasible", "optimal", "tokens_out", "tokens_in",
+            "median_s"} <= set(board["board"][1])
+    table = hub.board_markdown("v4", [kimi, luna], 2).splitlines()
+    assert "At the anchor" in table[0] and table[2].startswith("| Kimi K3 | Fireworks | 2 of 2 | **0.750**")
+
+
+def test_the_card_carries_each_versions_board_between_its_markers():
+    text = hub.card_text(PLUGIN, {"v4": "| Kimi K3 |"})
+    assert "<!-- board:v4 -->\n\n| Kimi K3 |\n\n<!-- /board:v4 -->" in text
+    assert "<!-- board:v2 -->\n\n<!-- /board:v2 -->" in text
+    assert "results" in [c["config_name"] for c in DatasetCard(text).data.to_dict()["configs"]]
+
+
 def test_the_hub_sources_install_this_version_of_the_plugin():
     assert f"agentenv-portsim-plugin/archive/refs/tags/{TAG}.tar.gz" in (ROOT / "hub/space/Dockerfile").read_text()
     for card in ("hub/dataset/README.md", "hub/space/README.md"):

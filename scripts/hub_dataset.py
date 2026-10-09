@@ -2,7 +2,8 @@
 push it. Two kinds of tables share the repo:
 
 - PortSim's, one family per version (v4 wind, v3 marine, v2 live, v1): the weeks with what the agent is told and the
-  reference costs, the recorded runs with their grades and chat transcripts, and the references.
+  reference costs, the recorded runs with their grades and chat transcripts, and the references. Beside them, each
+  model's results per version, as a table, as the card's tables and as a board.json in the shape of PortSimEnv's.
 - agentenv-hf's, one per bundle, as `agent-env hf publish` writes them: the bundle's tasks and runs, each run's record
   and native trajectory, and the bundle itself, which `agent-env hf run` runs. A version's runs come from several
   sweeps, each played from a bundle of its own, so they are built sweep by sweep and joined under the version's
@@ -14,13 +15,15 @@ agentenv-hf's check for keys and token shapes before anything is written, and --
 on top of the commit it read, removing what the build no longer writes.
 
     uv run python scripts/hub_dataset.py --out build/hub/dataset
-    uv run python scripts/hub_dataset.py --out build/hub/dataset --repo earakely-scale/PortSimEnv-AgentEnv --tag v0.4.1
+    uv run python scripts/hub_dataset.py --out build/hub/dataset --repo earakely-scale/PortSimEnv-AgentEnv --tag v0.4.2
 """
 
 import argparse
 import io
 import json
+import re
 import shutil
+import statistics
 import tomllib
 from pathlib import Path
 
@@ -35,21 +38,32 @@ from huggingface_hub import CommitOperationAdd, CommitOperationDelete, HfApi
 
 from agentenv_portsim import marine, tasks, wind
 from agentenv_portsim.schedule import MARINE_ENV, WIND_ENV, WIND_MAX_TURNS, schedule
-from agentenv_portsim.sweep import EVAL_PACK, RUNS, results
+from agentenv_portsim.sweep import EVAL_PACK, RUNS, TIERS, ci, results
 
 ROOT = Path(__file__).resolve().parents[1]
 CARD = ROOT / "hub/dataset/README.md"
 VERSION = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["version"]
 WEATHER = ROOT / "data/wind/weather.jsonl"
 SPLIT = "eval"
-SWEEPS = ["wind-pilot-gpt", "wind-gpt", "wind-pilot-sonnet", "wind-sonnet", "marine-pilot-gpt", "marine-gpt",
-          "marine-pilot-sonnet", "marine-sonnet", "live-pilot-gpt", "live-gpt", "live-pilot-sonnet", "live-sonnet",
-          "g2"]
+BOARD = ["gpt", "sonnet", "opus", "haiku", "astra", "luna", "kimi", "glm", "glmflash", "qwen2t", "qwen27b", "dsflash"]
+SWEEPS = [f"{env}-{stage}{model}{replay}" for env in ("wind", "marine", "live") for model in BOARD
+          for stage in ("pilot-", "") for replay in ("", "-2")]  # -2: replays of runs that used up their attempts
+SWEEPS.append("g2")
 BUNDLES = {"v4": f"{EVAL_PACK}-wind", "v3": f"{EVAL_PACK}-marine", "v2": f"{EVAL_PACK}-live", "v1": EVAL_PACK}
 REFERENCE_FILES = {"v4": ("wind", wind.REFERENCES), "v3": ("marine", marine.REFERENCES),
                    "v2": ("live", tasks.REFERENCES)}
 SETUP = "agent-env portsim setup --agent"
-NAMES = {"openai/gpt-6.1-sol": "GPT-6.1 Sol", "anthropic/claude-sonnet-5-5": "Claude Sonnet 5.5"}
+ENVS = {"v4": WIND_ENV, "v3": MARINE_ENV, "v2": "portsim-live", "v1": "portsim"}
+NAMES = {
+    "anthropic/claude-opus-5-5": "Claude Opus 5.5", "anthropic/claude-sonnet-5-5": "Claude Sonnet 5.5",
+    "anthropic/claude-haiku-5-5": "Claude Haiku 5.5", "openai/gpt-6-astra": "GPT-6 Astra",
+    "openai/gpt-6.1-sol": "GPT-6.1 Sol", "openai/gpt-6-luna": "GPT-6 Luna", "fireworks_ai/kimi-k3": "Kimi K3",
+    "fireworks_ai/glm-5p3": "GLM-5.3", "fireworks_ai/glm-5p3-flash": "GLM-5.3-Flash",
+    "fireworks_ai/qwen3p8-2p4t-a95b": "Qwen3.8-2.4T", "groq/qwen/qwen3.8-27b": "Qwen3.8-27B",
+    "fireworks_ai/deepseek-v4p1-flash": "DeepSeek V4.1 Flash",
+}
+PROVIDERS = {"anthropic": "Anthropic", "openai": "Azure OpenAI", "fireworks_ai": "Fireworks", "groq": "Groq"}
+BOARD_TABLE = re.compile(r"(<!-- board:(v\d) -->\n).*?(\n<!-- /board:\2 -->)", re.S)
 MESSAGES = pa.field("messages", pa.list_(tables.MESSAGE))
 
 
@@ -117,12 +131,13 @@ def episode_rows(sweep_dir: Path, version: str, by_id: dict, episode_ids: dict[s
                "difficulty": task.difficulty, "quay": task.quay, "num_ships": len(task.ships), "reward": r["reward"],
                "feasible": r["feasible"], "cost": r["plan_cost"], "optimal_cost": r["optimal_cost"],
                "turns": r["turns"], "tool_calls": r["tool_calls"], "input_tokens": r["input_tokens"],
-               "output_tokens": r["output_tokens"], "cost_usd": r["cost_usd"], "end_reason": r["end_reason"],
-               "sweep": sweep_dir.name}
+               "output_tokens": r["output_tokens"], "cost_usd": r["cost_usd"], "seconds": r["wall_seconds"],
+               "end_reason": r["end_reason"], "sweep": sweep_dir.name}
         if version == "v1":
             row |= {"submitted": r["submitted"], "checks": r["checks"]}
         else:
-            row |= {"num_watches": r["watches"], "regret": r["regret"], "excused_cost": r["excused_cost"]}
+            row |= {"reached_end": r["submitted"], "num_watches": r["watches"], "regret": r["regret"],
+                    "excused_cost": r["excused_cost"]}
         plan = record["final"].get("plan") if version == "v1" else graded.get(row["episode_id"])
         rows.append(row | {"final_plan": json.dumps(plan),
                            "steps": json.dumps(record["steps"], ensure_ascii=False),
@@ -155,6 +170,66 @@ def table_bytes(rows: list[dict]) -> bytes:
     return tables.parquet(rows, schema)
 
 
+def board(version: str, episodes: list[dict]) -> list[dict]:
+    """One row per model, best first: the mean over its weeks with the bootstrap CI the sweep reports use, drawing the
+    weeks in task id order as they do, each tier's mean, and the counts PortSimEnv's eval board shows. A week played
+    more than once counts as its runs' mean."""
+    rows = []
+    for model in dict.fromkeys(e["model"] for e in episodes):
+        eps = [e for e in episodes if e["model"] == model]
+        weeks: dict[str, list[dict]] = {}
+        for e in eps:
+            weeks.setdefault(e["task_id"], []).append(e)
+        mean = {t: statistics.mean(e["reward"] for e in weeks[t]) for t in sorted(weeks)}
+        low, high = ci(list(mean.values()))
+        tiers = {t: statistics.mean(m for w, m in mean.items() if weeks[w][0]["difficulty"] == t)
+                 for t in TIERS if any(es[0]["difficulty"] == t for es in weeks.values())}
+        costs = [e["cost_usd"] for e in eps if e["cost_usd"] is not None]
+        rows.append({
+            "version": version, "env": ENVS[version], "model": model, "model_name": NAMES.get(model, model),
+            "provider": PROVIDERS.get(model.split("/")[0], model.split("/")[0]), "weeks": len(weeks), "runs": len(eps),
+            "mean_reward": statistics.mean(mean.values()), "ci_low": low, "ci_high": high,
+            **{f"reward_{t}": m for t, m in tiers.items()},
+            "finished": sum(bool(e.get("reached_end", e.get("submitted"))) for e in eps),
+            "feasible": sum(bool(e["feasible"]) for e in eps),
+            "optimal": sum(bool(e["feasible"]) and e["cost"] <= e["optimal_cost"] for e in eps),
+            "median_turns": statistics.median(e["turns"] for e in eps),
+            "input_tokens": sum(e["input_tokens"] or 0 for e in eps),
+            "output_tokens": sum(e["output_tokens"] or 0 for e in eps),
+            "cost_usd": sum(costs), "cost_per_episode": statistics.mean(costs) if costs else None,
+            "median_seconds": statistics.median(e["seconds"] for e in eps if e["seconds"] is not None),
+        })
+    return sorted(rows, key=lambda r: -r["mean_reward"])
+
+
+def board_json(version: str, rows: list[dict], weeks: int) -> dict:
+    """The board in the shape of PortSimEnv's article data (portsim-results.json), with the CI, provider and cost."""
+    return {"version": version, "env": ENVS[version], "tasks": weeks, "board": [{
+        "model": r["model_name"], "key": r["model"], "provider": r["provider"], "n": r["runs"],
+        "mean": round(r["mean_reward"], 4), "ci": [round(r["ci_low"], 4), round(r["ci_high"], 4)],
+        "tiers": {t: round(r[f"reward_{t}"], 4) for t in TIERS if f"reward_{t}" in r},
+        "submitted": r["finished"], "feasible": r["feasible"], "optimal": r["optimal"],
+        "tokens_out": r["output_tokens"], "tokens_in": r["input_tokens"], "median_s": round(r["median_seconds"]),
+        "cost_usd": round(r["cost_usd"], 2)} for r in rows]}
+
+
+def board_markdown(version: str, rows: list[dict], weeks: int) -> str:
+    finished = "Submitted" if version == "v1" else "Reached the end"
+    optimal = "At the anchor" if version == "v4" else "Optimal"
+    tiers = [t for t in TIERS if any(f"reward_{t}" in r for r in rows)]
+    lines = [f"| Model | Provider | Weeks | Mean reward (95% CI) | {' | '.join(t.capitalize() for t in tiers)} "
+             f"| {finished} | Feasible | {optimal} | Median turns | Cost per episode |",
+             "|---|---|---:|---|" + "---:|" * (len(tiers) + 5)]
+    for r in rows:
+        lines.append(" | ".join([
+            f"| {r['model_name']}", r["provider"], f"{r['weeks']} of {weeks}",
+            f"**{r['mean_reward']:.3f}** ({r['ci_low']:.3f} to {r['ci_high']:.3f})",
+            *(f"{r[f'reward_{t}']:.3f}" if f"reward_{t}" in r else "–" for t in tiers),
+            str(r["finished"]), str(r["feasible"]), str(r["optimal"]), f"{r['median_turns']:g}",
+            f"${r['cost_per_episode']:.2f}" if r["cost_per_episode"] is not None else "–"]) + " |")
+    return "\n".join(lines)
+
+
 def raw_lines(pack_dir: Path) -> dict[str, str]:
     return {json.loads(line)["task_id"]: line for line in (pack_dir / "tasks.jsonl").read_text().splitlines()}
 
@@ -185,9 +260,11 @@ def agentenv_files(name: str, bundle: Path,
     return files, episode_ids, graded
 
 
-def card_text(plugin: str) -> str:
-    """hub/dataset/README.md with each bundle's two configs and its needs, as agentenv-hf's publish writes them."""
-    text = CARD.read_text()
+def card_text(plugin: str, boards: dict[str, str] | None = None) -> str:
+    """hub/dataset/README.md with each version's board between its markers, and each bundle's two configs and its
+    needs, as agentenv-hf's publish writes them."""
+    text = BOARD_TABLE.sub(lambda m: m[1] + (f"\n{t}\n" if (t := (boards or {}).get(m[2])) else "") + m[3],
+                           CARD.read_text())
     for name in BUNDLES.values():
         text = card(text, name=name, split=SPLIT, repo=None, description=None, license=None,
                     needs={"plugins": [plugin], "setup": SETUP})
@@ -205,6 +282,8 @@ def build(sweeps: list[str], runs_dir: Path, out: Path, plugin: str) -> dict[str
            "v4": wind.task_ids()}
     weathers = {json.loads(line)["id"]: json.loads(line) for line in WEATHER.read_text().splitlines()}
     played = {v: [] for v in BUNDLES}
+    boards: dict[str, str] = {}
+    board_rows: list[dict] = []
     for name in sweeps:
         played[version_of(json.loads((runs_dir / name / "sweep.json").read_text()))].append(runs_dir / name)
     files: dict[str, bytes] = {}
@@ -213,6 +292,7 @@ def build(sweeps: list[str], runs_dir: Path, out: Path, plugin: str) -> dict[str
         shutil.rmtree(bundle, ignore_errors=True)
         tasks.generate(EVAL_PACK, bundle, live=v != "v1", marine=v == "v3", wind=v == "v4")
         scored = [(d, [r["instance"] for r in results(d) if r["outcome"] == "scored"]) for d in played[v]]
+        scored = [(d, instances) for d, instances in scored if instances]
         hub_files, episode_ids, graded = agentenv_files(bundle_name, bundle, scored)
         files |= hub_files
         by_ref = {r["task_id"]: r for r in refs.get(v, [])}
@@ -220,6 +300,12 @@ def build(sweeps: list[str], runs_dir: Path, out: Path, plugin: str) -> dict[str
                                                    for i in ids[v]])
         episodes = [row for d in played[v] for row in episode_rows(d, v, by_version[v], episode_ids, graded)]
         files[f"episodes/{v}.parquet"] = table_bytes(sorted(episodes, key=lambda r: (r["model"], r["task_id"])))
+        if episodes:
+            rows = board(v, episodes)
+            weeks = len({e["task_id"] for e in episodes})
+            board_rows += rows
+            boards[v] = board_markdown(v, rows, weeks)
+            files[f"results/{v}.json"] = (json.dumps(board_json(v, rows, weeks), indent=1) + "\n").encode()
         if v in REFERENCE_FILES:
             ref_name, source = REFERENCE_FILES[v]
             files[f"references/{ref_name}.jsonl"] = source.read_bytes()
@@ -229,11 +315,12 @@ def build(sweeps: list[str], runs_dir: Path, out: Path, plugin: str) -> dict[str
                 rel = path.relative_to(d)
                 if path.is_file() and rel.parts[0] not in ("logs", "bundle"):
                     files[f"runs/{d.name}/{rel.as_posix()}"] = path.read_bytes()
-    return files | {"README.md": card_text(plugin).encode()}
+    files["results/board.parquet"] = table_bytes(board_rows)
+    return files | {"README.md": card_text(plugin, boards).encode()}
 
 
 def write(files: dict[str, bytes], out: Path) -> None:
-    for folder in ("tasks", "episodes", "references", "raw", "runs", "bundles"):
+    for folder in ("tasks", "episodes", "references", "results", "raw", "runs", "bundles"):
         shutil.rmtree(out / folder, ignore_errors=True)
     for path, content in files.items():
         (out / path).parent.mkdir(parents=True, exist_ok=True)
@@ -257,18 +344,20 @@ def push(out: Path, repo: str, tag: str | None, message: str) -> str:
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("sweeps", nargs="*", default=SWEEPS)
+    ap.add_argument("sweeps", nargs="*", help="Default: every sweep in SWEEPS that has been run.")
     ap.add_argument("--runs", type=Path, default=RUNS)
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--plugin-ref", default=f"v{VERSION}",
                     help="The plugin tag the card's bundles pin, for agent-env hf run.")
     ap.add_argument("--repo", help="Push the folder to this dataset repo after writing it.")
-    ap.add_argument("--tag", help="Tag the pushed commit, e.g. v0.4.1.")
+    ap.add_argument("--tag", help="Tag the pushed commit, e.g. v0.4.2.")
     ap.add_argument("--message", default="Publish PortSimEnv on AgentEnv")
     args = ap.parse_args()
     plugin = f"agentenv-portsim @ git+https://github.com/earakely-scale/agentenv-portsim-plugin@{args.plugin_ref}"
+    sweeps = args.sweeps or [s for s in SWEEPS if (args.runs / s / "sweep.json").is_file()]
+    print("sweeps:", " ".join(sweeps))
     with namespace_routing():
-        files = build(args.sweeps, args.runs, args.out, plugin)
+        files = build(sweeps, args.runs, args.out, plugin)
     scan(files, known_values())
     write(files, args.out)
     counts = {p: pq.read_metadata(io.BytesIO(c)).num_rows for p, c in files.items() if p.endswith(".parquet")}
