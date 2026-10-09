@@ -665,7 +665,7 @@ def y7_sources(cache: Path) -> dict:
     return {
         "dataset": "nzvn-apee", "url": XEMA, "api": SOCRATA,
         "publisher": "Servei Meteorològic de Catalunya (Meteocat), via the Generalitat de Catalunya's open data portal",
-        "station": "Y7", "name": "Barcelona – Bocana Sud",
+        "station": "Y7", "name": "Port de Barcelona - Bocana Sud",
         "variables": {"30": "VV10, wind speed at 10 m, 30-minute mean, m/s",
                       "50": "VVx10, wind gust at 10 m, 3-second maximum, m/s"},
         "conversion": {"knots": "m/s x 3600/1852", "30": FACTORS["30"], "50": round(FACTORS["50"], 3),

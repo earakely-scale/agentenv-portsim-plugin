@@ -604,7 +604,7 @@
     "range": "bytes=offset-(offset+length-1) of the key; sha256 of those bytes",
     "messages": {
       "file": "wind/weather-sources.json",
-      "sha256": "6178146ae0d8b244d682a8f086c51d2e69237024b1d256845733534761efdda4",
+      "sha256": "c948aa38cf0dd904e99cba431156125b1326aac8cecdaea83a6d4c5a85e76dc3",
       "count": 33550
     }
   },
@@ -614,7 +614,7 @@
     "api": "https://analisi.transparenciacatalunya.cat/resource/nzvn-apee.json",
     "publisher": "Servei Meteorològic de Catalunya (Meteocat), via the Generalitat de Catalunya's open data portal",
     "station": "Y7",
-    "name": "Barcelona – Bocana Sud",
+    "name": "Port de Barcelona - Bocana Sud",
     "variables": {
       "30": "VV10, wind speed at 10 m, 30-minute mean, m/s",
       "50": "VVx10, wind gust at 10 m, 3-second maximum, m/s"

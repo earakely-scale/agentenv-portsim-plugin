@@ -33623,7 +33623,7 @@
   "api": "https://analisi.transparenciacatalunya.cat/resource/nzvn-apee.json",
   "publisher": "Servei Meteorològic de Catalunya (Meteocat), via the Generalitat de Catalunya's open data portal",
   "station": "Y7",
-  "name": "Barcelona – Bocana Sud",
+  "name": "Port de Barcelona - Bocana Sud",
   "variables": {
    "30": "VV10, wind speed at 10 m, 30-minute mean, m/s",
    "50": "VVx10, wind gust at 10 m, 3-second maximum, m/s"

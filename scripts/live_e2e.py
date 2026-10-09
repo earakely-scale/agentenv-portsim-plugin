@@ -175,9 +175,10 @@ def check(task, fake: FakeLiteLLM, ctx: dict, env: str, expected: dict, played: 
         problems.append(f"the clock at the end: {clock}")
 
     if (v["score"] != expected["reward"] or week["grade"]["cost"] != expected["cost"]
-            or play["reward"] != expected["reward"]):
-        problems.append(f"scored {v['score']} (cost {week['grade']['cost']}, agent {play['reward']}); "
-                        f"expected {expected['reward']} (cost {expected['cost']})")
+            or week["grade"]["excused_cost"] != expected["excused_cost"] or play["reward"] != expected["reward"]):
+        problems.append(f"scored {v['score']} (cost {week['grade']['cost']}, excused {week['grade']['excused_cost']}, "
+                        f"agent {play['reward']}); expected {expected['reward']} (cost {expected['cost']}, "
+                        f"excused {expected['excused_cost']})")
     if not week["audit"]["ok"] or week["end_reason"] != "done" or play["end_reason"] != "done":
         problems.append(f"audit {week['audit']}, env {week['end_reason']}, agent {play['end_reason']}")
     if len(fake.requests) != play["turns"]:
