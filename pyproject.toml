@@ -7,7 +7,7 @@ name = "agentenv-portsim"
 version = "0.4.0"
 description = "PortSimEnv as an AgentEnv environment: an agent re-plans a disrupted week of container-ship berthing at a Port of Barcelona quay through MCP tools."
 readme = "README.md"
-license = "Apache-2.0 AND CC-BY-SA-4.0"
+license = "Apache-2.0 AND CC-BY-SA-4.0 AND CC-BY-4.0 AND LicenseRef-Meteocat"
 license-files = ["LICENSE", "NOTICE", "data/LICENSE"]
 requires-python = ">=3.11"
 keywords = ["agentenv", "mcp", "reinforcement-learning", "llm-agents", "portsim", "berth-planning", "scheduling"]

@@ -101,12 +101,13 @@ The forecasts are modified ECMWF open data.
   Modified: each run's 10 m wind at one grid point, every 3 hours to 72 hours, mapped to the Y7
   anemometer by quantiles and rounded to whole knots.
   Terms of use: https://apps.ecmwf.int/datasets/licences/general/
-data/wind/weather-sources.json pins each ECMWF message used (object key, byte range, sha256,
-Last-Modified); no GRIB data is included.
+data/wind/weather-sources.json pins each ECMWF message of the runs the weather weeks use (object key,
+byte range, sha256, Last-Modified); the runs the calibration was fitted on are described, not pinned.
+No GRIB data is included.
 
 The observed wind windows are derived from the readings of the Servei Meteorològic de Catalunya's
-(Meteocat) XEMA station Y7, Barcelona – Bocana Sud, in the Generalitat de Catalunya's open data
-portal; no reading is included, and they are used on the terms published there.
+(Meteocat) XEMA station Y7, Port de Barcelona – Bocana Sud, in the Generalitat de Catalunya's open
+data portal; no reading is included, and they are subject to the terms published there.
   Font: Servei Meteorològic de Catalunya (Meteocat), estació XEMA Y7; dades extretes el 2026-10-08; finestres derivades
   https://analisi.transparenciacatalunya.cat/d/nzvn-apee
 data/wind/weather-sources.json pins each month of readings used by its row count and sha256.

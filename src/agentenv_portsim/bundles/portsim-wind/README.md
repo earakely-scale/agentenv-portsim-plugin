@@ -16,7 +16,8 @@ step, so the run is not scored.
 - `wiring-noplay` runs the same steps without the agent and needs no model: end-week delivers every watch's notices
   itself, the week ends with no window confirmed, and it scores 0 with the audit passing.
 
-The task pack and the prompts and notices in these tasks are CC BY-SA 4.0. The other traffic is derived from the Port of
-Barcelona's 2024 calls of every ship type (CC BY-SA 4.0). Contains data from the Port de Barcelona open data portal.
-Contains modified ECMWF open data (CC BY 4.0, © ECMWF) and wind windows derived from the Servei Meteorològic de
+The task pack and the prompts and notices in these tasks are CC BY-SA 4.0, except the weather they show (the forecast
+notices and the wind windows), which keeps its sources' terms (NOTICE, data/LICENSE). The other traffic is derived from
+the Port of Barcelona's 2024 calls of every ship type (CC BY-SA 4.0). Contains data from the Port de Barcelona open data
+portal. Contains modified ECMWF open data (CC BY 4.0, © ECMWF) and wind windows derived from the Servei Meteorològic de
 Catalunya's (Meteocat) XEMA station Y7.

@@ -458,10 +458,10 @@ terms, set out here.
 
   b. Observed wind. The observed windows, the hours the wind was above
      25 or 30 kn, are derived from the readings of the Servei
-     Meteorològic de Catalunya's (Meteocat) XEMA station Y7 (Barcelona
-     – Bocana Sud) in the dataset "Dades meteorològiques de la XEMA",
-     nzvn-apee, of the Generalitat de Catalunya's open data portal. No
-     reading is included.
+     Meteorològic de Catalunya's (Meteocat) XEMA station Y7 (Port de
+     Barcelona – Bocana Sud) in the dataset "Dades meteorològiques de la
+     XEMA", nzvn-apee, of the Generalitat de Catalunya's open data
+     portal. No reading is included.
 
        Font: Servei Meteorològic de Catalunya (Meteocat), estació XEMA
        Y7; dades extretes el 2026-10-08; finestres derivades
@@ -475,15 +475,24 @@ terms, set out here.
 
        https://www.meteo.cat/wpweb/avis-legal/
 
-     and its attribution links the Generalitat's open data licences,
+     and its attribution link,
+
+       https://administraciodigital.gencat.cat/ca/dades/dades-obertes/informacio-practica/llicencies/
+
+     redirects to the Generalitat's open data licences,
 
        https://web.gencat.cat/ca/generalitat/dades-indicadors/dades-obertes/llicencies
 
-     Both ask that the information not be altered or its meaning
-     distorted, that the source be cited and that the date of its last
-     update be given. The Generalitat's open licence does not authorise
+     The Generalitat's licence asks that the information not be altered
+     or its meaning distorted, that the source be cited and that the
+     date of its last update be given; it does not authorise
      sublicensing, and a dataset's own licence or notice prevails over
-     it.
+     it. Meteocat's legal notice sets the same four conditions for
+     information not subject to its intellectual property; for content
+     that is, as the dataset declares, it forbids extracting or reusing
+     all or a substantial part of a database, or repeatedly or
+     systematically extracting parts of it, and directs reusers to
+     Meteocat for a licence.
 
 The files:
 
@@ -494,10 +503,11 @@ The files:
     (a).
 
   - data/wind/weather-sources.json: the pins of the sources: each ECMWF
-    message used (object key, byte range, sha256, Last-Modified), with
-    ECMWF's wording (a); each month of Y7 readings used, by row count
-    and sha256 (b); and a description of the calibration, without its
-    quantile maps (a, b).
+    message of the runs the weather weeks use (object key, byte range,
+    sha256, Last-Modified), with ECMWF's wording (a); each month of Y7
+    readings used, by row count and sha256 (b); and a description of
+    the calibration, without its quantile maps or pins of the runs it
+    was fitted on (a, b).
 
   - data/dock-v1-wind/tasks.jsonl: weeks of data/dock-v1-marine/
     (licence above), each with the windows that blew as its

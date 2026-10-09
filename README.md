@@ -741,17 +741,19 @@ No model has played the wind weeks yet; the scores below are the reference polic
 
 ### The wind rules and their sources
 
-Each number comes from a public source or is labelled an assumption. `data/dock-v1-wind/manifest.json` carries the
-same list, under `wind`, and the pins of the sources under `ecmwf`, `y7` and `calibration`.
+Each number comes from a public source or is labelled an assumption. `data/dock-v1-wind/manifest.json` carries these
+rules in brief under `wind.grounding`, all but Validation and Weather weeks; the Y7 month pins under `y7`; the
+calibration's description under `calibration`; and ECMWF's block under `ecmwf`, whose `messages` names the message
+pins in `data/wind/weather-sources.json` by that file's sha256 and their count.
 
 | Rule | Value | Source |
 |---|---|---|
 | Thresholds | above 25 kn no ship of 300 m or more berths or leaves, and each movement takes one more tug, as in the marine port; above 30 kn no ship moves | The port's [traffic ordinance](https://www.boe.es/diario_boe/txt.php?id=BOE-A-2023-6719) (BOE-A-2023-6719), 4.1 and 4.1.2.1: 25 kn for container ships of 300 m or more and 30 kn for the others, reached or forecast; 4.1.2.2 for the tug. The thresholds start a review with the pilots, which PortSimEnv simplifies to no-movement windows, as v1 does |
-| Anemometer | Meteocat's XEMA station Y7, Barcelona – Bocana Sud | The ordinance's annex III measures the wind at the anemometer of the Dique Sur's red light; taking Y7 for it is an **assumption**. Its readings come from the Generalitat de Catalunya's open data portal, dataset [nzvn-apee](https://analisi.transparenciacatalunya.cat/d/nzvn-apee) |
+| Anemometer | Meteocat's XEMA station Y7, Port de Barcelona – Bocana Sud | The ordinance's annex III measures the wind at the anemometer of the Dique Sur's red light; taking Y7 for it is an **assumption**. Its readings come from the Generalitat de Catalunya's open data portal, dataset [nzvn-apee](https://analisi.transparenciacatalunya.cat/d/nzvn-apee) |
 | Reading | an hour is above T kn when either half-hour has 1.045 × the 30-minute mean or 0.664 × the 3-second gust above T | Annex III takes the 10-minute mean, or the largest 1-minute mean above 1.25 T. Y7 publishes a 30-minute mean and a 3-second gust; the factors 1.045 (10- over 30-minute mean) and 0.83 (1-minute mean over 3-second gust, so 0.83 / 1.25 = 0.664) are **assumptions** |
 | Windows | the hours above each threshold, gaps of 2 hours or less merged, over the 264 hours from the weather week's Monday 00:00 UTC | **Assumption** |
 | Validation | readings count as published, validated or not; each window records the share of its readings not yet validated | **Assumption**. The windows of the 9 weeks from 2023-W44 to 2025-W03 rest wholly on readings not yet validated |
-| Weather weeks | 14 storm weeks: those of 2023-W04 to 2025-W52 with a window above 25 kn of 4 hours or more, or an hour above 30 kn, unless that rests on one unvalidated gust (2025-W30, a single 53.8 kn gust, is left out); and 2 bust weeks, 2023-W44 and 2025-W14, below the storm rule, whose forecasts showed hours above 25 kn that didn't blow | PortSimEnv's choice. By the reading above, 2023 to 2025 had 56 windows above 25 kn at Y7 and 13 above 30 kn |
+| Weather weeks | 14 storm weeks: those of 2023-W04 to 2025-W52 with a window above 25 kn of 4 hours or more, or an hour above 30 kn, unless that rests on one unvalidated gust reading (2025-W30 is left out for that); and 2 bust weeks, 2023-W44 and 2025-W14, below the storm rule, whose forecasts showed hours above 25 kn that didn't blow | PortSimEnv's choice. By the reading above, 2023 to 2025 had 56 windows above 25 kn at Y7 and 13 above 30 kn |
 | Forecast | ECMWF's HRES runs, 4 a day: the 10 m wind every 3 hours to 72 hours, at the nearest sea grid point, 0.4° (41.2° N, 2.0° E) for runs before 2024-02-28 06 UTC and 0.25° (41.25° N, 2.25° E) from then | [ECMWF open data](https://www.ecmwf.int/en/forecasts/datasets/open-data), on [AWS](https://registry.opendata.aws/ecmwf-forecasts/), CC BY 4.0. The port's own forecasts aren't published, so that ECMWF's stand in for them is an **assumption** |
 | Publication | a run is in force from 9 hours after its start, with all 25 steps; a run that is missing, late or incomplete leaves the one before in force | **Assumption**, after the times the runs appeared in the public bucket: 6.45 to 8.58 hours after their start, over the 671 runs the weeks use |
 | Calibration | each run's speeds mapped to Y7's reading by quantiles (99 percentiles), one map per weather year and lead block (0–23, 24–47 and 48–72 hours), and rounded to whole knots. Each year's maps are fitted on another year's 00 and 12 UTC runs on the same grid: 2023 on the 0.4° runs of Feb 2024 to Jan 2025, 2024 on the 0.25° runs of 2025, 2025 on the 0.25° runs of Feb to Dec 2024 | **Assumption** |
@@ -764,9 +766,9 @@ of the 16 weather weeks, the windows that blew with their unvalidated share and 
 ECMWF messages those runs read (object key, byte range, sha256 and Last-Modified), each Y7 month's row count and digest,
 and the calibration's method, fits and run counts. The maps aren't published, but the published knots and the pinned
 forecasts give them back closely: read back that way, a map's percentiles are off by a median 0.07 to 0.11 kn, and
-0.17 to 0.25 kn at the 90th percentile. Hours with no Y7 reading at all count as calm: in 2024-W18 (`e07`) hours 224 to
-228 and 230 to 241, after the working week; in 2025-W03 (`e12`) hour 126; and in 2024-W49 (`e11`), which no task uses,
-hours 79 to 84 and 182.
+0.17 to 0.25 kn at the 90th percentile. Hours with no Y7 reading at all count as calm: in 2024-W18 (`e07`) the 17
+hours from 224 to 229 and from 230 to 242, after the working week; in 2025-W03 (`e12`) hour 126; and in 2024-W49
+(`e11`), which no task uses, the 6 hours from 79 to 85, and hour 182.
 
 The forecasts are only as good as ECMWF's open data at that grid point. Hour by hour, at 9 to 72 hours ahead, over the
 runs the weeks use, they showed 41% to 62% of the hours that blew above 25 kn, and 31% to 69% of the hours they showed
@@ -1016,7 +1018,9 @@ agent-env portsim record --sweep live-pilot-gpt --model openai/gpt-6.1-sol --tas
   PortSimEnv's public bucket into `~/.cache/agentenv-portsim/` (`$XDG_CACHE_HOME/agentenv-portsim/` if that is set),
   and checks each file against upstream's. The page loads three.js from jsDelivr, so watching needs the internet.
 - Every frame shows the attribution "© OpenStreetMap contributors (ODbL)", and the MP4 also carries it in its
-  metadata. Keep it on anything you publish from a film; the task text a film shows is CC BY-SA 4.0.
+  metadata. Keep it on anything you publish from a film; the task text a film shows is CC BY-SA 4.0. In a wind film
+  the forecasts and wind windows keep their sources' terms, so keep the strip's ECMWF and Meteocat credit too
+  ([NOTICE](NOTICE)).
 
 ## Built on the AgentEnv Framework
 
@@ -1111,7 +1115,8 @@ Contributions are welcome; [CONTRIBUTING.md](CONTRIBUTING.md) covers how a chang
 
 The code is licensed under the Apache License 2.0 ([LICENSE](LICENSE), [NOTICE](NOTICE)); the data is CC BY-SA 4.0,
 except the weather in the wind data, which keeps its sources' terms (below, and [data/LICENSE](data/LICENSE)). The wheel
-and the env image carry both licences, and the package declares `Apache-2.0 AND CC-BY-SA-4.0`.
+and the env image carry these licences, and the package declares `Apache-2.0 AND CC-BY-SA-4.0 AND CC-BY-4.0 AND
+LicenseRef-Meteocat`, the last two for the ECMWF forecasts and the Meteocat windows.
 
 - **[PortSimEnv v1](https://github.com/adithya-s-k/FineEnvs/tree/b0f4c2f9526e3c45d608b4f92f6ec6c71fecc152/07-simulation-environments/portsim-v1)**
   is by Adithya S Kolavi, part of [FineEnvs](https://github.com/adithya-s-k/FineEnvs), under the Apache License
@@ -1134,9 +1139,9 @@ and the env image carry both licences, and the package declares `Apache-2.0 AND 
   ([ECMWF's terms](https://apps.ecmwf.int/datasets/licences/general/)). This data is based on data and products of the
   European Centre for Medium-Range Weather Forecasts (ECMWF). The observed wind windows are derived from the readings
   of Meteocat's XEMA station Y7 in the Generalitat de Catalunya's open data portal
-  ([nzvn-apee](https://analisi.transparenciacatalunya.cat/d/nzvn-apee)), on the terms published there: "Font: Servei
-  Meteorològic de Catalunya (Meteocat), estació XEMA Y7; dades extretes el 2026-10-08; finestres derivades". No
-  reading, quantile map or GRIB file is stored here. [NOTICE](NOTICE) carries both attributions in full.
+  ([nzvn-apee](https://analisi.transparenciacatalunya.cat/d/nzvn-apee)), subject to the terms published there, and
+  credited "Font: Servei Meteorològic de Catalunya (Meteocat), estació XEMA Y7; dades extretes el 2026-10-08; finestres
+  derivades". No reading, quantile map or GRIB file is stored here. [NOTICE](NOTICE) carries both attributions in full.
 - **The published episodes** the replay and harness tests read come from the
   [PortSimEnv dataset](https://huggingface.co/datasets/FineEnvs/PortSimEnv) (CC BY-SA 4.0), fetched at a pinned
   revision and never stored here. The published dock-eval50 results that `sweep report` compares with,
