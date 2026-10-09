@@ -1,7 +1,7 @@
 # PortSimEnv for AgentEnv
 
 [![CI](https://github.com/earakely-scale/agentenv-portsim-plugin/actions/workflows/ci.yml/badge.svg)](https://github.com/earakely-scale/agentenv-portsim-plugin/actions/workflows/ci.yml)
-[![License: Apache-2.0, data CC BY-SA 4.0](https://img.shields.io/badge/license-Apache--2.0%20%C2%B7%20data%20CC%20BY--SA%204.0-blue)](NOTICE)
+[![License: Apache-2.0, data CC BY-SA 4.0, weather CC BY 4.0 and Meteocat's terms](https://img.shields.io/badge/license-Apache--2.0%20%C2%B7%20data%20CC%20BY--SA%204.0%20%C2%B7%20weather%20CC%20BY%204.0%20%2B%20Meteocat-blue)](NOTICE)
 [![Built on the AgentEnv Framework](https://img.shields.io/badge/built%20on-AgentEnv%20Framework-6f42c1)](https://www.agentenvframework.com)
 [![Replay Space on Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97%20Space-replays%20in%203D-yellow)](https://huggingface.co/spaces/earakely-scale/PortSimEnv-AgentEnv)
 [![Dataset on Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97%20Dataset-tasks%20and%20runs-yellow)](https://huggingface.co/datasets/earakely-scale/PortSimEnv-AgentEnv)
@@ -9,7 +9,7 @@
 <p align="center">
   <a href="https://github.com/earakely-scale/agentenv-portsim-plugin/releases/tag/replays-2026-10-09"><img src="assets/wind-port.webp" width="100%" alt="GPT-6.1 Sol plays a wind week at the Port of Barcelona on AgentEnv: at each watch Barcelona Port Control's forecast arrives as a bulletin, the watch panel draws its knots and windows, and the storm that blew raises whitecaps and a no-movement banner on the quay"></a>
 </p>
-<p align="center"><sub><b>The wind port (v4):</b> GPT-6.1 Sol plans <code>dock-24B-w37x1-standard-0-e01</code>, the week of 6 March 2023's wind on APM Terminals Barcelona's schedule, watch by watch on AgentEnv's virtual clock. At each watch Barcelona Port Control's bulletin is the ECMWF run published by then; on Thursday 15:00 it warns of wind above 25 kn in hours 127–130, and on Friday 09:00 in 125–129. The agent berths VIENNA EXPRESS (335 m) at hour 130, after the latest window. The wind blew above 25 kn from 122 to 135, and above 30 kn to 125: longer and earlier than any forecast showed, so hour 130 is excused. The plan is feasible at 301 against the forecast-following re-planner's 252 (reward 0.62): it works several ships with fewer cranes, and the late arrivals wait. Ignoring the forecast is infeasible (0.187). Replayed on PortSimEnv's 3D viewer; <a href="https://github.com/earakely-scale/agentenv-portsim-plugin/releases/tag/replays-2026-10-09">full film</a>. Twin © OpenStreetMap contributors (ODbL); forecasts ECMWF open data (CC BY 4.0, modified); wind windows derived from Meteocat XEMA Y7.</sub></p>
+<p align="center"><sub><b>The wind port (v4):</b> GPT-6.1 Sol plans <code>dock-24B-w37x1-standard-0-e01</code>, APM Terminals Barcelona's schedule in the wind of the week of 6 March 2023, watch by watch on AgentEnv's virtual clock; the clock shows the schedule's own 2024 dates. At each watch a Barcelona Port Control bulletin gives the ECMWF run published by then: the Thursday 18:00 bulletin (issued 15:00) warns of wind above 25 kn in hours 127–130, and the Friday 12:00 one (issued 09:00) in 125–129. The agent berths VIENNA EXPRESS (335 m) at hour 130, after the latest window. The wind blew above 25 kn from 122 to 135, and above 30 kn to 125: longer and earlier than any forecast showed, so hour 130 is excused. The plan is feasible at 301 against the forecast-following re-planner's 252 (reward 0.62): it works several ships with fewer cranes, and the late arrivals wait. Ignoring the forecast is infeasible (0.187). Replayed on PortSimEnv's 3D viewer; <a href="https://github.com/earakely-scale/agentenv-portsim-plugin/releases/tag/replays-2026-10-09">full film</a>. Twin © OpenStreetMap contributors (ODbL); forecasts ECMWF open data (CC BY 4.0, modified); wind windows derived from Meteocat XEMA Y7.</sub></p>
 
 <details open>
 <summary><b>How a live, marine or wind task is built</b>: the task's steps, and the watch loop inside <code>play</code> (details in <a href="#the-live-port">The live port</a>, <a href="#the-marine-port">The marine port</a> and <a href="#the-wind-port">The wind port</a>)</summary>
@@ -26,7 +26,7 @@ flowchart TD
   end
   subgraph finish["3 · Grade the week"]
     direction LR
-    endweek["<b>apply_server_config</b><br/>end-week: the rest of the week<br/>runs on the confirmed windows"] --> grade["<b>env_outcome_verifier</b><br/>reward vs the hindsight optimum;<br/>audit: every bulletin on time"]
+    endweek["<b>apply_server_config</b><br/>end-week: the rest of the week<br/>runs on the confirmed windows"] --> grade["<b>env_outcome_verifier</b><br/>reward vs the hindsight optimum<br/>(v4: the anchor);<br/>audit: every bulletin on time"]
   end
   setup --> play -->|"after the last watch: done"| finish
 ```
@@ -35,8 +35,9 @@ flowchart TD
 
 In the newest version, the wind port (v4), an agent runs one container quay at the Port of Barcelona in real wind:
 each of its 15 weeks is moved into a real Barcelona weather week of 2023 to 2025, 14 of them storms and one a false
-alarm. At every watch Barcelona Port Control sends the ECMWF forecast as it was published then. The agent plans on the
-forecasts as they were issued, and the week is graded on the wind that blew at the port's anemometer.
+alarm. At every watch the forecast arrives in a Barcelona Port Control bulletin, standing in for the port's own
+forecasts: the ECMWF run published by then, adjusted to the port's anemometer. The agent plans on the forecasts as
+they were issued, and the week is graded on the wind that blew at that anemometer.
 
 In every version the ships and their week come from 2024, and the week has just gone wrong: late and bunched ships,
 closed quay sections, crane breakdowns, gales, emergencies. The agent decides when, where along the quay and with how
@@ -53,6 +54,19 @@ in the article [Simulation RL Environments, part 1](https://huggingface.co/space
 or play an episode by hand in the [PortSimEnv Space](https://huggingface.co/spaces/FineEnvs/PortSimEnv). The wind
 port (v4), the marine port (v3) and the live week (v2) are new here.
 
+**Terms used below:**
+
+- **Watch:** a point in the week where the agent re-plans: watch 0 at hour 0, then one at each bulletin.
+- **Bulletin:** the news a watch brings, from ships and the port's services; in v4 also Port Control's forecast.
+- **Freeze:** from watch 1 on, a window starting less than 6 hours after the current hour is frozen and can't change.
+- **Excuse:** a rule break or cost that news (in v4, unforecast wind too) brought to a window after its last chance
+  to change; not charged.
+- **Re-planner (rolling):** CP-SAT re-planning at each watch on the week as known; in v4 forecast-following, or blind
+  to the wind.
+- **Anchor:** what a wind week scores 1.0 at: the lower of the hindsight optimum and the forecast-follower's best cost.
+- **Bundle:** what `agent-env run` plays: a folder of tasks and their verifiers, or one a plugin ships (`portsim`).
+- **CP-SAT:** Google OR-Tools' constraint solver; it proves the hindsight optimum, the best plan knowing the whole week.
+
 **Contents:** [What's in it](#whats-in-it) · [Run it yourself](#run-it-yourself) · [Tasks](#tasks) ·
 [Play a model](#play-a-model) · [The environment](#the-environment) · [Grading](#grading) ·
 [The live port](#the-live-port) · [The marine port](#the-marine-port) · [The wind port](#the-wind-port) ·
@@ -64,8 +78,9 @@ port (v4), the marine port (v3) and the live week (v2) are new here.
 
 - **Four environments, in one image.**
   - **v4, the wind port,** `portsim-wind`, plays v3's marine week in a real Barcelona weather week of 2023 to 2025: the
-    wind that blew at the port's anemometer sets the rules, and at every watch Barcelona Port Control sends the ECMWF
-    forecast as it was published then ([The wind port](#the-wind-port)).
+    wind that blew at the port's anemometer sets the rules, and at every watch the forecast arrives in a Barcelona Port
+    Control bulletin, standing in for the port's own forecasts: the ECMWF run published by then, adjusted to that
+    anemometer ([The wind port](#the-wind-port)).
   - **v3, the marine port,** `portsim-marine`, plays v2's live week with the port's pilots and tugs: every berthing
     and departure takes them from hourly pools shared with the rest of the port's real 2024 traffic, and the tug
     company and the pilot station announce cuts ([The marine port](#the-marine-port)).
@@ -79,13 +94,15 @@ port (v4), the marine port (v3) and the live week (v2) are new here.
   Barcelona) and 36A (Terminal Catalunya, BEST), in four tiers from standard to extreme: 50 eval weeks and 1,050
   train weeks, with no week in both. 15 of the eval weeks are live weeks, and the same 15 are marine weeks; 11 of
   them, moved into real weather weeks, make the 15 wind weeks ([Tasks](#tasks)).
-- **A deterministic grade, with no judge.** A valid plan scores 0.2 + 0.8·e^(−gap/0.5) against the optimum (in the
-  wind port, the anchor), which scores 1.0. A plan that breaks a rule scores under 0.2, and no plan scores 0. A live
-  week is graded on the windows the agent confirmed, against the week as it really happened ([Grading](#grading)).
+- **A deterministic grade, with no judge.** A valid plan scores 0.2 + 0.8·e^(−[gap](#grading)/0.5) against the
+  optimum (in the wind port, the anchor), which scores 1.0. A plan that breaks a rule scores under 0.2 (down to 0),
+  and a run that submits nothing scores 0. A live week is graded on the windows the agent confirmed, against the week
+  as it really happened ([Grading](#grading)).
 - **An agent.** `portsim-llm` plays a week with a model through agent-env's endpoint: the Hugging Face router for
   open models, or a LiteLLM proxy ([Play a model](#play-a-model)).
 - **Commands.**
-  - `agent-env portsim setup` builds the images and registers the envs and the agent.
+  - `agent-env portsim setup` builds the env image and registers the four envs; with `--agent`, also the
+    `portsim-llm` agent.
   - `tasks generate`, `sweep run` and `sweep report` play models over the weeks under a spend cap.
   - `view` and `record` replay runs on a 3D twin of the quay and film them ([Watch a run](#watch-a-run)).
 - **On the Hugging Face Hub.** The dataset
@@ -109,7 +126,7 @@ You need [Docker](https://docs.docker.com/get-docker/), running and usable witho
 
 ```bash
 uv tool install agentenv-framework \
-    --with "agentenv-portsim @ git+https://github.com/earakely-scale/agentenv-portsim-plugin"
+    --with "agentenv-portsim @ git+https://github.com/earakely-scale/agentenv-portsim-plugin@v0.4.1"
 agent-env portsim setup              # build the env image for this machine; register the envs "portsim", "portsim-live", "portsim-marine" and "portsim-wind"
 agent-env run portsim --task smoke   # load a task, submit its optimal plan, grade it
 ```
@@ -126,17 +143,18 @@ runs on the Hugging Face router, with a token that can make calls to Inference P
 agent-env portsim setup --agent        # also builds and registers portsim-llm, the agent that plays the model
 export HF_TOKEN=hf_...                  # with "Make calls to Inference Providers", on an account with credits
 export LITELLM_BASE_URL=https://router.huggingface.co/v1 LITELLM_API_KEY=$HF_TOKEN
-agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.4.0 --task dock-36A-w06x1-standard-0-e07 \
+agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.4.1 --task dock-36A-w06x1-standard-0-e07 \
     --model zai-org/GLM-5.3-Flash:baseten   # the shortest wind week, 4 watches
 ```
 
 It downloads the dataset's bundles at that tag, shows what it will run and asks before it runs; the task stops the
-episode before it could spend $5. [On the Hugging Face Hub](#on-the-hugging-face-hub) has the other bundles and
-`agent-env hf publish`.
+episode before it could spend $5. It prints the reward and the instance id, as `agent-env run` does; to replay a week
+in 3D, play it as a sweep ([Publish your own runs](#publish-your-own-runs) has the sweep and the `view`).
+[On the Hugging Face Hub](#on-the-hugging-face-hub) has the other bundles and `agent-env hf publish`.
 
-agent-env reads `.agentenv/config.toml` from the directory it runs in or one above it. Without one, it runs on its
-local defaults: stores under `~/.local/state/agent-env/`, images in a registry at `localhost:5000` that it starts on
-first push, and the env as a container on this machine's Docker.
+agent-env reads `.agentenv/config.toml` from the directory it runs in or the nearest one above it that has one.
+Without one, it runs on its local defaults: stores under `~/.local/state/agent-env/`, images in a registry at
+`localhost:5000` that it starts on first push, and the env as a container on this machine's Docker.
 [`.agentenv/config.example.toml`](.agentenv/config.example.toml) describes that profile and the `modal_vm` one.
 
 To change the plugin, work from a clone; `setup` then builds the checkout:
@@ -150,7 +168,10 @@ cd agentenv-portsim-plugin && agent-env portsim setup
 `setup` builds for the Docker host's own platform (`linux/arm64` on Apple Silicon). For Modal, put the `modal_vm`
 profile in `.agentenv/config.toml`, set its `repository_prefix` to your own GHCR namespace, and run
 `agent-env portsim setup --platform linux/amd64`, which pushes the image to `ghcr.io/<namespace>/agentenv-portsim-env`.
-In an existing agent-env install, `agent-env plugin add ./agentenv-portsim-plugin` adds a clone of the plugin.
+Pushing needs `docker login ghcr.io` with a token that can write packages; Modal's VMs pull the image without
+credentials, so make the package public; and Modal needs `modal token new`. Run live, marine and wind weeks on the local
+profile ([Play a live week](#play-a-live-week) says why). In an existing agent-env install,
+`agent-env plugin add ./agentenv-portsim-plugin` adds a clone of the plugin.
 
 <details>
 <summary>Troubleshooting</summary>
@@ -552,9 +573,9 @@ agent-env portsim sweep report --live live-pilot   # results/live.md
   weeks. It also counts weeks that reached `done`, feasible weeks and optimal weeks, and gives regret, excused cost,
   turns, tokens and cost. Then it goes week by week.
 
-**End to end at no model spend.** `scripts/live_e2e.py` plays the `week` task through `agent-env run` on local
-Docker. `tests/fake_litellm.py` answers `portsim-llm` with the naive policy's moves, one turn per watch. The script
-fails unless:
+**End to end at no model spend.** From a clone set up as in [Development](#development), `scripts/live_e2e.py`
+plays the `week` task through `agent-env run` on local Docker. `tests/fake_litellm.py` answers `portsim-llm` with the
+naive policy's moves, one turn per watch. The script fails unless:
 
 - each watch's trigger fired once;
 - the agent was never offered `port_notice`;
@@ -788,7 +809,7 @@ pins in `data/wind/weather-sources.json` by that file's sha256 and their count.
 | Thresholds | above 25 kn no ship of 300 m or more berths or leaves, and each movement takes one more tug, as in the marine port; above 30 kn no ship moves | The port's [traffic ordinance](https://www.boe.es/diario_boe/txt.php?id=BOE-A-2023-6719) (BOE-A-2023-6719), 4.1 and 4.1.2.1: 25 kn for container ships of 300 m or more and 30 kn for the others, reached or forecast; 4.1.2.2 for the tug. The thresholds start a review with the pilots, which PortSimEnv simplifies to no-movement windows, as v1 does |
 | Anemometer | Meteocat's XEMA station Y7, Port de Barcelona – Bocana Sud | The ordinance's annex III measures the wind at the anemometer of the Dique Sur's red light; taking Y7 for it is an **assumption**. Its readings come from the Generalitat de Catalunya's open data portal, dataset [nzvn-apee](https://analisi.transparenciacatalunya.cat/d/nzvn-apee) |
 | Reading | an hour is above T kn when either half-hour has 1.045 × the 30-minute mean or 0.664 × the 3-second gust above T | Annex III takes the 10-minute mean, or the largest 1-minute mean above 1.25 T. Y7 publishes a 30-minute mean and a 3-second gust; the factors 1.045 (10- over 30-minute mean) and 0.83 (1-minute mean over 3-second gust, so 0.83 / 1.25 = 0.664) are **assumptions** |
-| Windows | the hours above each threshold, gaps of 2 hours or less merged, over the 264 hours from the weather week's Monday 00:00 UTC | **Assumption** |
+| Windows | the hours above each threshold, gaps of 2 hours or less merged, over the 264 hours from the weather week's Monday 00:00 UTC. A window a–b, or from a to b, runs from hour a up to, not including, hour b | **Assumption** |
 | Validation | readings count as published, validated or not; each window records the share of its readings not yet validated | **Assumption**. The windows of the 9 weeks from 2023-W44 to 2025-W03 rest wholly on readings not yet validated |
 | Weather weeks | 14 storm weeks: those of 2023-W04 to 2025-W52 with a window above 25 kn of 4 hours or more, or an hour above 30 kn, unless that rests on one unvalidated gust reading (2025-W30 is left out for that); and 2 bust weeks, 2023-W44 and 2025-W14, below the storm rule, whose forecasts showed hours above 25 kn that didn't blow | PortSimEnv's choice. By the reading above, 2023 to 2025 had 56 windows above 25 kn at Y7 and 13 above 30 kn |
 | Forecast | ECMWF's HRES runs, 4 a day: the 10 m wind every 3 hours to 72 hours, at the nearest sea grid point, 0.4° (41.2° N, 2.0° E) for runs before 2024-02-28 06 UTC and 0.25° (41.25° N, 2.25° E) from then | [ECMWF open data](https://www.ecmwf.int/en/forecasts/datasets/open-data), on [AWS](https://registry.opendata.aws/ecmwf-forecasts/), CC BY 4.0. The port's own forecasts aren't published, so that ECMWF's stand in for them is an **assumption** |
@@ -870,11 +891,11 @@ situation ends:
 and the viewer's watch panel reads, watch by watch:
 
 ```
-Wind h0 · Port Control, issued Sun 21:00: ≥25 kn none · observed none
-Wind h6 · Port Control, issued Mon 03:00: ≥25 kn none · observed none
-Wind h78 · Port Control, issued Thu 03:00: ≥25 kn none · observed none
-Wind h90 · Port Control, issued Thu 15:00: ≥25 kn 127–130 · observed none
-Wind h108 · Port Control, issued Fri 09:00: ≥25 kn 125–129 · observed none
+Wind h0 · Port Control, issued Sun 21:00: >25 kn none · observed none
+Wind h6 · Port Control, issued Mon 03:00: >25 kn none · observed none
+Wind h78 · Port Control, issued Thu 03:00: >25 kn none · observed none
+Wind h90 · Port Control, issued Thu 15:00: >25 kn 127–130 · observed none
+Wind h108 · Port Control, issued Fri 09:00: >25 kn 125–129 · observed none
 ```
 
 The storm meets VIENNA EXPRESS, 335 m and delayed to hour 128, where v3's optimum berths it. The forecast-following
@@ -1101,7 +1122,7 @@ PortSimEnv's 3D viewer; both are in one
 plugin depends on [agentenv-hf](https://github.com/earakely-scale/agentenv-hf-plugin), an agent-env plugin that
 publishes bundles and their runs as Hub datasets and runs bundles from them, so installing this plugin adds
 `agent-env hf run` and `agent-env hf publish`. Each release tags the dataset with the plugin's version; the commands
-below pin `v0.4.0`.
+below pin `v0.4.1`.
 
 ### The dataset
 
@@ -1119,7 +1140,8 @@ Two kinds of tables share it, all parquet, all in the split `eval`:
   watch's notices (`watches`). v4 adds the marine week it is built on (`schedule`), the weather week, the hindsight
   and blind costs and the windows that blew (`wind_windows`), and its `optimal_cost` is the anchor. An episode row
   holds the grade (`reward`, `feasible`, `cost`, and from v2 on `regret` and `excused_cost`), the turns, tokens and
-  spend, the final plan, each tool call (`steps`) and the transcript (`messages`). A reference row holds each
+  spend, the final plan (`final_plan`: in v1 the plan submitted, if any; from v2 on the confirmed windows as the
+  verifier graded them), each tool call (`steps`) and the transcript (`messages`). A reference row holds each
   reference policy's cost, reward and feasibility (v4: rolling, blind, naive and, in the false-alarm week, hold; v3 and
   v2: rolling and naive), the rolling plans, and whether the week qualifies.
 - **agentenv-hf's tables** are the ones `agent-env hf publish` writes for any bundle (agentenv-hf's README,
@@ -1131,21 +1153,22 @@ Two kinds of tables share it, all parquet, all in the split `eval`:
 native trajectory, one run per line: `dock-v1-eval-wind/dock-24B-w06x1-busy-0-e15-iamceybb` is the same run in
 `v4_episodes`, `dock-v1-eval-wind_episodes` and `raw/dock-v1-eval-wind.jsonl`. In both kinds, `messages` is a list of
 chat messages: OpenAI roles, `tool_calls` with their arguments as objects, and `tool_call_id` and `name` on tool
-messages, the shape TRL's `SFTTrainer` and transformers chat templates read. PortSim's other columns that hold JSON
-(`watches`, `task`, the plans, `steps`, `wind_windows`, `clauses`, `configs`, `solver`) are strings; agentenv-hf's
-(`scores`, `verifications`, `structured_output` and the tasks' `steps`) are JSON columns that `datasets` 5.1 reads back
-as Python objects.
+messages, the shape TRL's `SFTTrainer` and transformers chat templates read. The `plan` argument of `check_plan`,
+`confirm_berths` and `submit_plan` is kept as the model sent it: a JSON string from Claude Sonnet 5.5, a list from
+GPT-6.1 Sol. PortSim's other columns that hold JSON (`watches`, `task`, the plans, `steps`, `wind_windows`, `clauses`,
+`configs`, `solver`) are strings; agentenv-hf's (`scores`, `verifications`, `structured_output` and the tasks'
+`steps`) are JSON columns that `datasets` 5.1 reads back as Python objects.
 
 ```python
 import json
 from datasets import load_dataset
 
-weeks = load_dataset("earakely-scale/PortSimEnv-AgentEnv", "v4_tasks", split="eval", revision="v0.4.0")
+weeks = load_dataset("earakely-scale/PortSimEnv-AgentEnv", "v4_tasks", split="eval", revision="v0.4.1")
 print(weeks[0]["situation"])                        # what the agent gets at hour 0
 for watch in json.loads(weeks[0]["watches"]):       # what arrives later, Port Control's forecast included
     print(watch["hour"], [n["from"] for n in watch["notices"]])
 
-runs = load_dataset("earakely-scale/PortSimEnv-AgentEnv", "v4_episodes", split="eval", revision="v0.4.0")
+runs = load_dataset("earakely-scale/PortSimEnv-AgentEnv", "v4_episodes", split="eval", revision="v0.4.1")
 print(runs[0]["reward"], len(runs[0]["messages"]))  # the grade, and the transcript as chat messages
 ```
 
@@ -1159,7 +1182,7 @@ which part carries which terms, as does this README's [Licence and credits](#lic
 
 ### The Space
 
-The Space serves `agent-env portsim view` ([Watch a run](#watch-a-run)) from the plugin's `v0.4.0` tag over the
+The Space serves `agent-env portsim view` ([Watch a run](#watch-a-run)) from the plugin's `v0.4.1` tag over the
 dataset's `runs/`, which it downloads when it starts: every recorded run of the four versions, replayed from its
 records, with no model called. A link opens one run, such as
 [GPT-6.1 Sol's wind film week](https://earakely-scale-portsimenv-agentenv.hf.space/viewer/#/run/wind-pilot-gpt/openai%2Fgpt-6.1-sol/dock-24B-w37x1-standard-0-e01).
@@ -1167,9 +1190,9 @@ records, with no model called. A link opens one run, such as
 ### Run a bundle from the Hub
 
 ```bash
-agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.4.0 --task dock-36A-w06x1-standard-0-e07 \
+agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.4.1 --task dock-36A-w06x1-standard-0-e07 \
     --model zai-org/GLM-5.3-Flash:baseten          # the default bundle: dock-v1-eval-wind (v4)
-agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.4.0 --bundle dock-v1-eval-marine \
+agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.4.1 --bundle dock-v1-eval-marine \
     --task dock-24B-w07x1-busy-0 --model zai-org/GLM-5.3-Flash:baseten   # v3; dock-v1-eval-live is v2, dock-v1-eval v1
 ```
 
@@ -1177,7 +1200,7 @@ agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.4.0 --bundle dock-v1-eval
   `~/.cache/agentenv-hf/earakely-scale/PortSimEnv-AgentEnv/<commit>`. Without `--bundle` it runs the card's default,
   `dock-v1-eval-wind`.
 - The card's `agentenv` table names what each bundle needs: the plugin,
-  `agentenv-portsim @ git+https://github.com/earakely-scale/agentenv-portsim-plugin@v0.4.0`, and the setup command,
+  `agentenv-portsim @ git+https://github.com/earakely-scale/agentenv-portsim-plugin@v0.4.1`, and the setup command,
   `agent-env portsim setup --agent`. `hf run` checks that the plugin is installed and, if it isn't, stops with the
   `agent-env plugin add` command; it never installs or runs anything the card names. It checks the plugin by name,
   not by version, so an older install passes and has to be upgraded to this release first. If an env or the agent
@@ -1202,15 +1225,17 @@ agent-env hf publish results/runs/mine/bundle --name dock-v1-eval-wind --out min
 agent-env hf publish results/runs/mine/bundle --name dock-v1-eval-wind --repo you/portsim-runs
 ```
 
-Pushing needs a Hugging Face token with write access (`hf auth login`, or `HF_TOKEN`). `HF_TOKEN` is used before the
+Pushing needs a Hugging Face token with write access: log in with `uvx --from huggingface_hub hf auth login`
+(`uv tool install` doesn't put `hf` on the PATH), or put a write token in `HF_TOKEN`. `HF_TOKEN` is used before the
 login, so if it holds the Inference Providers token from [Run it yourself](#run-it-yourself), give that token write
 access too or unset it. Before anything is written or pushed, agentenv-hf scans every file for this machine's model
 key, Hugging Face token and other key-like environment variables, and for token shapes; a hit stops the publish and
 names the file. Transcripts are published as the agent wrote them, so read a run's `messages` before you make a
 dataset public. The tasks and transcripts carry PortSimEnv's task text (CC BY-SA 4.0) and, in a wind week, ECMWF's
-forecasts and the wind windows derived from Meteocat's readings, so give the card a licence with `--license` and their
-attribution with `--card-note` ([NOTICE](NOTICE) has the wording). agentenv-hf's README has the other options, such
-as `--private`, `--split`, `--requires` and `--setup`.
+forecasts and the wind windows derived from Meteocat's readings, so give the card a licence with `--license`
+(`other` for wind runs, whose terms no single licence covers) and their attribution with `--card-note`, which takes a
+Markdown file, such as an `attribution.md` with [NOTICE](NOTICE)'s wording. agentenv-hf's README has the other
+options, such as `--private`, `--split`, `--requires` and `--setup`.
 
 ### How this dataset is built
 

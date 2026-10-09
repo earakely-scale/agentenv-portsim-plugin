@@ -6,7 +6,7 @@ USER user
 ENV HOME=/home/user PATH=/home/user/.local/bin:$PATH
 WORKDIR /home/user/app
 RUN pip install --user "huggingface_hub>=1,<2" \
-    "agentenv-portsim @ https://github.com/earakely-scale/agentenv-portsim-plugin/archive/refs/tags/v0.4.0.tar.gz"
+    "agentenv-portsim @ https://github.com/earakely-scale/agentenv-portsim-plugin/archive/refs/tags/v0.4.1.tar.gz"
 COPY --chown=user start.sh .
 EXPOSE 7860
 CMD ["sh", "start.sh"]

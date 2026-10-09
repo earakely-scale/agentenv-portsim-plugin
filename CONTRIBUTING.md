@@ -148,18 +148,19 @@ A release goes in this order:
 
 1. **Pin the new version, merge it, then tag the plugin on GitHub.** Bump `version` in `pyproject.toml` and move
    every pin of the old tag to `v<version>`: the install commands, links and `revision`s in `hub/dataset/README.md`
-   and `hub/space/README.md`, the plugin tarball in `hub/space/Dockerfile`, and the README's Hub commands.
-   `tests/packaging/test_hub_dataset.py` checks only the install pins (the Dockerfile's tarball and the cards'
-   `agentenv-portsim-plugin@` lines), so search `hub/` for the old tag as well. Merge that, then tag `v<version>` on
-   GitHub: the card's `agentenv` table pins every bundle's plugin to it, and the cards and the Space's Dockerfile pin
-   it, so it must exist before anything on the Hub points at it.
+   and `hub/space/README.md`, the plugin tarball in `hub/space/Dockerfile`, the `--revision` in `hub/space/start.sh`,
+   and the README's install line and Hub commands. `tests/packaging/test_hub_dataset.py` checks only the install pins
+   (the Dockerfile's tarball and the cards' `agentenv-portsim-plugin@` lines), so search `hub/`, the README and this file for
+   the old tag as well. Merge that, then tag `v<version>` on GitHub: the card's `agentenv` table pins every bundle's
+   plugin to it, and the cards and the Space's Dockerfile pin it, so it must exist before anything on the Hub points
+   at it.
 2. **Build the dataset, read it, then push it with the same tag,** from the repository root (`--runs` defaults to the
    relative path `results/runs`):
 
    ```bash
    uv run python scripts/hub_dataset.py --out build/hub/dataset
-   uv run python scripts/hub_dataset.py --out build/hub/dataset --repo earakely-scale/PortSimEnv-AgentEnv --tag v0.4.0 \
-       --message "v0.4.0: ..."
+   uv run python scripts/hub_dataset.py --out build/hub/dataset --repo earakely-scale/PortSimEnv-AgentEnv --tag v0.4.1 \
+       --message "v0.4.1: ..."
    ```
 
    The first writes the folder and prints each table's row count. Every file goes through agentenv-hf's scan for this

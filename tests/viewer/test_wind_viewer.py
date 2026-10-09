@@ -189,7 +189,7 @@ def wind_line(w: dict) -> str:
     def spans(ws: list[dict]) -> str:
         return ", ".join(f"{x['start']}–{x['end']}" for x in ws if x["min_length"] > 0) or "none"
 
-    return (f"Wind h{w['hour']} · Port Control, issued {w['time']}: ≥25 kn {spans(w['windows'])} · "
+    return (f"Wind h{w['hour']} · Port Control, issued {w['time']}: >25 kn {spans(w['windows'])} · "
             f"observed {spans(w['observed'])}")
 
 

@@ -101,3 +101,4 @@ html.scene .ps-feed li.new { background: rgba(251, 241, 220, 0.97); color: #1c1c
   -webkit-line-clamp: 3; overflow: hidden; }
 html.scene .ps-final dt { color: #b8c7d3; }
 html.scene .stage .ov-tl { top: 16px; left: auto; right: 18px; }
+.ps-glossary code { white-space: nowrap; }

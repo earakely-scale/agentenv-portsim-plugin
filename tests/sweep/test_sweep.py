@@ -220,7 +220,7 @@ def test_an_attempt_that_ended_before_the_signal_keeps_its_own_row(fake, monkeyp
 
 
 def test_a_sweep_that_fails_tears_its_attempts_down_and_counts_them_at_the_cap(fake, monkeypatch):
-    fake.script({f"{SONNET}|{T1}": [{"context": scored(T1, SONNET)}],
+    fake.script({f"{SONNET}|{T1}": [{"context": scored(T1, SONNET), "sleep": 0.5}],
                  "*": [{"wait": True, "context": scored(T2, SONNET)}]})
 
     def unreadable(instance):

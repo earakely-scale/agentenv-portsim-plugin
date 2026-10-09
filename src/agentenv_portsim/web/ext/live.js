@@ -14,6 +14,7 @@ const WIND_CREDIT = "Forecast: ECMWF open data, CC BY 4.0, modified · Observed:
 
 const shipName = (task, id) => (task.ships.find((s) => s.id === Number(id)) || {}).name || `ship ${id}`;
 const names = (task, ids) => ids.map((id) => escapeHtml(shipName(task, id))).join(", ") || "none";
+const excusedHtml = (task, g) => (g.excused || []).map((e) => `${escapeHtml(shipName(task, e.ship))}: ${escapeHtml(e.problem)}`).join("<br>") || "none";
 const firstLine = (s, n = 80) => {
   const line = String(s || "").trim().split("\n")[0];
   return line.length > n ? `${line.slice(0, n - 1)}…` : line;
@@ -129,7 +130,7 @@ function windHtml(wind, t, blew, horizon) {
     `<line class="ps-ws-cursor" x1="${x(t)}" x2="${x(t)}" y1="0" y2="${track}"/>`,
     `<text class="ps-ws-credit" x="0" y="45.5">${WIND_CREDIT}</text>`,
   ];
-  return `<div class="ps-line ps-wind"><span>Wind h${wind.hour}</span> · <span>Port Control, issued ${escapeHtml(wind.time)}:</span> <span>≥25 kn ${spans(long(wind.windows))}</span> · <span>observed ${spans(long(wind.observed))}</span></div>
+  return `<div class="ps-line ps-wind"><span>Wind h${wind.hour}</span> · <span>Port Control, issued ${escapeHtml(wind.time)}:</span> <span>&gt;25 kn ${spans(long(wind.windows))}</span> · <span>observed ${spans(long(wind.observed))}</span></div>
       <svg class="ps-wind-strip" width="${W}" height="48" viewBox="0 0 ${W} 48" role="img" aria-label="Wind forecast and observed windows">${strip.join("")}</svg>`;
 }
 
@@ -164,7 +165,7 @@ function otherHtml(tc, out) {
   return `<details class="plan-d"><summary>Output <span class="muted">${escapeHtml(firstLine(txt))}</span></summary><pre class="txt result">${escapeHtml(txt)}</pre></details>`;
 }
 
-function gradeRows(gradeEl, ro) {
+function gradeRows(gradeEl, ro, task) {
   const g = ro.final.grade;
   const ref = ro.live.reference;
   const count = (tool) => ro.steps.filter((s) => s.tool === tool).length;
@@ -177,12 +178,16 @@ function gradeRows(gradeEl, ro) {
   const wind = ref.hindsight_cost != null;
   const rows = [
     ["Excused cost", fmtNum(g.excused_cost), wind ? "Cost that news, or wind the forecast didn't show, brought to a window after its last chance to change: not charged" : "Cost that news brought to windows already frozen: not charged"],
-    ["Regret", fmtNum(g.regret), wind ? "Cost above the optimum" : "Cost above the optimum in hindsight"],
+    ["Excused", excusedHtml(task, g), wind ? "The rule breaks the grade excused: wind no forecast had shown, or news, after the window's last chance to change" : "The rule breaks the grade excused: news that came after the window froze"],
+    ["Regret", fmtNum(g.regret), wind ? "Cost above the anchor" : "Cost above the optimum in hindsight"],
     ["Rolling re-plan", replanHtml(ref.rolling), "A CP-SAT re-planner on the week as known, watch by watch"],
     ...extraRows(ref),
     ["Audit", audit.ok ? '<i class="dot ok"></i>passed' : `<i class="dot bad"></i>${escapeHtml(audit.problems.join("; "))}`, "Every bulletin arrived once, on time, at its watch"],
   ];
-  if (wind) for (const dt of kv.querySelectorAll("dt")) if (dt.textContent === "Optimum") dt.title = "The lower of the best plan in hindsight and the forecast-following re-planner's cost";
+  if (wind) for (const dt of kv.querySelectorAll("dt")) if (dt.textContent === "Optimum") {
+    dt.textContent = "Anchor";
+    dt.title = "The lower of the best plan in hindsight and the forecast-following re-planner's cost";
+  }
   kv.insertAdjacentHTML("beforeend", rows.map(([k, v, tip]) => `<dt title="${escapeHtml(tip)}">${escapeHtml(k)}</dt><dd>${v}</dd>`).join(""));
 }
 
@@ -289,7 +294,7 @@ export function renderLive(root, ro, task, { onStep, horizon }) {
   const later = [...root.querySelectorAll("[data-known]")];
 
   const left = root.closest(".ro-left");
-  gradeRows(left.querySelector("#grade"), ro);
+  gradeRows(left.querySelector("#grade"), ro, task);
   const panel = document.createElement("section");
   panel.className = "ps-watch";
   left.insertBefore(panel, root.closest("section"));

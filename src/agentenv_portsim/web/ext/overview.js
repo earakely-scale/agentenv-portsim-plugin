@@ -40,17 +40,17 @@ function columns(env) {
     { k: "ships", label: "Ships", get: (e) => e.ships, num: true, opt: true },
     { k: "result", label: "Result", get: (e) => e.end_reason, html: resultHtml, sort: (e) => (e.submitted ? 1 : 0) + (e.feasible ? 1 : 0) + (optimal(e) ? 1 : 0) },
     { k: "cost", label: "Cost", get: (e) => (e.feasible ? e.cost : "–"), sort: (e) => (e.feasible ? e.cost : null), num: true },
-    { k: "optimal_cost", label: "Optimum", get: (e) => e.optimal_cost, num: true, opt: true },
+    { k: "optimal_cost", label: env === "portsim-wind" ? "Anchor" : "Optimum", get: (e) => e.optimal_cost, num: true, opt: true, title: env === "portsim-wind" ? "The lower of the best plan in hindsight and the forecast-following re-planner's cost" : undefined },
     { k: "naive_cost", label: "Naive", get: (e) => e.naive_cost ?? (live ? "infeasible" : null), sort: (e) => e.naive_cost, num: true, opt: true, title: "The naive policy's cost; infeasible when its plan breaks a rule" },
   ];
   if (live) {
     cols.push({ k: "rolling_cost", label: "Rolling", get: (e) => e.rolling_cost, num: true, opt: true, title: "Cost of the rolling CP-SAT re-planner on the same week" });
     if (env === "portsim-wind") {
-      cols.push({ k: "hindsight_cost", label: "Hindsight", get: (e) => e.hindsight_cost, num: true, opt: true, title: "The best plan in hindsight, on the wind that blew" });
+      cols.push({ k: "hindsight_cost", label: "Hindsight", get: (e) => e.hindsight_cost, num: true, opt: true, title: "The best plan in hindsight, on the wind that blew. It pays for all the wind, while a plan that follows the forecast is not charged for wind no forecast showed, so it can cost less" });
       cols.push({ k: "weather", label: "Weather", get: (e) => e.weather, opt: true, title: "The weather week the week was played in" });
     }
     cols.push({ k: "watches", label: "Watches", get: (e) => e.watches, num: true, opt: true });
-    cols.push({ k: "regret", label: "Regret", get: (e) => e.regret ?? "–", sort: (e) => e.regret, num: true, title: env === "portsim-wind" ? "Cost above the optimum" : "Cost above the optimum in hindsight" });
+    cols.push({ k: "regret", label: "Regret", get: (e) => e.regret ?? "–", sort: (e) => e.regret, num: true, title: env === "portsim-wind" ? "Cost above the anchor" : "Cost above the optimum in hindsight" });
   } else cols.push({ k: "checks", label: "Checks", get: (e) => e.checks, num: true, opt: true });
   cols.push({ k: "reward", label: "Reward", get: (e) => fmtNum(e.reward, 3), sort: (e) => e.reward, num: true });
   return cols;
@@ -77,9 +77,15 @@ function capsText(caps) {
   return `model spend capped per episode at ${[...caps].map(([m, c]) => `$${c} for ${nameOf(m)}`).join(", ")}`;
 }
 
+/** The run the README and the cards film and link: GPT-6.1 Sol's wind week with the berth no forecast showed. */
+const FEATURED = { run: "wind-pilot-gpt", model: "openai/gpt-6.1-sol", task_id: "dock-24B-w37x1-standard-0-e01" };
+
 function showcase(groups) {
   const first = groups[0];
   if (!first) return null;
+  const featured = first.boards.flatMap((b) => b.eps).find((e) =>
+    e.run === FEATURED.run && e.model === FEATURED.model && e.task_id === FEATURED.task_id);
+  if (featured) return { ...featured, group: first };
   const order = first.boards.map((b) => b.model);
   const best = first.boards.flatMap((b) => b.eps).sort((a, b) =>
     optimal(b) - optimal(a) || (b.watches || 0) - (a.watches || 0) || a.task_id.localeCompare(b.task_id)
@@ -92,7 +98,7 @@ export async function overviewPage({ app, setCrumbs, isCurrent, sortableTable })
   app.innerHTML = `
   <div class="page ov-page ps-ov">
     <section class="ov-intro">
-      <h1>PortSim on AgentEnv: model runs, replayed in 3D</h1>
+      <h1>PortSimEnv on AgentEnv: model runs, replayed in 3D</h1>
       <p class="muted">Models re-plan a broken week of container-ship dockings at a Port of Barcelona quay on AgentEnv,
       replayed on PortSimEnv's viewer by Adithya S Kolavi (Apache-2.0): the quay in 3D, the dock chart of every plan the
       model checked or confirmed, the grade and the transcript. <b>v4, the wind port</b>, plays the marine port in real
@@ -104,9 +110,9 @@ export async function overviewPage({ app, setCrumbs, isCurrent, sortableTable })
       <ul class="ps-glossary muted small">
         <li><b>Week</b>: one task, a quay with its ships and what goes wrong; a v1 task can span up to three weeks (<code>x2</code>, <code>x3</code> in its id), a v2, v3 or v4 week is always one, and a v4 week's id ends with its weather week (<code>-e09</code>). <b>Reward</b>: 1.0 for the optimum, under 0.2 for a plan that breaks a rule, 0 for no plan.</li>
         <li><b>Watch</b> (v2 to v4): watch 0 opens the week at hour 0, and a new watch starts at each news bulletin; in v4 also at 00:00 or 12:00 when a new forecast restricts hours the last one didn't. The agent re-plans each watch; a window starting within 6 hours is frozen.</li>
-        <li><b>Pilots and tugs</b> (v3): a pilot is the local mariner who boards to guide a ship in or out, and tugs are the boats that push and pull it alongside. Each berthing and departure takes them in its hour, from 7 pilots and 8 tugs the quay shares with the port's other 2024 traffic; an hour our ships need more than are free is short, which breaks a rule. Sweeps named <code>…-pilot-…</code> are small first batches, not pilots.</li>
-        <li><b>Wind</b> (v4): above 25 kn at the Dique Sur anemometer ships of 300 m or more may not berth or leave, and every movement takes one more tug; above 30 kn no ship moves. The rules follow the wind that blew. Barcelona Port Control sends the ECMWF forecast issued by each watch, adjusted to that anemometer. Wind the forecast didn't show, like news, is not charged to a window frozen before it was known; wind it showed is.</li>
-        <li><b>Optimum</b>, <b>rolling</b>, <b>naive</b>: the best plan CP-SAT finds in hindsight, a CP-SAT re-planner that only knows what has been announced, and a simple policy that pushes ships later (in v2 to v4, it keeps each confirmed window that still fits and moves the rest, knowing nothing of pilots and tugs). In v4 the optimum is the lower of the best plan in hindsight and the cost of the rolling re-planner, which follows the forecasts; <b>blind</b> is that re-planner with the forecast taken away. <b>Regret</b>: cost above the optimum.</li>
+        <li><b>Pilots and tugs</b> (v3, v4): a pilot is the local mariner who boards to guide a ship in or out, and tugs are the boats that push and pull it alongside. Each berthing and departure of a ship of 45 m or more takes a pilot, and tugs by its length, in its hour, from 7 pilots and 8 tugs the quay shares with the port's other 2024 traffic; an hour our ships need more than are free is short, which breaks a rule. Sweeps named <code>…-pilot-…</code> are small first batches, not pilots.</li>
+        <li><b>Wind</b> (v4): above 25 kn at the port's anemometer ships of 300 m or more may not berth or leave, and every movement takes one more tug; above 30 kn no ship moves. The wind is read at Meteocat's XEMA station Y7 (Bocana Sud), which stands in for the ordinance's anemometer at the Dique Sur, and the rules follow the wind that blew. At each watch a Barcelona Port Control bulletin, standing in for the port's own forecasts, gives the ECMWF run published by then, adjusted to that anemometer. Wind the forecast didn't show, like news, is excused on a window frozen before it was known; wind it showed is charged. Hours <code>a–b</code> run from hour a up to, not including, b. A v4 week keeps its schedule's 2024 dates; its wind is from a week of 2023 to 2025.</li>
+        <li><b>Optimum</b>, <b>rolling</b>, <b>naive</b>: the best plan CP-SAT finds in hindsight, a CP-SAT re-planner that only knows what has been announced, and a simple policy that pushes ships later (in v2 to v4, it keeps each confirmed window that still fits and moves the rest, knowing nothing of pilots and tugs). In v4 a week is scored against the <b>anchor</b>, the lower of the best plan in hindsight and the cost of the rolling re-planner, which follows the forecasts; hindsight pays for all the wind, while a plan that follows the forecast is not charged for wind no forecast showed, so it can cost less. <b>Blind</b> is that re-planner with the forecast taken away. <b>Regret</b>: cost above the optimum, in v4 above the anchor.</li>
       </ul>
       <p class="muted small">Port of Barcelona twin © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a> (ODbL) · terrain: Terrain Tiles (AWS) · tasks: Port de Barcelona open data, CC BY-SA 4.0 · v4 wind: forecasts contain modified ECMWF open data (CC BY 4.0), observed windows derived from the Servei Meteorològic de Catalunya's (Meteocat) XEMA station Y7.</p>
       <dl class="kv">${LINKS.map(([k, href, what]) => `<dt><a class="ext" href="${href}" target="_blank" rel="noopener">${k} ↗</a></dt><dd class="muted">${what}</dd>`).join("")}</dl>
@@ -145,7 +151,7 @@ export async function overviewPage({ app, setCrumbs, isCurrent, sortableTable })
   app.querySelector("#ps-runs").innerHTML = groups.length
     ? groups.map((g) => `<section class="ps-run">
         <div class="sec-head"><h2>${g.v} · ${escapeHtml(g.name)}</h2><span class="muted small">${escapeHtml(g.what)} · env ${escapeHtml(g.env)} · ${escapeHtml(capsText(g.caps))}</span></div>
-        <table class="tbl click"><thead><tr><th>Model</th><th class="num">Weeks</th><th class="num">Mean reward</th><th class="num">${g.env !== "portsim" ? "Reached the end" : "Submitted"}</th><th class="num">Feasible</th><th class="num">Optimal</th></tr></thead>
+        <table class="tbl click"><thead><tr><th>Model</th><th class="num">Weeks</th><th class="num">Mean reward</th><th class="num">${g.env !== "portsim" ? "Reached the end" : "Submitted"}</th><th class="num">Feasible</th><th class="num">${g.env === "portsim-wind" ? "At the anchor" : "Optimal"}</th></tr></thead>
         <tbody>${g.boards.map((b) => `<tr data-row="${escapeHtml(b.model)}" data-env="${escapeHtml(g.env)}" title="List ${escapeHtml(nameOf(b.model))}'s weeks"><td><span title="${escapeHtml(b.model)}">${escapeHtml(nameOf(b.model))}</span></td><td class="num">${b.weeks}${b.weeks < g.weeks ? ` of ${g.weeks}` : ""}${b.n > b.weeks ? ` (${b.n} runs)` : ""}</td><td class="num"><b>${fmtNum(b.mean, 3)}</b></td><td class="num">${fmtPct(b.submitted)}</td><td class="num">${fmtPct(b.feasible)}</td><td class="num">${b.optimal}/${b.n}</td></tr>`).join("")}</tbody></table>
         <p class="muted small">From the sweep${g.runs.length > 1 ? "s" : ""} ${g.runs.map((r) => `<code>${escapeHtml(r.run)}</code>`).join(", ")}.</p>
         ${g.failed.length ? `<ul class="viol">${g.failed.map((f) => `<li>${escapeHtml(nameOf(f.model))} on ${escapeHtml(f.task_id)} does not replay: ${escapeHtml(f.error)}</li>`).join("")}</ul>` : ""}

@@ -2,7 +2,6 @@
 a live week that shows no news before its bulletin."""
 
 import json
-import re
 import shutil
 import subprocess
 import threading
@@ -137,7 +136,7 @@ def test_a_live_week_shows_no_news_before_its_bulletin(runs):
                 assert (seen["winds"], seen["outages"]) == (len(week["rules"]["no_moves"]),
                                                             len(week["rules"]["crane_outages"]))
                 assert all(news(seen, j) == [j <= k] * len(news(seen, j)) for j in range(len(steps)))
-                assert bool(re.search(r"Watch \d+ of", seen["panel"])) == (k == len(steps) - 1)
+                assert ("\nReward\n" in seen["panel"]) == (k == len(steps) - 1)
                 if step["tool"] == "advance" and k and step["hour"] > steps[k - 1]["hour"]:
                     flying = at(k, (steps[k - 1]["hour"] + step["hour"]) / 2)
                     assert flying["task"] == steps[k - 1]["task"] and f"Advancing to watch {step['watch']}…" in (

@@ -14,7 +14,7 @@ agentenv-hf's check for keys and token shapes before anything is written, and --
 on top of the commit it read, removing what the build no longer writes.
 
     uv run python scripts/hub_dataset.py --out build/hub/dataset
-    uv run python scripts/hub_dataset.py --out build/hub/dataset --repo earakely-scale/PortSimEnv-AgentEnv --tag v0.4.0
+    uv run python scripts/hub_dataset.py --out build/hub/dataset --repo earakely-scale/PortSimEnv-AgentEnv --tag v0.4.1
 """
 
 import argparse
@@ -102,7 +102,10 @@ def task_row(task, version: str, reference: dict | None, raw: str, weathers: dic
                   "task": raw}
 
 
-def episode_rows(sweep_dir: Path, version: str, by_id: dict, episode_ids: dict[str, str]) -> list[dict]:
+def episode_rows(sweep_dir: Path, version: str, by_id: dict, episode_ids: dict[str, str],
+                 graded: dict[str, list]) -> list[dict]:
+    """One row per scored run. A v1 run's final plan is the one it submitted; a live run's is the windows it confirmed,
+    as the verifier graded them."""
     rows = []
     for r in results(sweep_dir):
         if r["outcome"] != "scored":
@@ -120,7 +123,8 @@ def episode_rows(sweep_dir: Path, version: str, by_id: dict, episode_ids: dict[s
             row |= {"submitted": r["submitted"], "checks": r["checks"]}
         else:
             row |= {"num_watches": r["watches"], "regret": r["regret"], "excused_cost": r["excused_cost"]}
-        rows.append(row | {"final_plan": json.dumps(record["final"].get("plan")),
+        plan = record["final"].get("plan") if version == "v1" else graded.get(row["episode_id"])
+        rows.append(row | {"final_plan": json.dumps(plan),
                            "steps": json.dumps(record["steps"], ensure_ascii=False),
                            "messages": to_messages(record)})
     return rows
@@ -155,17 +159,22 @@ def raw_lines(pack_dir: Path) -> dict[str, str]:
     return {json.loads(line)["task_id"]: line for line in (pack_dir / "tasks.jsonl").read_text().splitlines()}
 
 
-def agentenv_files(name: str, bundle: Path, sweeps: list[tuple[Path, list[str]]]) -> tuple[dict[str, bytes], dict]:
+def agentenv_files(name: str, bundle: Path,
+                   sweeps: list[tuple[Path, list[str]]]) -> tuple[dict[str, bytes], dict, dict]:
     """agentenv-hf's files for the bundle ``name``: its tasks from ``bundle``, and the runs ``sweeps`` list by instance
-    id, each sweep built from its own bundle under ``name``. Returns the files and each instance's episode id."""
+    id, each sweep built from its own bundle under ``name``. Returns the files, each instance's episode id, and each
+    episode's plan as its verifier graded it."""
     files = dataset.build(runs.locate(str(bundle)), name=name, split=SPLIT, which="latest").files
-    parts, raw, episode_ids = [], {}, {}
+    parts, raw, episode_ids, graded = [], {}, {}, {}
     for sweep_dir, ids in sweeps:
         played = runs.locate(str(sweep_dir / "bundle"))
         built = dataset.build(played, name=name, split=SPLIT, which="latest", instance_ids=tuple(ids)).files
         parts.append(pq.read_table(io.BytesIO(built[f"episodes/{name}.parquet"])))
         for line in built[f"raw/{name}.jsonl"].decode().splitlines():
-            raw[json.loads(line)["episode_id"]] = line
+            run = json.loads(line)
+            raw[run["episode_id"]] = line
+            outcome = run["record"]["metadata"]["verifications"]["portsim"]["results"]
+            graded[run["episode_id"]] = outcome[0]["episode"].get("plan")
         rewrite = records.Rewrite(played.id_root, name)
         episode_ids |= {i: rewrite.text(i) for i in ids}
     episodes = pa.concat_tables(parts).sort_by([("model", "ascending"), ("task", "ascending")])
@@ -173,7 +182,7 @@ def agentenv_files(name: str, bundle: Path, sweeps: list[tuple[Path, list[str]]]
     pq.write_table(episodes, sink)
     files[f"episodes/{name}.parquet"] = sink.getvalue()
     files[f"raw/{name}.jsonl"] = "".join(raw[i] + "\n" for i in episodes.column("episode_id").to_pylist()).encode()
-    return files, episode_ids
+    return files, episode_ids, graded
 
 
 def card_text(plugin: str) -> str:
@@ -204,12 +213,12 @@ def build(sweeps: list[str], runs_dir: Path, out: Path, plugin: str) -> dict[str
         shutil.rmtree(bundle, ignore_errors=True)
         tasks.generate(EVAL_PACK, bundle, live=v != "v1", marine=v == "v3", wind=v == "v4")
         scored = [(d, [r["instance"] for r in results(d) if r["outcome"] == "scored"]) for d in played[v]]
-        hub_files, episode_ids = agentenv_files(bundle_name, bundle, scored)
+        hub_files, episode_ids, graded = agentenv_files(bundle_name, bundle, scored)
         files |= hub_files
         by_ref = {r["task_id"]: r for r in refs.get(v, [])}
         files[f"tasks/{v}.parquet"] = table_bytes([task_row(by_version[v][i], v, by_ref.get(i), raw[v][i], weathers)
                                                    for i in ids[v]])
-        episodes = [row for d in played[v] for row in episode_rows(d, v, by_version[v], episode_ids)]
+        episodes = [row for d in played[v] for row in episode_rows(d, v, by_version[v], episode_ids, graded)]
         files[f"episodes/{v}.parquet"] = table_bytes(sorted(episodes, key=lambda r: (r["model"], r["task_id"])))
         if v in REFERENCE_FILES:
             ref_name, source = REFERENCE_FILES[v]
@@ -254,7 +263,7 @@ def main():
     ap.add_argument("--plugin-ref", default=f"v{VERSION}",
                     help="The plugin tag the card's bundles pin, for agent-env hf run.")
     ap.add_argument("--repo", help="Push the folder to this dataset repo after writing it.")
-    ap.add_argument("--tag", help="Tag the pushed commit, e.g. v0.4.0.")
+    ap.add_argument("--tag", help="Tag the pushed commit, e.g. v0.4.1.")
     ap.add_argument("--message", default="Publish PortSimEnv on AgentEnv")
     args = ap.parse_args()
     plugin = f"agentenv-portsim @ git+https://github.com/earakely-scale/agentenv-portsim-plugin@{args.plugin_ref}"
