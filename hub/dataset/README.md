@@ -1,0 +1,543 @@
+---
+license: other
+license_name: cc-by-sa-4.0-and-cc-by-4.0-and-meteocat
+license_link: https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.4.0/data/LICENSE
+pretty_name: PortSimEnv on AgentEnv
+language:
+- en
+task_categories:
+- reinforcement-learning
+- text-generation
+size_categories:
+- n<1K
+tags:
+- agentenv
+- rl-environment
+- agents
+- simulation
+- logistics
+- scheduling
+- operations-research
+- mcp
+- real-world-data
+- weather
+- forecasting
+configs:
+- config_name: v4_tasks
+  default: true
+  data_files:
+  - split: eval
+    path: tasks/v4.parquet
+- config_name: v4_episodes
+  data_files:
+  - split: eval
+    path: episodes/v4.parquet
+- config_name: v4_references
+  data_files:
+  - split: eval
+    path: references/wind.parquet
+- config_name: v3_tasks
+  data_files:
+  - split: eval
+    path: tasks/v3.parquet
+- config_name: v3_episodes
+  data_files:
+  - split: eval
+    path: episodes/v3.parquet
+- config_name: v3_references
+  data_files:
+  - split: eval
+    path: references/marine.parquet
+- config_name: v2_tasks
+  data_files:
+  - split: eval
+    path: tasks/v2.parquet
+- config_name: v2_episodes
+  data_files:
+  - split: eval
+    path: episodes/v2.parquet
+- config_name: v2_references
+  data_files:
+  - split: eval
+    path: references/live.parquet
+- config_name: v1_tasks
+  data_files:
+  - split: eval
+    path: tasks/v1.parquet
+- config_name: v1_episodes
+  data_files:
+  - split: eval
+    path: episodes/v1.parquet
+agentenv:
+  default: dock-v1-eval-wind
+---
+
+# PortSimEnv on AgentEnv
+
+[![GPT-6.1 Sol plays a wind week at the Port of Barcelona: at each watch Barcelona Port Control's forecast arrives as a bulletin, the watch panel draws its knots and windows, and the storm that blew raises whitecaps and a no-movement banner on the quay](https://raw.githubusercontent.com/earakely-scale/agentenv-portsim-plugin/v0.4.0/assets/wind-port.webp)](https://earakely-scale-portsimenv-agentenv.hf.space/viewer/#/run/wind-pilot-gpt/openai%2Fgpt-6.1-sol/dock-24B-w37x1-standard-0-e01)
+
+<sub>GPT-6.1 Sol plays the wind week `dock-24B-w37x1-standard-0-e01`, APM Terminals Barcelona's schedule in the wind of
+the week of 6 March 2023. At each watch Barcelona Port Control's bulletin is the ECMWF run published by then; on
+Thursday 15:00 it warns of wind above 25 kn in hours 127–130, and on Friday 09:00 in 125–129. The agent berths VIENNA
+EXPRESS (335 m) at hour 130, after the latest window. The wind blew above 25 kn from 122 to 135, and above 30 kn to
+125: longer and earlier than any forecast showed, so hour 130 is excused. The plan is feasible at 301 against the
+forecast-following re-planner's 252 (reward 0.62); ignoring the forecast is infeasible (0.187).
+**▶ [Watch this week](https://earakely-scale-portsimenv-agentenv.hf.space/viewer/#/run/wind-pilot-gpt/openai%2Fgpt-6.1-sol/dock-24B-w37x1-standard-0-e01)**
+on the [replay Space](https://huggingface.co/spaces/earakely-scale/PortSimEnv-AgentEnv), or the
+[full film](https://github.com/earakely-scale/agentenv-portsim-plugin/releases/tag/replays-2026-10-09). Twin ©
+OpenStreetMap contributors (ODbL); forecasts ECMWF open data (CC BY 4.0, modified); wind windows derived from Meteocat
+XEMA Y7.</sub>
+
+An agent runs one container quay at the Port of Barcelona for a week of 2024 that has just gone wrong: late and
+bunched ships, closed quay sections, crane breakdowns, gales, emergencies. It decides when, where along the quay and
+with how many cranes every ship docks, and the week is graded deterministically, with no judge, against plans the
+CP-SAT solver finds. The ships and their calls, the quays' crane fleets and the port's berth and wind rules are real;
+the workloads and the disruptions are simulated, except in v4, where the storms and their forecasts are real. This
+dataset holds the weeks and the recorded runs of that environment on the
+[AgentEnv Framework](https://www.agentenvframework.com), in four versions:
+
+- **v4, the wind port** (env `portsim-wind`): v3's marine week moved into a real Barcelona weather week of 2023 to
+  2025. The wind that blew at the port's anemometer sets the no-movement windows, and at every watch Barcelona Port
+  Control sends the latest ECMWF forecast published by then, adjusted to that anemometer. The agent plans on the
+  forecasts as they were issued, and the week is graded on the wind that blew.
+- **v3, the marine port** (env `portsim-marine`): v2's live week, where every berthing and departure also takes a
+  pilot and tugs in its hour, from port-wide pools shared with the rest of the port's real 2024 traffic. The tug
+  company and the pilot station announce cuts during the week, and a gale adds a tug to most movements.
+- **v2, the live port** (env `portsim-live`): the week played as it unfolds. AgentEnv's virtual clock runs it watch by
+  watch, the ships, the harbour master, terminal ops and the line desk send their news through triggers, windows
+  about to start are frozen, and the agent confirms berths as it goes. It is graded on what it confirmed, against the
+  week as it really happened.
+- **v1, a week planned in one go** (env `portsim`): the agent reads the situation, checks drafts and submits one
+  plan, as in PortSimEnv itself.
+
+Each version's weeks are also a bundle of agent-env tasks, published with
+[agentenv-hf](https://github.com/earakely-scale/agentenv-hf-plugin) beside PortSim's own tables, so
+`agent-env hf run` plays a week straight from this dataset ([Play a week yourself](#play-a-week-yourself)).
+
+The environment is the plugin
+[earakely-scale/agentenv-portsim-plugin](https://github.com/earakely-scale/agentenv-portsim-plugin), built on
+[PortSimEnv](https://github.com/adithya-s-k/FineEnvs/tree/main/07-simulation-environments/portsim-v1), Adithya S
+Kolavi's environment in [FineEnvs](https://github.com/adithya-s-k/FineEnvs). Its own tasks, including the 1,050
+training weeks, and rollouts are in [FineEnvs/PortSimEnv](https://huggingface.co/datasets/FineEnvs/PortSimEnv). See
+also the collection
+[PortSimEnv on AgentEnv](https://huggingface.co/collections/earakely-scale/portsimenv-on-agentenv-6ac6e1fc8313fc0cb74a54f1).
+
+## Tables
+
+Two kinds of tables, all parquet, all under the split `eval`. PortSim's own, one family per version:
+
+| Config | Split | Rows | What |
+|---|---|---:|---|
+| `v4_tasks` (default) | `eval` | 15 | the wind weeks: what the agent is told at the start, each watch's news with Port Control's forecast, the wind that blew, and the reference costs |
+| `v4_episodes` | `eval` | 30 | GPT-6.1 Sol and Claude Sonnet 5.5 on the wind weeks: the grade, the tool calls and the full transcript |
+| `v4_references` | `eval` | 15 | for each wind week, the hindsight optimum, the forecast-following and forecast-blind re-planners and the naive policy, and the conditions it qualified on |
+| `v3_tasks` | `eval` | 15 | the marine weeks: what the agent is told at the start, including the pilots and tugs free each hour, each watch's news, and the reference costs |
+| `v3_episodes` | `eval` | 29 | the same two models on the marine weeks |
+| `v3_references` | `eval` | 18 | for each one-week eval week, a rolling CP-SAT re-planner and a naive policy played with pilots and tugs, and whether it qualifies |
+| `v2_tasks` | `eval` | 15 | the live weeks, the same 15 without pilots and tugs |
+| `v2_episodes` | `eval` | 30 | the same two models on every live week |
+| `v2_references` | `eval` | 18 | the rolling re-planner and the naive policy on the live weeks |
+| `v1_tasks` | `eval` | 50 | the eval weeks planned in one go: the prompts, the optimal and naive plans |
+| `v1_episodes` | `eval` | 20 | the same two models on ten of those weeks |
+
+And agentenv-hf's, one pair per bundle, exactly as `agent-env hf publish` writes them:
+
+| Config | Split | Rows | Bundle | Version |
+|---|---|---:|---|---|
+| `dock-v1-eval-wind_tasks`, `dock-v1-eval-wind_episodes` | `eval` | 15, 30 | `bundles/dock-v1-eval-wind` | v4 |
+| `dock-v1-eval-marine_tasks`, `dock-v1-eval-marine_episodes` | `eval` | 15, 29 | `bundles/dock-v1-eval-marine` | v3 |
+| `dock-v1-eval-live_tasks`, `dock-v1-eval-live_episodes` | `eval` | 15, 30 | `bundles/dock-v1-eval-live` | v2 |
+| `dock-v1-eval_tasks`, `dock-v1-eval_episodes` | `eval` | 50, 20 | `bundles/dock-v1-eval` | v1 |
+
+A bundle's `_tasks` table has one row per task of the bundle, with its prompt, envs, verifiers and steps; its
+`_episodes` table has one row per recorded run, with its status, model, reward, the verifier's full output and the
+transcript as chat messages. They hold the same runs as PortSim's episode tables, with the same rewards: `episode_id`,
+e.g. `dock-v1-eval-wind/dock-24B-w06x1-busy-0-e15-iamceybb`, joins `v4_episodes` to `dock-v1-eval-wind_episodes` and
+to the line of `raw/dock-v1-eval-wind.jsonl` with that id, and so for each version. A PortSim table's `task_id` is an
+agentenv-hf table's `task` (agentenv-hf's own `task_id` is `<bundle>/<task>`).
+
+Every week is an eval week. The 15 live weeks are the one-week eval weeks on which the rolling re-planner reaches
+the hindsight optimum, so a perfect score is reachable on what the agent could know; with pilots and tugs, the same
+15 qualify. A wind week pairs a marine week with a weather week. Of the 240 pairs of the 15 marine weeks and 16
+weather weeks (14 storm weeks and 2 false alarms), 26 qualify, those that meet four conditions: (a) the
+forecast-following re-planner reaches the hindsight optimum and (b) ignoring the forecast (in a false-alarm week,
+holding every warning) scores 0.9 or less, each in at least 3 of its 4 solver configurations; (c) the week has at
+most 10 watches; (d) no ship alongside at hour 0 is due to leave inside a window above 30 kn. 15 are dealt: 14 storm
+weeks and 2023-W44's false alarm on `dock-24B-w07x1-busy-0`. They use 11 of the marine weeks' schedules, three of
+them more than once.
+
+A task id reads `dock-<quay>-w<week>x<weeks>-<difficulty>-<seed>`: `dock-24B-w07x1-busy-0` is week 7 of 2024 at quay
+24B, one week long, busy tier. A wind week adds its weather week, `-e00` to `-e15`: `dock-24B-w37x1-standard-0-e01` is
+the marine week `dock-24B-w37x1-standard-0` in the wind of 2023-W10. A v1 task can span up to three weeks (`x2`,
+`x3`); a v2, v3 or v4 week is always one. `dock-v1` is the name of PortSimEnv's task pack, which all four versions
+use, not this dataset's version.
+
+## Terms
+
+- **Week**: one task, a quay with its ships and what goes wrong. **Watch** (v2 to v4): watch 0 opens the week at
+  hour 0, and a new watch starts at each news bulletin; the agent re-plans each watch, and a window starting within 6
+  hours (the freeze) can no longer change. A wind week has 4 to 10 watches and always 52 turns, those of 10 watches,
+  so the turns don't give the count away; v2 and v3 weeks have 47.
+- **Pilots and tugs** (v3, v4): a pilot is the local mariner who boards to guide a ship in or out of the port, and
+  tugs are the boats that push and pull it alongside. Every berthing and departure of a ship of 45 m or more takes a
+  pilot, and tugs by length (0 under 120 m, up to 3 from 300 m), in its hour, from 7 pilots and 8 tugs on duty; inside
+  an announced gale window (in v4, in wind above 25 kn) most movements take one more tug (not Ro-Ro ships and ferries
+  under 200 m, nor yachts).
+  The port's other 2024 calls use the same pools. In any hour the quay's ships may need no more than are free; a
+  short hour is a rule break.
+- **Wind rules** (v4): above 25 kn (10-minute mean) at the port's anemometer, ships of 300 m or more may not berth or
+  leave and every movement takes one more tug, with the exemptions above; above 30 kn no ship moves (the port's
+  traffic ordinance, BOE-A-2023-6719). The hours the wind blew above each threshold are the week's no-movement
+  windows. v3's gale is gone; the agent sees only forecasts and the wind observed so far.
+- **Forecast bulletin** (v4): at every watch Barcelona Port Control sends the latest ECMWF open-data (HRES) run
+  published by then, adjusted to the anemometer, Meteocat's XEMA station Y7, by quantile maps fitted on another year,
+  in whole knots. A run counts as published 9 hours after it starts. The bulletin gives the hours above 25 and 30 kn
+  it shows and its peak; the situation adds its knots every 3 hours. A watch is added at 00:00 or 12:00 when the run
+  in force then shows an hour above 25 or 30 kn, 6 to 42 hours ahead, that the run at the watch before didn't.
+- **Storm week, false-alarm week** (v4): the weather weeks a wind week is set in. A storm week had a window above 25
+  kn of 4 hours or more, or an hour above 30 kn, at Y7; a false-alarm week (`bust` in the tables) stayed below that,
+  though its forecasts showed hours above 25 kn that didn't blow.
+- **Optimum**: the cost of the best plan CP-SAT, a constraint solver, finds for the week as it really happened.
+  **Hindsight** (v4): that optimum with the whole week known, in the wind that blew. **Anchor** (v4): the lower of
+  the hindsight optimum and the forecast-following re-planner's best cost over its 4 solver configurations; v4 scores
+  against it, and it is v4's `optimal_cost`. The agent's cost is net of its excuses while hindsight pays for all the
+  wind, so following the forecast can cost less than hindsight; the anchor is below it in 5 of the 15 wind weeks.
+- **Rolling**: a CP-SAT re-planner that only knows what has been announced; in v4 that includes the forecast, so it
+  is the forecast-following re-planner. **Blind** (v4): the same re-planner with the wind taken out of the week as
+  known. **Hold** (v4, the false-alarm week): the same, holding every window any forecast so far has shown. **Naive**:
+  a simple policy that pushes ships later (in v2 to v4, it keeps each confirmed window that still fits and moves the
+  rest; it knows nothing of pilots and tugs, so in v3 it often breaks their rule). **Unavoidable**: the cost no plan
+  avoids; in v4, in the wind that blew (the floor). **Regret**: cost above the optimum, in v4 above the anchor.
+  **Excused cost**: cost the grade excuses, which is not charged: in v2 and v3, cost that news put on a frozen window;
+  in v4, the cost the excuse waives.
+- **The excuse** (v4): per ship, at its freeze, on the whole plan. A ship first frozen at watch k is compared with the
+  week as known at watch k−1, its news and its forecast, and a rule break or cost the week adds to that is excused,
+  once. So wind that no forecast had shown by then is excused, and wind the forecast showed and that blew is charged,
+  as an ignored warning. A problem ships share (an overlap, or pilots, tugs or the move limit short at an hour) is
+  judged for each of them as the ship decided last saw it.
+- **Reward**: 0.2 + 0.8·e^(−gap/0.5) for a valid plan, where gap = max(0, cost − optimum) / (max(0, optimum −
+  unavoidable) + 100), so the optimum scores 1.0; in v4 the anchor and the floor take the optimum's and the
+  unavoidable cost's places. A plan that breaks a rule scores under 0.2 (0.2 times the share of ships placed
+  cleanly), and no plan scores 0. The confidence intervals below are bootstrap intervals over weeks.
+- **Sweep**: one batch of runs (models × weeks), recorded in `runs/`; the sweeps named `…-pilot-…` were small first
+  batches of two weeks, unrelated to harbour pilots. **Bundle**: a folder of agent-env tasks; `bundles/` has one per
+  version.
+
+## Use
+
+```python
+import json
+from datasets import load_dataset
+
+repo = "earakely-scale/PortSimEnv-AgentEnv"
+weeks = load_dataset(repo, "v4_tasks", split="eval", revision="v0.4.0")
+week = weeks[0]
+print(week["system_prompt"], week["situation"], sep="\n\n")   # what the agent gets at hour 0
+for watch in json.loads(week["watches"]):                       # what arrives later, Port Control's forecast included
+    print(watch["hour"], [n["text"] for n in watch["notices"]])
+print(json.loads(week["wind_windows"]))                         # the wind that blew, which the grade reads
+
+episodes = load_dataset(repo, "v4_episodes", split="eval", revision="v0.4.0")
+messages = episodes[0]["messages"]                              # a list of chat messages: no json.loads
+call = next(c for m in messages if m["tool_calls"] for c in m["tool_calls"]
+            if c["function"]["name"] == "check_plan")
+print(call["function"]["arguments"]["plan"])                    # the arguments are an object
+```
+
+`messages`, in every `vN_episodes` table, is now a list of chat messages, the type agentenv-hf writes: OpenAI roles,
+`tool_calls` of `{id, type, function: {name, arguments}}` with `arguments` an object, and `tool_call_id` and `name`
+on tool messages, which TRL's `SFTTrainer` and transformers chat templates read. In v0.3.x it was a JSON string. The
+other columns holding JSON (`watches`, `wind_windows`, `task`, the plans, `steps`, `clauses`) are still strings;
+`json.loads` them. agentenv-hf's JSON columns (`scores`, `verifications`, `structured_output` and its tasks' `steps`)
+come back as Python objects in `datasets` 5.1.
+
+## Play a week yourself
+
+You need Docker (running, usable without `sudo`, with buildx), [uv](https://docs.astral.sh/uv/) and git. Install
+the plugin, which brings agentenv-hf with it, build the images, and check it all works with a free task that calls no
+model:
+
+```bash
+uv tool install agentenv-framework \
+    --with "agentenv-portsim @ git+https://github.com/earakely-scale/agentenv-portsim-plugin@v0.4.0"
+agent-env portsim setup --agent        # build the env and agent images and register them (a few minutes)
+agent-env run portsim --task smoke     # no model: grades a known optimal plan, prints "passed"
+```
+
+Then play a week straight from this dataset. You need a Hugging Face token with the "Make calls to Inference
+Providers" permission, on an account with credits; each task stops an episode before it could spend $5.
+
+```bash
+export HF_TOKEN=hf_...                  # with "Make calls to Inference Providers", on an account with credits
+export LITELLM_BASE_URL=https://router.huggingface.co/v1 LITELLM_API_KEY=$HF_TOKEN
+agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.4.0 --task dock-36A-w06x1-standard-0-e07 \
+    --model zai-org/GLM-5.3-Flash:baseten          # the default bundle: dock-v1-eval-wind (v4)
+agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.4.0 --bundle dock-v1-eval-marine \
+    --task dock-24B-w07x1-busy-0 --model zai-org/GLM-5.3-Flash:baseten   # v3; dock-v1-eval-live is v2, dock-v1-eval v1
+```
+
+`hf run` downloads this card and `bundles/` at the tag's commit into
+`~/.cache/agentenv-hf/earakely-scale/PortSimEnv-AgentEnv/<commit>`, checks that the plugins the card's `agentenv`
+table names are installed (it never installs them itself), shows what it will run and asks first: `--yes` skips the
+question, and `--dry-run` runs nothing. Without `--bundle` it plays the card's default, `dock-v1-eval-wind`.
+`dock-36A-w06x1-standard-0-e07` is the shortest wind week, with 4 watches.
+
+The open models priced for the router are `Qwen/Qwen3.8-2.4T-A95B:together`, `Qwen/Qwen3.8-27B:ovhcloud`,
+`zai-org/GLM-5.3-Flash:baseten` and `zai-org/GLM-5.3:together`; closed models go through a LiteLLM proxy (the plugin
+README's [Play a model](https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.4.0/README.md#play-a-model)).
+If a step fails, the plugin README's
+[troubleshooting](https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.4.0/README.md#run-it-yourself)
+covers the usual causes (`agent-env` not on the PATH, port 5000 taken by macOS AirPlay).
+
+## Replay and publish your own runs
+
+To replay your own runs on the same viewer as the Space, play them as a sweep, which records each run under
+`results/runs/<name>/`, then serve them. `--wind` plays wind weeks, `--marine` and `--live` play v3 and v2, and a
+sweep with none of them plays v1.
+
+```bash
+agent-env portsim sweep run --wind --name mine --models zai-org/GLM-5.3-Flash:baseten \
+    --tasks dock-36A-w06x1-standard-0-e07 --episode-cap-usd 1 --cap-usd 3
+agent-env portsim view mine            # http://127.0.0.1:8237/viewer/
+```
+
+To publish them as a Hub dataset of your own, give `agent-env hf publish` the sweep's bundle,
+`results/runs/<name>/bundle`. Write it to a folder first and look, then push:
+
+```bash
+agent-env hf publish results/runs/mine/bundle --name dock-v1-eval-wind --out mine-dataset   # look first
+agent-env hf publish results/runs/mine/bundle --name dock-v1-eval-wind --repo you/portsim-runs
+```
+
+It writes the same tables as this dataset's `dock-v1-eval-wind_*` configs, the raw records and the bundle, under the
+split `train` unless `--split` names another, and pushes them in one commit; pushing needs a token with write access.
+Before writing anything it scans every file for this machine's keys and for token shapes, and stops on a hit.
+Transcripts are published as the agent wrote them, so read a run's `messages` before you make a dataset public.
+`--requires` and `--setup` write what the bundle needs to the card, as this card's `agentenv` table does, for
+`agent-env hf run` to check; [agentenv-hf's README](https://github.com/earakely-scale/agentenv-hf-plugin/blob/v0.3.0/README.md#publish)
+lists every option. The plugin README covers sweeps and filming a run.
+
+## Dataset structure
+
+**Tasks** (`v4_tasks`, `v3_tasks`, `v2_tasks`, `v1_tasks`), one row per week:
+
+- `task_id`, `quay`, `terminal`, `difficulty` (standard, busy, storm or extreme), `week`, `week_start_utc`,
+  `num_ships`, `num_disruptions`. A wind week keeps its schedule's 2024 week.
+- `system_prompt`, `situation`: the rules and the opening message, exactly as the agent receives them. In v3 and v4
+  the situation has a "Pilots and tugs" section: the pools, the rule, the tugs each ship takes, and the pilots and
+  tugs free for the quay's ships each hour. In v4 a "Wind at the Dique Sur" section follows it: the wind rules, the
+  forecast in force, its knots every 3 hours and the wind observed so far.
+- `optimal_cost`: the cost of the best plan CP-SAT finds for the week as it really happened; in v4, the anchor.
+  `naive_cost`: v1, a plan that pushes ships later; v2 to v4, the naive policy's cost, empty when its plan breaks a
+  rule (`naive_feasible`).
+- v2 to v4: `num_watches`, `watches` (each watch's hour and its notices: who sends it, the hour it is about, the
+  text; in v4 one of them is Barcelona Port Control's forecast), `rolling_cost` (the rolling CP-SAT re-planner) and
+  `unavoidable_cost` (what no plan avoids).
+- v3 and v4: `pilots` and `tugs` (the pools on duty), `other_movements` (the berthings and departures of the port's
+  other traffic the pools also serve). v3 only: `v2_optimal_cost` (the same week's optimum without pilots and tugs).
+- v4 only: `schedule` (the marine week it is built on), `v3_optimal_cost` (that week's optimum in the marine port),
+  `hindsight_cost`, `blind_cost` (empty when the blind plan breaks a rule) and `blind_feasible`, `weather_id`
+  (`e00` to `e15`), `weather_week` (the ISO week, e.g. `2023-W10`), `weather_monday_utc`, `weather_kind` (`storm` or
+  `bust`), and `wind_windows`: the windows that blew, each with its `start` and `end` hour, `above_kn` (25 or 30) and
+  `unvalidated`, the share of its Y7 readings not yet validated. The grade reads them; the agent sees only the wind
+  observed before each watch.
+- v1 only: `proven_optimal`, `optimal_plan`, `naive_plan`. A plan is a list of
+  `{"ship": id, "berth_hour": h, "section": s, "cranes": c}`.
+- `task`: the full week as the task pack has it, including every disruption (in v3 and v4 the pools and the other
+  traffic's movements; in v4 the windows that blew and the forecast in force at each watch); in v2 to v4 the agent
+  learns the disruptions only as their notices arrive.
+
+**Episodes** (`v4_episodes`, `v3_episodes`, `v2_episodes`, `v1_episodes`), one row per model and week:
+
+- `episode_id` (the run, as in agentenv-hf's tables), `model`, `model_name`, `task_id`, `difficulty`, `quay`,
+  `num_ships`.
+- `reward` (0 to 1), `feasible`, `cost` (of the plan, or of the confirmed windows in v2 to v4), `optimal_cost` (in
+  v4, the anchor).
+- v2 to v4: `num_watches`, `regret` (cost above the optimum, in v4 above the anchor), `excused_cost` (cost excused,
+  not charged). v1: `submitted`, `checks`.
+- `turns`, `tool_calls`, `input_tokens`, `output_tokens`, `cost_usd` (model spend at prices pinned in October 2026),
+  `end_reason`, `sweep` (the run it comes from).
+- `final_plan`, `steps` (each tool call with its plan), `messages` (the full transcript, as chat messages).
+
+**References** (`v4_references`, `v3_references`, `v2_references`). v2 and v3 have one row per one-week eval week:
+`qualifies`, `optimal_cost`, `unavoidable_cost`, `watch_hours`, the rolling re-planner's and the naive policy's
+`cost`, `reward`, `feasible` and `excused_cost` (`rolling_cost` to `naive_excused_cost`), `rolling_plans` (the rolling
+plans per watch), `configs` (each solver configuration's cost; in v4 also its reward) and `solver` (the solver
+settings); v3 adds `v2_optimal_cost`. v4 has one row per wind week, with the same columns (`optimal_cost` is the
+anchor) and `schedule`, `weather`, `kind`, `hindsight_cost`, `v3_optimal_cost`, `added_watches` (the watches its
+forecasts added), the blind re-planner's `blind_cost` to `blind_excused_cost`, and `clauses` (whether the week meets
+each of the four conditions above, `a` to `d`); in the false-alarm week, the hold-every-warning re-planner's
+`hold_cost` to `hold_excused_cost`, empty in the storm weeks.
+
+**agentenv-hf's tables** (`<bundle>_tasks`, `<bundle>_episodes`) are what `agent-env hf publish` writes for any
+bundle; [agentenv-hf's README](https://github.com/earakely-scale/agentenv-hf-plugin/blob/v0.3.0/README.md#whats-in-the-dataset)
+describes every column. In brief: `_tasks` has `task`, `task_id`, `evals`, `prompt`, `envs`, `agents`, `verifiers`,
+`num_steps` and `steps`; `_episodes` has `episode_id`, `task`, `task_version`, `run_group`, `status`, `created_utc`,
+`completed_utc`, `model`, `agent`, `reward` and `scores` (the `portsim` verifier's), `prompt` and `response`,
+`messages`, `tool_calls` (the count), `trajectory_format`, `failed_step`, `error_type`, `error`, `verifications` and
+`structured_output`.
+
+**Files** beside the tables: `bundles/<bundle>/` holds each version's weeks as agent-env tasks (what
+`agent-env hf run` plays), `raw/<bundle>.jsonl` each run's record and native trajectory, one run per line,
+`references/` the references also as JSONL, and `runs/` the 13 raw sweeps the replay Space reads.
+
+## Results
+
+**v4, the wind port**, one run per model and week, $16.05 recorded:
+
+| Model | Weeks scored | Mean reward (95% CI) | Rolling re-planner | Blind re-planner | Naive policy | Feasible | At the anchor | Median turns | Cost per episode |
+|---|---:|---|---:|---:|---:|---:|---:|---:|---:|
+| Claude Sonnet 5.5 | 15 of 15 | 0.888 (0.807 to 0.953) | 1.000 | 0.237 | 0.183 | 15 of 15 | 3 | 17 | $0.80 |
+| GPT-6.1 Sol | 15 of 15 | 0.745 (0.576 to 0.890) | 1.000 | 0.237 | 0.183 | 12 of 15 | 4 | 23 | $0.15 |
+
+- Every run reached the end of its week and passed the validity audit, and replaying each one gives its recorded
+  reward. The blind re-planner scores 0.183 on the 14 storm weeks, infeasible in all of them, and 1.000 on the false
+  alarm.
+- GPT-6.1 Sol's three infeasible weeks are its own rule breaks, none of them the wind's: on
+  `dock-24B-w07x1-busy-0-e08` HMM HANBADA leaves at hour 76 needing 3 tugs with 2 free, which its plan already broke
+  when the ship froze; on `dock-24B-w07x1-busy-0-e09` NEXOE MAERSK is placed in sections 19–23 from watch 0, past the
+  quay's last section, 22; on `dock-24B-w16x1-busy-0-e12` three ships move at hour 190 needing 8 tugs with 7 free.
+- On the false alarm, `dock-24B-w07x1-busy-0-e04`, both models end at 227 against the optimum's 226 (0.989), well
+  clear of holding every warning (242, 0.845).
+- Both models often cost less than the hindsight optimum, as the forecast-following re-planner does: the grade
+  excuses wind that no forecast showed, while hindsight pays for all of it. Claude Sonnet 5.5 ends
+  `dock-24B-w37x1-standard-0-e01` at 329 against hindsight's 359 and still scores 0.490 against the anchor's 252.
+- Claude Sonnet 5.5's `dock-24B-w35x1-busy-0-e00` took three attempts: the first two ended in provider errors, and
+  their $1.77 is counted in its spend.
+
+On the marine port's 15 weeks the averages were 0.932 for Claude Sonnet 5.5 (14 weeks) and 0.905 for GPT-6.1 Sol. The
+wind weeks use 11 of those schedules, three of them more than once, so the sets differ, and with one run per week
+neither model's change is beyond noise. A wind week has more watches than its marine week (8 at the median against
+6), and Claude Sonnet 5.5's cost per episode rises from $0.45 to $0.80.
+
+**v3, the marine port**, one run per model and week:
+
+| Model | Weeks scored | Mean reward (95% CI) | Rolling re-planner | Naive policy | Feasible | Optimal weeks | Cost per episode |
+|---|---:|---|---:|---:|---:|---:|---:|
+| GPT-6.1 Sol | 15 of 15 | 0.905 (0.790 to 0.977) | 1.000 | 0.187 | 14 of 15 | 7 | $0.08 |
+| Claude Sonnet 5.5 | 14 of 15 | 0.932 (0.886 to 0.971) | 1.000 | 0.187 | 14 of 14 | 5 | $0.45 |
+
+v3 is harder than v2 in a way a naive planner can't see: the pools are shared with the rest of the port, the cuts
+arrive mid-week, and a plan that ignores them breaks the rule. The naive policy, which knows nothing of pilots and
+tugs, is infeasible in 9 of the 15 weeks (0.187, against 0.202 in v2). The two models stay close to their v2 scores:
+GPT-6.1 Sol's mean is 0.957 without its one infeasible week, its v2 mean, and Claude Sonnet 5.5 averaged 0.901 on
+the same 14 weeks in v2. With one run per week, neither change is beyond noise.
+
+GPT-6.1 Sol's infeasible week is `dock-24B-w35x1-busy-0`: at its last watch it confirmed windows before checking
+them and advanced with a pilot-short hour in its plan. Claude Sonnet 5.5's unscored week is
+`dock-36A-w10x1-standard-0`: on the first attempt its second reply never came and the run ended after 15 minutes
+with no spend recorded, and the second attempt was stopped by hand after about 4 minutes.
+
+**v2, the live port**, one run per model and week:
+
+| Model | Mean reward (95% CI) | Rolling re-planner | Naive policy | Optimal weeks | Cost per episode |
+|---|---|---:|---:|---:|---:|
+| GPT-6.1 Sol | 0.957 (0.916 to 0.991) | 1.000 | 0.202 | 10 of 15 | $0.06 |
+| Claude Sonnet 5.5 | 0.904 (0.854 to 0.945) | 1.000 | 0.202 | 2 of 15 | $0.32 |
+
+Every v2 run reached the end of its week with a feasible plan and passed the validity audit.
+
+**v1, a week planned in one go**, on ten eval weeks, next to PortSimEnv's published eval of the same weeks:
+
+| Model | Mean of 10 weeks | Published, same weeks |
+|---|---:|---:|
+| GPT-6.1 Sol | 0.907 | 0.872 |
+| Claude Sonnet 5.5 | 0.778 | 0.839 |
+
+One Sonnet episode, on the 56-ship storm week `dock-36A-w15x2-storm-0`, spent both of its turns' 32,000 output tokens
+without calling a tool and scored 0; PortSimEnv's harness ends such an episode the same way.
+
+## Limitations
+
+- **Small samples:** one run per model and week, two closed models, 15 weeks in v2, v3 and v4 and 10 in v1. The
+  intervals above are wide, and a single week can swing by a lot. The 15 wind weeks rest on 11 schedules and 10
+  weather weeks; 2025-W03 alone serves 4 of them, and one is a false alarm.
+- **Simulated pressure on real data:** the ships, their calls, the cranes, the port's rules and its other traffic are
+  real; the workloads and the disruptions are simulated, except v4's storms and forecasts, and the parties send
+  scripted news without answering the agent.
+- **v4's weather is transplanted:** each wind week is a 2024 marine week moved, hour for hour, into a weather week of
+  2023 to 2025. Its ships never met that wind, and the task keeps its 2024 week, so no real date reaches the agent.
+- **Readings partly unvalidated:** Y7's readings count as published, validated or not. The windows of the 9 weather
+  weeks from 2023-W44 to 2025-W03, 5 of which set 10 of the 15 wind weeks, rest wholly on readings not yet validated;
+  `wind_windows` gives each window's share. Hours with no reading at all count as calm: 17 hours after the working
+  week in 2024-W18 (`e07`), and hour 126 in 2025-W03 (`e12`).
+- **A stand-in forecast:** the port's own forecasts aren't published. ECMWF's open-data runs at the nearest sea grid
+  point, calibrated to Y7 by quantile maps fitted on another year, stand in for them, and a run counting as published
+  9 hours after its start is an assumption. They are only as good as that: at 9 to 72 hours ahead they showed 41% to
+  62% of the hours that blew above 25 kn, 31% to 69% of the hours they showed above 25 kn didn't blow, and 2024's and
+  2025's runs showed only 7 of the 138 hours that blew above 30 kn. A storm's 30 kn core mostly comes unforecast, and
+  is excused; following the forecast pays through the 25 kn windows.
+- **One anemometer:** the whole port's wind is read at Y7, Port de Barcelona – Bocana Sud, taken for the ordinance's
+  anemometer at the Dique Sur's red light. Y7 publishes a 30-minute mean and a 3-second gust; the factors that turn
+  them into the ordinance's 10-minute and 1-minute means are assumptions.
+- **v4's simplifications:** the ordinance's thresholds start a review with the pilots, which PortSimEnv simplifies to
+  no-movement windows; windows with gaps of 2 hours or less between them are merged; forecast watches come only at
+  00:00 or 12:00. The harness sees the watch count, which depends on the forecasts to come, though the agent's tools
+  and turns don't. In an infeasible week the whole-plan excuse can give different partial credit from the marine
+  port's. The plugin
+  README's [wind rules and their sources](https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.4.0/README.md#the-wind-rules-and-their-sources)
+  marks each assumption.
+- **v3's assumptions:** some numbers have no public source, among them the 7 pilots on duty (calibrated to the 2024
+  traffic), the tugs per ship length, and the cuts. Ships don't wait for a tug: a short hour is a rule break. The
+  plugin README's [rules and their sources](https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.4.0/README.md#the-rules-and-their-sources)
+  marks each one. v4 keeps them.
+- **Eval weeks only:** live, marine and wind weeks are qualified from the eval pack; the training weeks are in
+  PortSimEnv's dataset and play on v1.
+- **Spend** is computed from token usage at prices pinned in October 2026, not billed amounts.
+
+## Licence and attribution
+
+The dataset carries several sets of terms, hence `license: other`; the plugin's
+[data/LICENSE](https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.4.0/data/LICENSE) and
+[NOTICE](https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.4.0/NOTICE) set out each file.
+
+**CC BY-SA 4.0: the weeks, the tables, the references and the transcripts**, except v4's weather. The weeks come from
+PortSimEnv's dock-v1 task packs, which Adithya S Kolavi built from the Port of Barcelona's 2024 container calls and
+shared under CC BY-SA 4.0. The other traffic in v3 and v4 is derived from the port's record of its 2024 calls of
+every ship type (`Barcelona_2024.csv` in
+[alberto-santini/berth-allocation-problems](https://github.com/alberto-santini/berth-allocation-problems), CC BY-SA
+4.0). Contains data from the [Port de Barcelona open data portal](https://opendata.portdebarcelona.cat/). The tables,
+the references and the transcripts, which carry the task text, are derived from them under the same licence.
+
+**v4's weather keeps its two sources' terms**, not CC BY-SA 4.0. It is in `v4_tasks`, `v4_episodes`,
+`v4_references`, the `dock-v1-eval-wind` tables, `raw/dock-v1-eval-wind.jsonl`, `bundles/dock-v1-eval-wind/`,
+`references/wind.*` and the `runs/wind-*` sweeps.
+
+*The forecasts, CC BY 4.0.* The forecast knots and windows are modified ECMWF open data:
+
+> Copyright: © 2023-2026 European Centre for Medium-Range Weather Forecasts (ECMWF).
+>
+> Source: www.ecmwf.int
+>
+> Licence Statement: This data is published under a Creative Commons Attribution 4.0 International (CC BY 4.0).
+> https://creativecommons.org/licenses/by/4.0/
+>
+> Disclaimer: ECMWF does not accept any liability whatsoever for any error or omission in the data, their
+> availability, or for any loss or damage arising from their use.
+>
+> This data is based on data and products of the European Centre for Medium-Range Weather Forecasts (ECMWF).
+>
+> Modified: each run's 10 m wind at one grid point, every 3 hours to 72 hours, mapped to the Y7 anemometer by
+> quantiles and rounded to whole knots.
+>
+> Terms of use: https://apps.ecmwf.int/datasets/licences/general/
+
+*The observed wind, Meteocat's terms.* The windows that blew are derived from the readings of the Servei Meteorològic
+de Catalunya's (Meteocat) XEMA station Y7, Port de Barcelona – Bocana Sud, in the Generalitat de Catalunya's open data
+portal ([nzvn-apee](https://analisi.transparenciacatalunya.cat/d/nzvn-apee)). No reading is included, and the windows
+are subject to the terms published there ([Meteocat's legal notice](https://www.meteo.cat/wpweb/avis-legal/)):
+
+> Font: Servei Meteorològic de Catalunya (Meteocat), estació XEMA Y7; dades extretes el 2026-10-08; finestres derivades
+
+**Apache-2.0: the verifier scripts in `bundles/`**, from the plugin.
+
+The films and the replay Space draw the port on a 3D twin © OpenStreetMap contributors (ODbL), with terrain from
+Terrain Tiles (AWS); the twin is not in this dataset. A wind film's forecast strip carries the ECMWF and Meteocat
+credit: keep it, with the OpenStreetMap attribution, on anything you publish from a film.
+
+`scripts/hub_dataset.py` in the plugin builds this dataset with agentenv-hf: PortSim's tables from the plugin's
+checkout and the recorded sweeps, and agentenv-hf's tables, raw records, bundles and this card's `agentenv` table as
+`agent-env hf publish` writes them, after agentenv-hf's scan of every file for keys and token shapes.
+
+This dataset is independent: neither the Port de Barcelona, PortSimEnv's author, ECMWF nor Meteocat is affiliated
+with it or endorses it.

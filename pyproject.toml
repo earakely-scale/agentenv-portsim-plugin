@@ -17,8 +17,9 @@ classifiers = [
 ]
 # The env image pins its own server dependencies (Dockerfile); CI runs the golden and replay tests against it.
 dependencies = [
-    "agentenv-framework>=0.9.1289",
+    "agentenv-framework>=0.9.1298",
     "agentenv-framework-protocol>=0.1.290,<0.2",
+    "agentenv-hf @ https://github.com/earakely-scale/agentenv-hf-plugin/archive/refs/tags/v0.3.0.tar.gz",
     "berth-core @ https://github.com/adithya-s-k/FineEnvs/archive/b0f4c2f9526e3c45d608b4f92f6ec6c71fecc152.tar.gz#subdirectory=07-simulation-environments/portsim-v1/envs/berth_planning/core",
     "fastmcp==3.4.8",
     "pydantic>=2.13,<2.14",
@@ -26,9 +27,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8,<10", "ruff>=0.16,<0.17", "huggingface_hub>=1,<2", "pyarrow>=20,<26", "hatchling>=1.27",
-       "anthropic==1.11.0", "openai==2.54.0",
-       "agentenv-hf @ git+https://github.com/earakely-scale/agentenv-hf-plugin@v0.2.0"]
+dev = ["pytest>=8,<10", "ruff>=0.16,<0.17", "hatchling>=1.27", "anthropic==1.11.0", "openai==2.54.0"]
 
 [project.urls]
 Source = "https://github.com/earakely-scale/agentenv-portsim-plugin"

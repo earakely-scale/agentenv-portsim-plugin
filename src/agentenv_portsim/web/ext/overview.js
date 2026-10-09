@@ -15,7 +15,7 @@ const LINKS = [
   ["Article", "https://huggingface.co/spaces/FineEnvs/simulation-rl-environments", "Simulation RL Environments, part 1"],
 ];
 const VERSIONS = [
-  { env: "portsim-wind", v: "v4", name: "the real wind", what: "the marine port in real Barcelona storms, planned on the forecasts as issued and graded on the wind that blew" },
+  { env: "portsim-wind", v: "v4", name: "the wind port", what: "the marine port in real Barcelona storms, planned on the forecasts as issued and graded on the wind that blew" },
   { env: "portsim-marine", v: "v3", name: "the marine port", what: "the live week with the port's pilots and tugs, shared with the rest of the port's real traffic" },
   { env: "portsim-live", v: "v2", name: "the live port", what: "the week unfolds watch by watch on a virtual clock, and the agent confirms berths as the news comes in" },
   { env: "portsim", v: "v1", name: "a week planned in one go", what: "the agent checks drafts and submits one plan, as in PortSimEnv" },
@@ -95,7 +95,7 @@ export async function overviewPage({ app, setCrumbs, isCurrent, sortableTable })
       <h1>PortSim on AgentEnv: model runs, replayed in 3D</h1>
       <p class="muted">Models re-plan a broken week of container-ship dockings at a Port of Barcelona quay on AgentEnv,
       replayed on PortSimEnv's viewer by Adithya S Kolavi (Apache-2.0): the quay in 3D, the dock chart of every plan the
-      model checked or confirmed, the grade and the transcript. <b>v4, the real wind</b>, plays the marine port in real
+      model checked or confirmed, the grade and the transcript. <b>v4, the wind port</b>, plays the marine port in real
       Barcelona storms: at every watch the agent gets the wind forecast issued by then, and the week is graded on the wind
       that blew. <b>v3, the marine port</b>, is the live port with the port's pilots and tugs, shared with its real 2024
       traffic. <b>v2, the live port</b>, plays the week as it unfolds

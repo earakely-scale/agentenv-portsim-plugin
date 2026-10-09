@@ -69,6 +69,7 @@ spend (README, [Development](README.md#development)). For a change to the live p
 | The weather weeks, the wind pack and references | `scripts/wind_weather.py`, which writes `data/wind/weather.jsonl` and `weather-sources.json`; `scripts/wind_references.py`, which writes `data/dock-v1-wind/` and `data/wind/references.jsonl` | `tests/wind/test_wind_weather.py`, `test_wind_references.py`, on the committed data and the synthetic fixtures in `tests/wind/fixtures/` (`python tests/wind/synthetic.py` rewrites their weather) |
 | `portsim-llm`'s live mode | `agents/portsim-llm/agent.py` | `tests/agent/test_agent_live.py`; v1's requests must stay as `tests/golden/harness.json` has them |
 | Watching runs: `agent-env portsim view` and `record`, the live week's panel and chart marks, the twin download | `src/agentenv_portsim/episodes.py`, `view.py`, `record.py`, `twin.py`, `web/ext/` | `tests/viewer/`, with the synthetic marine and wind runs in `tests/viewer/marine_runs/` and `wind_runs/` (`python tests/viewer/recorded.py` rebuilds them); the README's [Watch a run](README.md#watch-a-run) |
+| The Hugging Face dataset and Space | `scripts/hub_dataset.py`, the card `hub/dataset/README.md`, the Space `hub/space/` | `tests/packaging/test_hub_dataset.py`; the README's [On the Hugging Face Hub](README.md#on-the-hugging-face-hub) and [Publishing to the Hugging Face Hub](#publishing-to-the-hugging-face-hub) below |
 | PortSimEnv's core, viewer, task packs or published results | never here: `berth_core` is a dependency pinned to a FineEnvs commit, and `src/agentenv_portsim/web/upstream/`, `data/dock-v1-eval/`, `data/dock-v1-train/` and `data/published/` are copied unchanged from upstream ([VENDORED.md](VENDORED.md)) | a new upstream commit is vendored whole, the berth-core pin moves with it, and VENDORED.md names it |
 
 ## Conventions
@@ -127,6 +128,53 @@ spend (README, [Development](README.md#development)). For a change to the live p
   The wind data's weather keeps its sources' terms, and anything that shows it carries their attribution: ECMWF's
   wording for the forecasts and Meteocat's source line for the observed windows ([NOTICE](NOTICE),
   [data/LICENSE](data/LICENSE)).
+
+## Publishing to the Hugging Face Hub
+
+The maintainer publishes the dataset and the Space
+[earakely-scale/PortSimEnv-AgentEnv](https://huggingface.co/datasets/earakely-scale/PortSimEnv-AgentEnv) with each
+release, from this repository: `scripts/hub_dataset.py` builds the dataset with agentenv-hf, `hub/dataset/README.md`
+is its card, and `hub/space/` is the Space (README, [On the Hugging Face Hub](README.md#on-the-hugging-face-hub)).
+The script needs:
+
+- **The recorded sweeps** under `results/runs`, the 13 it lists in `SWEEPS` from `wind-pilot-gpt` to `g2`, and the
+  agent-env store they wrote their runs to, from which agentenv-hf reads each run's record and trajectory. Neither is
+  in git: `results/runs/` is ignored, and the store is agent-env's (`~/.local/state/agent-env` by default).
+- **An `hf` login with write access** to the dataset and the Space: `hf auth login` (or
+  `uvx --from huggingface_hub hf auth login`), or `HF_TOKEN`. `HF_TOKEN` is used before the login, so unset it if it
+  holds a token without write access.
+
+A release goes in this order:
+
+1. **Pin the new version, merge it, then tag the plugin on GitHub.** Bump `version` in `pyproject.toml` and move
+   every pin of the old tag to `v<version>`: the install commands, links and `revision`s in `hub/dataset/README.md`
+   and `hub/space/README.md`, the plugin tarball in `hub/space/Dockerfile`, and the README's Hub commands.
+   `tests/packaging/test_hub_dataset.py` checks only the install pins (the Dockerfile's tarball and the cards'
+   `agentenv-portsim-plugin@` lines), so search `hub/` for the old tag as well. Merge that, then tag `v<version>` on
+   GitHub: the card's `agentenv` table pins every bundle's plugin to it, and the cards and the Space's Dockerfile pin
+   it, so it must exist before anything on the Hub points at it.
+2. **Build the dataset, read it, then push it with the same tag,** from the repository root (`--runs` defaults to the
+   relative path `results/runs`):
+
+   ```bash
+   uv run python scripts/hub_dataset.py --out build/hub/dataset
+   uv run python scripts/hub_dataset.py --out build/hub/dataset --repo earakely-scale/PortSimEnv-AgentEnv --tag v0.4.0 \
+       --message "v0.4.0: ..."
+   ```
+
+   The first writes the folder and prints each table's row count. Every file goes through agentenv-hf's scan for this
+   machine's keys and for token shapes before anything is written, and a hit stops the build, naming the file. The
+   second builds it again and pushes it as one commit on top of the repo's current commit, deleting the files the
+   build no longer writes, and tags that commit; a concurrent push makes it fail rather than interleave.
+   `--plugin-ref` pins another plugin tag. `build/` stays out of git.
+3. **Upload the Space:**
+
+   ```bash
+   hf upload earakely-scale/PortSimEnv-AgentEnv hub/space . --repo-type space --commit-message "..."
+   ```
+
+   The Space builds from its Dockerfile, which installs the plugin at the tag, and downloads the dataset's `runs/`
+   when it starts.
 
 ## Reporting bugs and security issues
 
