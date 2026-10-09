@@ -1,6 +1,8 @@
 """Build the Hugging Face dataset earakely-scale/PortSimEnv-AgentEnv from this checkout and recorded sweeps: the v3, v2
 and v1 task tables, the episode tables with each transcript inline, the agent-env bundles, the live and marine
 references, and the raw runs the replay Space reads. The dataset card (README.md) is written by hand and left in place.
+Last, every file in the folder goes through agentenv-hf's check for keys and token shapes, so the build fails before
+anything is uploaded.
 
     uv run python scripts/hub_dataset.py --out hub/dataset g2 live-pilot-gpt live-gpt live-pilot-sonnet live-sonnet \\
         marine-pilot-gpt marine-gpt marine-pilot-sonnet marine-sonnet
@@ -13,6 +15,7 @@ from pathlib import Path
 
 import pyarrow as pa
 import pyarrow.parquet as pq
+from agentenv_hf.scan import known_values, scan
 
 from agentenv_portsim import marine, tasks
 from agentenv_portsim.schedule import MARINE_ENV, schedule
@@ -129,6 +132,8 @@ def main():
                                ("marine", marine.REFERENCES, marine.references())):
         shutil.copy(source, args.out / f"references/{name}.jsonl")
         write([reference_row(r) for r in refs], args.out / f"references/{name}.parquet")
+    scan({p.relative_to(args.out).as_posix(): p.read_bytes() for p in sorted(args.out.rglob("*")) if p.is_file()},
+         known_values())
     print(", ".join(f"{len(rows)} {version} episodes" for version, rows in episodes.items()), f"into {args.out}")
 
 

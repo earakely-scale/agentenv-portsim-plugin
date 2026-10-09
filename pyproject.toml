@@ -27,7 +27,8 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8,<10", "ruff>=0.16,<0.17", "huggingface_hub>=1,<2", "pyarrow>=20,<26", "hatchling>=1.27",
-       "anthropic==1.11.0", "openai==2.54.0"]
+       "anthropic==1.11.0", "openai==2.54.0",
+       "agentenv-hf @ git+https://github.com/earakely-scale/agentenv-hf-plugin@v0.2.0"]
 
 [project.urls]
 Source = "https://github.com/earakely-scale/agentenv-portsim-plugin"
