@@ -737,7 +737,14 @@ watch Barcelona Port Control sends the latest ECMWF forecast published by then, 
 agent plans on the forecasts as they were issued, and the week is graded on the wind that blew. The `portsim`,
 `portsim-live` and `portsim-marine` envs and their tasks are unchanged.
 
-No model has played the wind weeks yet; the scores below are the reference policies'.
+<p align="center">
+  <a href="https://github.com/earakely-scale/agentenv-portsim-plugin/releases/tag/replays-2026-10-09"><img src="assets/wind-port.webp" width="100%" alt="GPT-6.1 Sol plays a wind week at the Port of Barcelona on AgentEnv: at each watch Barcelona Port Control's forecast arrives as a bulletin, the watch panel draws its knots and windows, and the storm that blew raises whitecaps and a no-movement banner on the quay"></a>
+</p>
+<p align="center"><sub><b>The wind port (v4):</b> GPT-6.1 Sol plans <code>dock-24B-w37x1-standard-0-e01</code>, the week of 6 March 2023's wind on APM Terminals Barcelona's schedule. At each watch Barcelona Port Control's bulletin is the ECMWF run published by then; on Thursday 15:00 it warns of wind above 25 kn in hours 127–130, and on Friday 09:00 in 125–129. The agent berths VIENNA EXPRESS (335 m) at hour 130, after the latest window. The wind blew above 25 kn from 122 to 135, and above 30 kn to 125: longer and earlier than any forecast showed, so hour 130 is excused. The plan is feasible at 301 against the forecast-following re-planner's 252 (reward 0.62): it works several ships with fewer cranes, and the late arrivals wait. Ignoring the forecast is infeasible (0.187). Replayed on PortSimEnv's 3D viewer; <a href="https://github.com/earakely-scale/agentenv-portsim-plugin/releases/tag/replays-2026-10-09">full film</a>. Twin © OpenStreetMap contributors (ODbL); forecasts ECMWF open data (CC BY 4.0, modified); wind windows derived from Meteocat XEMA Y7.</sub></p>
+
+Claude Sonnet 5.5 averages 0.888 on the 15 wind weeks and GPT-6.1 Sol 0.745, against 1.000 for the
+forecast-following re-planner, 0.183 for the forecast-blind one on the 14 storm weeks, and 0.183 for v2's naive
+policy ([Wind results](#wind-results)).
 
 ### The wind rules and their sources
 
@@ -971,6 +978,36 @@ PYTHONPATH=tests .venv/bin/python scripts/live_e2e.py --env portsim-wind --polic
 PYTHONPATH=tests .venv/bin/python scripts/live_e2e.py --env portsim-wind --task dock-24B-w37x1-standard-0-e01 --policy rolling   # 1.0, cost 252
 ```
 
+### Wind results
+
+GPT-6.1 Sol and Claude Sonnet 5.5 played the 15 wind weeks once each on local Docker, in sweeps `wind-pilot-*` and
+`wind-*`, for $16.05 recorded ([`results/wind.md`](results/wind.md)):
+
+| Model | Weeks scored | Mean reward (95% CI) | Rolling reference | Blind reference | Naive reference | Feasible | At the anchor | Median turns | Cost per episode |
+|---|---:|---|---:|---:|---:|---:|---:|---:|---:|
+| Claude Sonnet 5.5 | 15 of 15 | 0.888 (0.807 to 0.953) | 1.000 | 0.237 | 0.183 | 15 of 15 | 3 | 17 | $0.80 |
+| GPT-6.1 Sol | 15 of 15 | 0.745 (0.576 to 0.890) | 1.000 | 0.237 | 0.183 | 12 of 15 | 4 | 23 | $0.15 |
+
+- Every run reached the end of its week and passed the validity audit, and replaying each one gives its recorded
+  reward. The blind reference is 0.183 on the 14 storm weeks and 1.000 on the false alarm.
+- GPT-6.1 Sol's three infeasible weeks are its own rule breaks, none of them the wind's: on
+  `dock-24B-w07x1-busy-0-e08` HMM HANBADA leaves at hour 76 needing 3 tugs with 2 free, which its plan already broke
+  when the ship froze; on `dock-24B-w07x1-busy-0-e09` NEXOE MAERSK is placed in sections 19–23 from watch 0, past the
+  quay's last section, 22; on `dock-24B-w16x1-busy-0-e12` three ships move at hour 190 needing 8 tugs with 7 free.
+  In each, the wind that no forecast had shown was excused.
+- On the false alarm, `dock-24B-w07x1-busy-0-e04`, both models end at 227 against the optimum's 226 (0.989), well
+  clear of holding every warning (242, 0.845).
+- Both models often cost less than the hindsight optimum, as the forecast-following re-planner does: the grade
+  excuses wind that no forecast showed, while hindsight pays for all of it. Claude Sonnet 5.5 ends
+  `dock-24B-w37x1-standard-0-e01` at 329 against hindsight's 359 and still scores 0.490 against the anchor's 252.
+- Claude Sonnet 5.5's `dock-24B-w35x1-busy-0-e00` took three attempts: the first two ended in provider errors, after 6
+  turns and 1, and their $1.77 is counted in its spend.
+
+On the marine port's 15 weeks the averages were 0.932 for Claude Sonnet 5.5 (14 weeks) and 0.905 for GPT-6.1 Sol.
+The wind weeks use 11 of those schedules, some twice, so the sets differ, and with one run per week neither model's
+change is beyond noise. A wind week has more watches than its marine week (8 at the median against 6), and Claude
+Sonnet 5.5's cost per episode rises from $0.45 to $0.80.
+
 ## Watch a run
 
 ![GPT-6.1 Sol plays a live week on the 3D quay, the dock chart and the watch panel](assets/live-week.gif)
@@ -980,7 +1017,9 @@ PortSimEnv's viewer. Port of Barcelona twin © OpenStreetMap contributors (ODbL)
 Task text CC BY-SA 4.0.* Full-length films of this week and of a v1 week are in the release
 [replays-2026-10-07](https://github.com/earakely-scale/agentenv-portsim-plugin/releases/tag/replays-2026-10-07), and
 of the same week on the marine port in
-[replays-2026-10-08](https://github.com/earakely-scale/agentenv-portsim-plugin/releases/tag/replays-2026-10-08).
+[replays-2026-10-08](https://github.com/earakely-scale/agentenv-portsim-plugin/releases/tag/replays-2026-10-08). The wind
+port's film week is in
+[replays-2026-10-09](https://github.com/earakely-scale/agentenv-portsim-plugin/releases/tag/replays-2026-10-09).
 
 Recorded runs replay on PortSimEnv's own viewer, by Adithya S Kolavi: the 3D twin of the quay, with ships, tugs and
 cranes acting out each plan, the dock chart, every plan the model checked, confirmed or submitted, the grade and the
