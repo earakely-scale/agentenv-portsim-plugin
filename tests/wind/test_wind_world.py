@@ -4,11 +4,12 @@ process."""
 
 import json
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 import synthetic
-from berth_core import TaskPack, plan_from_list, plan_to_list
-from wind_fixtures import BUST_TASK, PACK_DIR, REFERENCES, STORM_TASK, WEATHER
+from berth_core import Task, TaskPack, plan_from_list, plan_to_list
+from wind_fixtures import BUST_TASK, DATA, PACK_DIR, REFERENCES, STORM_TASK, WEATHER
 
 from agentenv_portsim import marine, wind, world
 from agentenv_portsim.marine import MarineWeek
@@ -21,6 +22,14 @@ TASKS = {t.task_id: t for t in TaskPack(PACK_DIR).tasks}
 REFS = {r["task_id"]: r for r in map(json.loads, REFERENCES.read_text().splitlines())}
 STORM = TASKS[STORM_TASK]
 PAIRS = [(s, w) for s in marine.task_ids() for w in WEEKS]
+PACKS = [pytest.param(PACK_DIR, WEATHER, REFERENCES, id="fixture"),
+         pytest.param(DATA / "dock-v1-wind", DATA / "wind/weather.jsonl", DATA / "wind/references.jsonl", id="data")]
+
+
+def packed(pack_dir: Path, weather: Path, references: Path) -> list[tuple[Task, dict, dict]]:
+    weeks = {w["id"]: w for w in map(json.loads, weather.read_text().splitlines())}
+    refs = {r["task_id"]: r for r in map(json.loads, references.read_text().splitlines())}
+    return [(t, weeks[t.task_id[-3:]], refs[t.task_id]) for t in TaskPack(pack_dir).tasks]
 
 
 def to_watch(week: world.Week, k: int) -> None:
@@ -64,23 +73,23 @@ def test_the_transplant_keeps_the_v3_week_and_its_news_and_drops_the_gale(pair):
         if n.kind != "gale"]
 
 
-def test_the_packed_tasks_are_the_transplants_with_the_anchor_as_reference():
-    for task_id, task in TASKS.items():
-        v3 = V3.get(task_id.rsplit("-", 1)[0])
-        assert replace(task, reference={}) == replace(wind.transplant(v3, WEEKS[task_id[-3:]]), reference={})
-        ref = REFS[task_id]
+@pytest.mark.parametrize(("pack_dir", "weather", "references"), PACKS)
+def test_the_packed_tasks_are_the_transplants_with_the_anchor_as_reference(pack_dir, weather, references):
+    for task, week, ref in packed(pack_dir, weather, references):
+        v3 = V3.get(task.task_id.rsplit("-", 1)[0])
+        assert replace(task, reference={}) == replace(wind.transplant(v3, week), reference={})
         assert task.reference == v3.reference | {"optimal_cost": ref["optimal_cost"],
                                                  "optimal_plan": task.reference["optimal_plan"],
                                                  "lower_bound": ref["hindsight_cost"], "proven_optimal": True}
 
 
-def test_each_forecast_is_the_run_delivered_at_its_watch_from_the_watch_on():
-    for task_id, task in TASKS.items():
-        weather = WEEKS[task_id[-3:]]
+@pytest.mark.parametrize(("pack_dir", "weather", "references"), PACKS)
+def test_each_forecast_is_the_run_delivered_at_its_watch_from_the_watch_on(pack_dir, weather, references):
+    for task, week, _ in packed(pack_dir, weather, references):
         for e, text in zip(task.disruptions, task.notices, strict=True):
             if e["type"] != "forecast":
                 continue
-            h, run = e["hour"], wind.delivered(weather, e["hour"])
+            h, run = e["hour"], wind.delivered(week, e["hour"])
             assert list(e) == ["type", "start", "hour", "init", "issued", "horizon", "kn", "windows", "observed"]
             assert (e["start"], e["init"], e["issued"], e["horizon"], e["kn"]) == (
                 h + FREEZE_HOURS, run["init"], run["init"] + 9, run["init"] + 72, run["kn"])
@@ -88,7 +97,7 @@ def test_each_forecast_is_the_run_delivered_at_its_watch_from_the_watch_on():
             assert [(w["start"], w["end"], w["min_length"]) for w in e["windows"]] == [
                 (max(w["start"], h), w["end"], w["min_length"]) for w in run["windows"] if w["end"] > h]
             assert [{k: w[k] for k in ("start", "end", "min_length")} for w in e["observed"]] == (
-                wind.observed_before(weather, h))
+                wind.observed_before(week, h))
             assert {w["reason"] for w in e["windows"]} <= {"forecast: wind above 25 kn", "forecast: wind above 30 kn"}
             assert {w["reason"] for w in e["observed"]} <= {"observed: wind above 25 kn", "observed: wind above 30 kn"}
             assert text == wind.notice(e)
