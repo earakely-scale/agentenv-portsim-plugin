@@ -207,10 +207,10 @@ def outcome(sweep: Sweep, attempt: Attempt, earlier: list[dict], interrupted: bo
     else:
         spent = None
     transcript = None
-    if pr and pr.get("agent_trajectory_s3_uri"):
+    if pr and pr.get("agent_trajectory_object_url"):
         path = sweep.out / "transcripts" / slug(model) / f"{task}-r{rep}-a{attempt.number}.json"
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(trajectory(pr["agent_trajectory_s3_uri"]))
+        path.write_bytes(trajectory(pr["agent_trajectory_object_url"]))
         transcript = path.relative_to(sweep.out).as_posix()
     episode = v["results"][0]["episode"] if scored else {}
     grade = episode.get("grade") or {}

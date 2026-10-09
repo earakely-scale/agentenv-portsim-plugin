@@ -23,9 +23,10 @@ def episode(task: str, reward: float) -> dict:
 
 def play(task: str, model: str, structured: dict | None, code: str | None = None, message: str | None = None,
          trajectory: str | None = "file:///state/agent-env/object_store/trajectories/play.json") -> PromptResponse:
-    return PromptResponse(prompt_id=task, response=f"{code or 'submitted'}: ...", agent_trajectory_s3_uri=trajectory,
-                          model=model, error_type="infra_error" if code else None, error_code=code,
-                          error_message=message, agent_session_id="a2a-1", agent_name="portsim-llm", step_id="play",
+    return PromptResponse(prompt_id=task, response=f"{code or 'submitted'}: ...",
+                          agent_trajectory_object_url=trajectory, model=model,
+                          error_type="infra_error" if code else None, error_code=code, error_message=message,
+                          agent_session_id="a2a-1", agent_name="portsim-llm", step_id="play",
                           structured_output=structured)
 
 

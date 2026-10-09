@@ -30,7 +30,7 @@ def summary(model: str, end_reason: str = "done", reward: float | None = 1.0, co
 
 def play(task: str, model: str, structured: dict | None) -> PromptResponse:
     return PromptResponse(prompt_id=task, response="done: ...",
-                          agent_trajectory_s3_uri="file:///state/agent-env/object_store/trajectories/play.json",
+                          agent_trajectory_object_url="file:///state/agent-env/object_store/trajectories/play.json",
                           model=model, agent_session_id="a2a-1", agent_name="portsim-llm", step_id="play",
                           structured_output=structured)
 

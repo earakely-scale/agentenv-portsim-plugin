@@ -137,7 +137,7 @@ def check(task, fake: FakeLiteLLM, ctx: dict, env: str, expected: dict, played: 
 
     if held(week) != held(json.loads(json.dumps(played.data()))):
         problems.append("data/get differs from the week played in process")
-    record = json.loads(trajectory(response["agent_trajectory_s3_uri"]))
+    record = json.loads(trajectory(response["agent_trajectory_object_url"]))
     calls = exchanges(record)
     opening = next(m["content"] for m in record["messages"] if m["role"] == "user")
     if env == MARINE_ENV and pilots_and_tugs(task, watches, 0) not in opening:

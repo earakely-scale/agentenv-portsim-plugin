@@ -17,7 +17,7 @@ classifiers = [
 ]
 # The env image pins its own server dependencies (Dockerfile); CI runs the golden and replay tests against it.
 dependencies = [
-    "agentenv-framework>=0.9.1275",
+    "agentenv-framework>=0.9.1289",
     "agentenv-framework-protocol>=0.1.290,<0.2",
     "berth-core @ https://github.com/adithya-s-k/FineEnvs/archive/b0f4c2f9526e3c45d608b4f92f6ec6c71fecc152.tar.gz#subdirectory=07-simulation-environments/portsim-v1/envs/berth_planning/core",
     "fastmcp==3.4.8",

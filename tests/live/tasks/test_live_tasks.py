@@ -202,7 +202,7 @@ def test_setup_also_registers_portsim_live_on_the_gateway_with_the_same_image(lo
     def put(id, *, description, image_name):
         stored.append(id)
         return DockerImageArtifact.put_tar(id, description=description, image_name=f"localhost:5000/{id}:v1",
-                                           tar_gz_s3_url="file:///dev/null")
+                                           tar_gz_object_url="file:///dev/null")
 
     monkeypatch.setattr(cli.DockerImageArtifact, "put", put)
     result = CliRunner().invoke(portsim, ["setup", "--source", str(ROOT)])

@@ -38,7 +38,7 @@ def stored(monkeypatch):
     def put(id, *, description, image_name):
         calls.append({"id": id, "image_name": image_name})
         return DockerImageArtifact.put_tar(id, description=description, image_name=f"localhost:5000/{id}:v1",
-                                           tar_gz_s3_url="file:///dev/null")
+                                           tar_gz_object_url="file:///dev/null")
 
     monkeypatch.setattr(cli.DockerImageArtifact, "put", put)
     return calls
