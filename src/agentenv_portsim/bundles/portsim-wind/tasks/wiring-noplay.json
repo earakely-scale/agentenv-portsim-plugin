@@ -1,0 +1,258 @@
+[
+  {
+    "id": "deploy",
+    "type": "deploy_env",
+    "env_id": "portsim-wind"
+  },
+  {
+    "id": "load-task",
+    "type": "apply_server_config",
+    "env_id": "portsim-wind",
+    "directives": [
+      {
+        "service": "portsim-wind",
+        "uri": "urn:portsim:live-load/v1",
+        "args": {
+          "task_id": "dock-24B-w06x1-busy-0-e15"
+        }
+      }
+    ]
+  },
+  {
+    "id": "hide-port-notice",
+    "type": "modify_env_tool_access",
+    "env_id": "portsim-wind",
+    "action": "disable",
+    "role": "default",
+    "tools": [
+      "port_notice"
+    ]
+  },
+  {
+    "id": "watches",
+    "type": "register_env_triggers",
+    "env_id": "portsim-wind",
+    "watch_roles": [
+      "default"
+    ],
+    "triggers": [
+      {
+        "id": "watch-1",
+        "when": {
+          "type": "action",
+          "tool": "advance",
+          "where": {
+            "result.watch": {
+              "equals": 1
+            }
+          }
+        },
+        "barrier": {
+          "at": "provoking_call",
+          "timeout_seconds": 60
+        },
+        "actions": [
+          {
+            "type": "tool",
+            "tool": "port_notice",
+            "args": {
+              "event_id": "crane_outage-5",
+              "name": "Terminal ops",
+              "text": "2 of the terminal's 9 quay cranes are out of service from hour 49 to hour 83 (gantry repair): 7 cranes in that window."
+            }
+          },
+          {
+            "type": "tool",
+            "tool": "port_notice",
+            "args": {
+              "event_id": "forecast-10",
+              "name": "Barcelona Port Control",
+              "text": "Wind forecast issued Mon 21:00 (ECMWF, adjusted to the Dique Sur anemometer), to hour 84: no hour above 25 kn, peak 21 kn."
+            }
+          }
+        ]
+      },
+      {
+        "id": "watch-2",
+        "when": {
+          "type": "action",
+          "tool": "advance",
+          "where": {
+            "result.watch": {
+              "equals": 2
+            }
+          }
+        },
+        "barrier": {
+          "at": "provoking_call",
+          "timeout_seconds": 60
+        },
+        "actions": [
+          {
+            "type": "tool",
+            "tool": "port_notice",
+            "args": {
+              "event_id": "late-3",
+              "name": "NANTO",
+              "text": "Ship 5 NANTO was delayed leaving Alicante: it now arrives at hour 74 (planned slot hour 54). Its planned departure stays hour 67."
+            }
+          },
+          {
+            "type": "tool",
+            "tool": "port_notice",
+            "args": {
+              "event_id": "forecast-11",
+              "name": "Barcelona Port Control",
+              "text": "Wind forecast issued Tue 03:00 (ECMWF, adjusted to the Dique Sur anemometer), to hour 90: above 25 kn hours 44–48, peak 41 kn; above 30 kn 44–48."
+            }
+          }
+        ]
+      },
+      {
+        "id": "watch-3",
+        "when": {
+          "type": "action",
+          "tool": "advance",
+          "where": {
+            "result.watch": {
+              "equals": 3
+            }
+          }
+        },
+        "barrier": {
+          "at": "provoking_call",
+          "timeout_seconds": 60
+        },
+        "actions": [
+          {
+            "type": "tool",
+            "tool": "port_notice",
+            "args": {
+              "event_id": "extra-0",
+              "name": "FOS EXPRESS",
+              "text": "Unscheduled call: ship 16 FOS EXPRESS (294 m, 7 sections) arrives at hour 69, has 1344 moves and asks to sail by hour 91. It has no planned slot, so placing it anywhere costs no move penalty."
+            }
+          },
+          {
+            "type": "tool",
+            "tool": "port_notice",
+            "args": {
+              "event_id": "late-4",
+              "name": "ONE FREEDOM",
+              "text": "Ship 6 ONE FREEDOM was delayed leaving Damietta: it now arrives at hour 72 (planned slot hour 66). Its planned departure stays hour 106."
+            }
+          },
+          {
+            "type": "tool",
+            "tool": "port_notice",
+            "args": {
+              "event_id": "tug_outage-7",
+              "name": "Tug company",
+              "text": "2 of the port's 8 tugs are out of service from hour 66 to hour 90: 6 tugs in that window."
+            }
+          },
+          {
+            "type": "tool",
+            "tool": "port_notice",
+            "args": {
+              "event_id": "pilot_shortage-8",
+              "name": "Pilot station",
+              "text": "2 of the port's 7 pilots on duty are unavailable from hour 66 to hour 78: 5 pilots in that window."
+            }
+          },
+          {
+            "type": "tool",
+            "tool": "port_notice",
+            "args": {
+              "event_id": "forecast-12",
+              "name": "Barcelona Port Control",
+              "text": "Wind forecast issued Tue 15:00 (ECMWF, adjusted to the Dique Sur anemometer), to hour 102: above 25 kn hours 44–48, peak 37 kn; above 30 kn 45–47."
+            }
+          }
+        ]
+      },
+      {
+        "id": "watch-4",
+        "when": {
+          "type": "action",
+          "tool": "advance",
+          "where": {
+            "result.watch": {
+              "equals": 4
+            }
+          }
+        },
+        "barrier": {
+          "at": "provoking_call",
+          "timeout_seconds": 60
+        },
+        "actions": [
+          {
+            "type": "tool",
+            "tool": "port_notice",
+            "args": {
+              "event_id": "forecast-13",
+              "name": "Barcelona Port Control",
+              "text": "Wind forecast issued Wed 21:00 (ECMWF, adjusted to the Dique Sur anemometer), to hour 132: above 25 kn hours 92–96, peak 29 kn."
+            }
+          }
+        ]
+      },
+      {
+        "id": "watch-5",
+        "when": {
+          "type": "action",
+          "tool": "advance",
+          "where": {
+            "result.watch": {
+              "equals": 5
+            }
+          }
+        },
+        "barrier": {
+          "at": "provoking_call",
+          "timeout_seconds": 60
+        },
+        "actions": [
+          {
+            "type": "tool",
+            "tool": "port_notice",
+            "args": {
+              "event_id": "forecast-14",
+              "name": "Barcelona Port Control",
+              "text": "Wind forecast issued Thu 21:00 (ECMWF, adjusted to the Dique Sur anemometer), to hour 156: above 25 kn hours 96–98, 130–141, peak 32 kn; above 30 kn 134–139."
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "clock",
+    "type": "sync_env_clock",
+    "env_id": "portsim-wind",
+    "virtual_time": "2024-02-05T00:00:00Z",
+    "virtual_seconds_per_real_second": 0,
+    "tolerate_missing_sync_time": false
+  },
+  {
+    "id": "end-week",
+    "type": "apply_server_config",
+    "env_id": "portsim-wind",
+    "directives": [
+      {
+        "service": "portsim-wind",
+        "uri": "urn:portsim:end-week/v1",
+        "args": {}
+      }
+    ]
+  },
+  {
+    "id": "grade",
+    "type": "env_outcome_verifier",
+    "env_id": "portsim-wind",
+    "file_artifact_id": "portsim-live-verifier",
+    "verifier_id": "portsim",
+    "score_aggregator": "weighted_average"
+  }
+]

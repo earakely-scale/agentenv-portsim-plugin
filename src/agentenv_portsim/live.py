@@ -1,5 +1,6 @@
 """PortSim live: one week at one quay, played in watches on the gateway's virtual clock; PortSim marine: the same
-week with the port's pilots and tugs.
+week with the port's pilots and tugs; PortSim wind: the marine week in a real weather week, with the forecast at every
+watch.
 
 urn:portsim:live-load/v1 starts a week; each advance re-arms the clock at the next bulletin, and the gateway's
 triggers deliver the parties' notices through the hidden port_notice tool. data/get never reports reference plans."""
@@ -17,9 +18,20 @@ from fastmcp import FastMCP
 from fastmcp.server.middleware import Middleware
 from pydantic import BaseModel, Field
 
-from . import marine
+from . import marine, wind
 from .marine import MarineWeek
-from .schedule import CLOCK_URI, END_WEEK_URI, LIVE_ENV, LIVE_LOAD_URI, MARINE_ENV, NOTICE_TOOL, TOOLS, virtual_time
+from .schedule import (
+    CLOCK_URI,
+    END_WEEK_URI,
+    LIVE_ENV,
+    LIVE_LOAD_URI,
+    MARINE_ENV,
+    NOTICE_TOOL,
+    TOOLS,
+    WIND_ENV,
+    virtual_time,
+)
+from .wind import WindWeek
 from .world import Week
 
 PACKS = files("agentenv_portsim") / "data"
@@ -162,6 +174,13 @@ class PortSimMarineEnv(PortSimLiveEnv):
     ENV = MARINE_ENV
     WEEK = MarineWeek
     task_pack = staticmethod(marine.pack)
+
+
+@environment_card(name=WIND_ENV)
+class PortSimWindEnv(PortSimMarineEnv):
+    ENV = WIND_ENV
+    WEEK = WindWeek
+    task_pack = staticmethod(wind.pack)
 
 
 class LiveEpisode(Middleware):

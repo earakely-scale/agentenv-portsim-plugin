@@ -16,6 +16,7 @@ the re-solve is infeasible and the script stops; no one-week dock-v1-eval week g
 import argparse
 import json
 import time
+from collections import Counter
 from collections.abc import Callable
 from pathlib import Path
 
@@ -35,16 +36,22 @@ TIEBREAK_SCALE = 10000
 
 
 def solve(view: Task, fixed: Plan, before: int, hint: Plan, workers: int, tiebreak: bool,
-          extra: Callable[[cp_model.CpModel, dict], None] | None = None, optimal: bool = False) -> Plan:
+          extra: Callable[[cp_model.CpModel, dict], None] | None = None, optimal: bool = False,
+          forecast_relief: bool = False) -> Plan:
     """berth_core.solve.optimal_plan's crane-rule model, with ``fixed`` pinned and the others at or after ``before``;
     ``extra`` adds constraints over each ship's (berthing, leaving) hour variables, and ``optimal`` accepts only a
-    proven optimum."""
+    proven optimum. ``forecast_relief`` takes what no one can move as given, since a new forecast may put a pinned
+    window inside its no-movement windows: pinned ships may berth inside them, the movements of pinned ships (at their
+    stays as held in the view) and of the ships alongside count as fixed demand up to the hourly limit, and those stays
+    and the blocks may overlap one another but no other ship."""
     horizon = (max([s.arrival for s in view.ships] + [before]) + sum(s.handling_for(s.min_cranes) for s in view.ships)
                + max([b.end for b in view.blocks] + [0]))
     md = cp_model.CpModel()
     xs, ys, terms, ends, T, M, C = [], [], [], [], {}, {}, {}
     crane_iv, crane_dem, move_iv = [], [], []
+    rects, fixed_moves = [], Counter()
     for s in view.ships:
+        pinned = forecast_relief and s.id in fixed
         t = md.NewIntVar(s.arrival if s.id in fixed else max(s.arrival, before), horizon, f"t{s.id}")
         m = md.NewIntVar(view.first_section, view.last_section - s.sections + 1, f"m{s.id}")
         end = md.NewIntVar(s.arrival, horizon * 2, f"e{s.id}")
@@ -59,10 +66,11 @@ def solve(view: Task, fixed: Plan, before: int, hint: Plan, workers: int, tiebre
         md.AddExactlyOne(pres.values())
         inside = []
         for a, b in view.no_move_windows(s):
-            lt, ge = md.NewBoolVar(""), md.NewBoolVar("")
-            md.Add(t <= a - 1).OnlyEnforceIf(lt)
-            md.Add(t >= b).OnlyEnforceIf(ge)
-            md.AddBoolOr([lt, ge])
+            if not pinned:
+                lt, ge = md.NewBoolVar(""), md.NewBoolVar("")
+                md.Add(t <= a - 1).OnlyEnforceIf(lt)
+                md.Add(t >= b).OnlyEnforceIf(ge)
+                md.AddBoolOr([lt, ge])
             w = md.NewBoolVar(f"w{s.id}_{a}")
             md.Add(finish >= a).OnlyEnforceIf(w)
             md.Add(finish <= b - 1).OnlyEnforceIf(w)
@@ -81,10 +89,17 @@ def solve(view: Task, fixed: Plan, before: int, hint: Plan, workers: int, tiebre
             md.Add(end == finish)
         size = md.NewIntVar(1, horizon * 2, f"sz{s.id}")
         md.Add(size == end - t)
-        xs.append(md.NewIntervalVar(t, size, end, f"x{s.id}"))
-        ys.append(md.NewIntervalVar(m, s.sections, m + s.sections, f"y{s.id}"))
-        move_iv.append(md.NewFixedSizeIntervalVar(t, 1, f"mb{s.id}"))
-        move_iv.append(md.NewFixedSizeIntervalVar(end, 1, f"md{s.id}"))
+        if pinned:
+            h, sec, cranes = fixed[s.id]
+            dep = view.departure(s, h + s.handling_for(cranes))
+            rects.append((h, dep, sec, sec + s.sections, md.NewFixedSizeIntervalVar(h, dep - h, f"x{s.id}"),
+                          md.NewFixedSizeIntervalVar(sec, s.sections, f"y{s.id}")))
+            fixed_moves.update([h, dep])
+        else:
+            xs.append(md.NewIntervalVar(t, size, end, f"x{s.id}"))
+            ys.append(md.NewIntervalVar(m, s.sections, m + s.sections, f"y{s.id}"))
+            move_iv.append(md.NewFixedSizeIntervalVar(t, 1, f"mb{s.id}"))
+            move_iv.append(md.NewFixedSizeIntervalVar(end, 1, f"md{s.id}"))
         late = md.NewIntVar(0, horizon * 2, f"late{s.id}")
         md.Add(late >= end - s.due)
         terms.append(s.sections * s.weight * late)
@@ -105,19 +120,35 @@ def solve(view: Task, fixed: Plan, before: int, hint: Plan, workers: int, tiebre
         T[s.id], M[s.id], C[s.id] = t, m, pres
     for k, b in enumerate(view.blocks):
         bx = md.NewFixedSizeIntervalVar(b.start, b.end - b.start, f"bx{k}")
-        xs.append(bx)
-        ys.append(md.NewFixedSizeIntervalVar(b.first, b.last - b.first + 1, f"by{k}"))
+        by = md.NewFixedSizeIntervalVar(b.first, b.last - b.first + 1, f"by{k}")
+        if forecast_relief:
+            rects.append((b.start, b.end, b.first, b.last + 1, bx, by))
+        else:
+            xs.append(bx)
+            ys.append(by)
         if b.kind == "alongside":
             if b.cranes:
                 crane_iv.append(bx)
                 crane_dem.append(b.cranes)
-            move_iv.append(md.NewFixedSizeIntervalVar(b.end, 1, f"bm{k}"))
-    md.AddNoOverlap2D(xs, ys)
+            if forecast_relief:
+                fixed_moves[b.end] += 1
+            else:
+                move_iv.append(md.NewFixedSizeIntervalVar(b.end, 1, f"bm{k}"))
+    if forecast_relief:
+        for group in _apart(rects) or [[]]:
+            md.AddNoOverlap2D(xs + [r[4] for r in group], ys + [r[5] for r in group])
+    else:
+        md.AddNoOverlap2D(xs, ys)
     for k, o in enumerate(view.rules.get("crane_outages", [])):
         crane_iv.append(md.NewFixedSizeIntervalVar(o["start"], o["end"] - o["start"], f"out{k}"))
         crane_dem.append(int(o["cranes"]))
     md.AddCumulative(crane_iv, crane_dem, int(view.rules["crane_pool"]))
-    md.AddCumulative(move_iv, [1] * len(move_iv), int(view.rules["max_moves_per_hour"]))
+    cap = int(view.rules["max_moves_per_hour"])
+    move_dem = [1] * len(move_iv)
+    for h, n in sorted(fixed_moves.items()):
+        move_iv.append(md.NewFixedSizeIntervalVar(h, 1, f"fm{h}"))
+        move_dem.append(min(n, cap))
+    md.AddCumulative(move_iv, move_dem, cap)
     if extra:
         extra(md, {s.id: (T[s.id], end) for s, end in zip(view.ships, ends, strict=True)})
     md.Minimize(sum(terms) * TIEBREAK_SCALE + sum(ends) if tiebreak else sum(terms))
@@ -135,6 +166,18 @@ def solve(view: Task, fixed: Plan, before: int, hint: Plan, workers: int, tiebre
         raise RuntimeError(f"{view.task_id}: the re-solve at the freeze line {before} is {status}")
     return {s.id: (solver.Value(T[s.id]), solver.Value(M[s.id]), next(k for k, p in C[s.id].items() if solver.Value(p)))
             for s in view.ships}
+
+
+def _apart(rects: list[tuple]) -> list[list[tuple]]:
+    """The rectangles in groups that overlap nowhere within a group, each new one in the first group it fits."""
+    groups: list[list[tuple]] = []
+    for r in rects:
+        fits = [g for g in groups if not any(r[0] < q[1] and q[0] < r[1] and r[2] < q[3] and q[2] < r[3] for q in g)]
+        if fits:
+            fits[0].append(r)
+        else:
+            groups.append([r])
+    return groups
 
 
 def rolling(workers: int, tiebreak: bool, plans: list[list[dict]]) -> world.Policy:

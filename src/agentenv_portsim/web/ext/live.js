@@ -10,6 +10,7 @@ import { currentStage } from "./stage.js";
 const STATUSES = ["departed", "berthed", "frozen", "open", "draft"];
 const SVG = "http://www.w3.org/2000/svg";
 const INFEASIBLE = '<i class="dot bad"></i>infeasible';
+const WIND_CREDIT = "Forecast: ECMWF open data, CC BY 4.0, modified · Observed: Meteocat XEMA Y7, derived windows";
 
 const shipName = (task, id) => (task.ships.find((s) => s.id === Number(id)) || {}).name || `ship ${id}`;
 const names = (task, ids) => ids.map((id) => escapeHtml(shipName(task, id))).join(", ") || "none";
@@ -103,6 +104,35 @@ function marineHtml(m, t) {
   return `<div class="ps-line ps-marine">${parts.map((x) => `<span>${x}</span>`).join(" · ")}</div>`;
 }
 
+const spans = (ws) => ws.map((w) => `${w.start}–${w.end}`).join(", ") || "none";
+const long = (ws) => ws.filter((w) => w.min_length > 0);
+
+/** The forecast in force at the watch shown, and under it a strip over hours [0, horizon) and 0–40 kn: the forecast's
+ * knots and windows, the 25 and 30 kn lines, and the windows of the wind that blew (``blew``) up to hour t. */
+function windHtml(wind, t, blew, horizon) {
+  const [W, top, base, track] = [440, 1, 31, 37];
+  const r = (v) => Math.round(v * 10) / 10;
+  const x = (h) => r((Math.max(0, Math.min(h, horizon)) / horizon) * W);
+  const y = (kn) => r(base - (Math.min(kn, 40) / 40) * (base - top));
+  const rect = (cls, a, b, y0, y1) => `<rect class="${cls}" x="${x(a)}" y="${y0}" width="${r(x(b) - x(a))}" height="${y1 - y0}"/>`;
+  const level = (w) => (w.min_length > 0 ? 25 : 30);
+  const days = Array.from({ length: Math.ceil(horizon / 24) - 1 }, (_, d) => x((d + 1) * 24));
+  const nodes = wind.kn.filter(([h]) => h <= horizon);
+  const [last, past] = [nodes[nodes.length - 1], wind.kn.find(([h]) => h > horizon)];
+  if (last && past) nodes.push([horizon, last[1] + ((past[1] - last[1]) * (horizon - last[0])) / (past[0] - last[0])]);
+  const strip = [
+    ...days.map((d) => `<line class="ps-ws-day" x1="${d}" x2="${d}" y1="${top}" y2="${track}"/>`),
+    ...wind.windows.map((w) => rect(`ps-ws-w${level(w)}`, w.start, w.end, top, base)),
+    ...blew.filter((w) => w.start < t).map((w) => rect(`ps-ws-o${level(w)}`, w.start, Math.min(w.end, t), base + 1, track)),
+    ...[[25, 6.5], [30, -1.5]].map(([kn, dy]) => `<g class="ps-ws-t${kn}"><line x1="0" x2="${W}" y1="${y(kn)}" y2="${y(kn)}"/><text x="${W}" y="${r(y(kn) + dy)}">${kn} kn</text></g>`),
+    `<polyline class="ps-ws-fc" points="${nodes.map(([h, kn]) => `${x(h)},${y(kn)}`).join(" ")}"/>`,
+    `<line class="ps-ws-cursor" x1="${x(t)}" x2="${x(t)}" y1="0" y2="${track}"/>`,
+    `<text class="ps-ws-credit" x="0" y="45.5">${WIND_CREDIT}</text>`,
+  ];
+  return `<div class="ps-line ps-wind"><span>Wind h${wind.hour}</span> · <span>Port Control, issued ${escapeHtml(wind.time)}:</span> <span>≥25 kn ${spans(long(wind.windows))}</span> · <span>observed ${spans(long(wind.observed))}</span></div>
+      <svg class="ps-wind-strip" width="${W}" height="48" viewBox="0 0 ${W} 48" role="img" aria-label="Wind forecast and observed windows">${strip.join("")}</svg>`;
+}
+
 const replanHtml = (r) => `${r.feasible ? r.cost : INFEASIBLE} <span class="muted">(reward ${fmtNum(r.reward, 3)})</span>`;
 
 function bulletinsHtml(list, cls = "ps-msgs") {
@@ -144,13 +174,27 @@ function gradeRows(gradeEl, ro) {
     if (dt.textContent === "Naive re-plan") dt.nextElementSibling.innerHTML = ref.naive.feasible ? fmtNum(ref.naive.cost) : INFEASIBLE;
   }
   const audit = ro.live.audit;
+  const wind = ref.hindsight_cost != null;
   const rows = [
-    ["Excused cost", fmtNum(g.excused_cost), "Cost that news brought to windows already frozen: not charged"],
-    ["Regret", fmtNum(g.regret), "Cost above the optimum in hindsight"],
+    ["Excused cost", fmtNum(g.excused_cost), wind ? "Cost that news, or wind the forecast didn't show, brought to a window after its last chance to change: not charged" : "Cost that news brought to windows already frozen: not charged"],
+    ["Regret", fmtNum(g.regret), wind ? "Cost above the optimum" : "Cost above the optimum in hindsight"],
     ["Rolling re-plan", replanHtml(ref.rolling), "A CP-SAT re-planner on the week as known, watch by watch"],
+    ...extraRows(ref),
     ["Audit", audit.ok ? '<i class="dot ok"></i>passed' : `<i class="dot bad"></i>${escapeHtml(audit.problems.join("; "))}`, "Every bulletin arrived once, on time, at its watch"],
   ];
+  if (wind) for (const dt of kv.querySelectorAll("dt")) if (dt.textContent === "Optimum") dt.title = "The lower of the best plan in hindsight and the forecast-following re-planner's cost";
   kv.insertAdjacentHTML("beforeend", rows.map(([k, v, tip]) => `<dt title="${escapeHtml(tip)}">${escapeHtml(k)}</dt><dd>${v}</dd>`).join(""));
+}
+
+/** A wind week's other references: the optimum in hindsight, and the re-planner blind to the forecast or holding every
+ * warning. */
+function extraRows(ref) {
+  if (ref.hindsight_cost == null) return [];
+  return [
+    ["Hindsight", fmtNum(ref.hindsight_cost), "The best plan in hindsight, on the wind that blew"],
+    ["Blind re-plan", replanHtml(ref.blind), "The rolling re-planner with the forecast taken out of its week"],
+    ...(ref.hold ? [["Hold re-plan", replanHtml(ref.hold), "The rolling re-planner holding every window any forecast delivered so far showed"]] : []),
+  ];
 }
 
 export function renderLive(root, ro, task, { onStep, horizon }) {
@@ -170,6 +214,9 @@ export function renderLive(root, ro, task, { onStep, horizon }) {
     return weeks.get(key);
   };
   const watchLabel = (step) => `Watch ${step.watch}${step.last ? " (the last)" : ""}`;
+  const truths = new Map();
+  /** A wind week shown in the wind that blew, one object per week shown: the 3D quay draws it at the cursor hour. */
+  const inTruth = (week) => truths.get(week) || truths.set(week, { ...week, rules: { ...week.rules, no_moves: task.rules.no_moves } }).get(week);
 
   root.innerHTML = "";
   let turn = 0;
@@ -260,11 +307,11 @@ export function renderLive(root, ro, task, { onStep, horizon }) {
     const g = ro.final.grade;
     const ref = live.reference;
     const final = state.k === steps.length - 1
-      ? `<dl class="kv ps-final"><dt>Reward</dt><dd><b>${fmtNum(g.reward, 3)}</b></dd><dt>Cost</dt><dd>${g.feasible ? g.cost : INFEASIBLE}</dd><dt>Excused cost</dt><dd>${fmtNum(g.excused_cost)}</dd><dt>Regret</dt><dd>${fmtNum(g.regret)}</dd><dt>Rolling re-plan</dt><dd>${replanHtml(ref.rolling)}</dd><dt>Naive re-plan</dt><dd>${replanHtml(ref.naive)}</dd><dt>Audit</dt><dd>${live.audit.ok ? '<i class="dot ok"></i>passed' : `<i class="dot bad"></i>${escapeHtml(live.audit.problems.join("; "))}`}</dd></dl>`
+      ? `<dl class="kv ps-final"><dt>Reward</dt><dd><b>${fmtNum(g.reward, 3)}</b></dd><dt>Cost</dt><dd>${g.feasible ? g.cost : INFEASIBLE}</dd><dt>Excused cost</dt><dd>${fmtNum(g.excused_cost)}</dd><dt>Regret</dt><dd>${fmtNum(g.regret)}</dd><dt>Rolling re-plan</dt><dd>${replanHtml(ref.rolling)}</dd>${extraRows(ref).map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}<dt>Naive re-plan</dt><dd>${replanHtml(ref.naive)}</dd><dt>Audit</dt><dd>${live.audit.ok ? '<i class="dot ok"></i>passed' : `<i class="dot bad"></i>${escapeHtml(live.audit.problems.join("; "))}`}</dd></dl>`
       : "";
     const next = shown === step ? "" : `<div class="ps-line ps-next">Advancing to watch ${step.watch}…</div>`;
     const html = `<div class="sec-head"><h2>${watchLabel(shown)}</h2><span class="muted small">step ${state.k + 1} of ${steps.length} · ${escapeHtml(step.tool)}</span></div>
-      <div class="ps-clock"><b>${c.day} ${c.date} · ${c.hm}</b> <span class="muted">${virtualTime(task, t)}</span></div>${shown.marine ? marineHtml(shown.marine, t) : ""}
+      <div class="ps-clock"><b>${c.day} ${c.date} · ${c.hm}</b> <span class="muted">${virtualTime(task, t)}</span></div>${shown.marine ? marineHtml(shown.marine, t) : ""}${shown.wind ? windHtml(shown.wind, t, task.rules.no_moves, horizon) : ""}
       <div class="ps-line">${escapeHtml(shown.time)} (h ${shown.hour}) · ${shown.watch ? `freeze line h ${shown.frozen_before}` : "every window open"}</div>${next}
       <div class="ps-counts">${["departed", "berthed", "frozen", "open"].map((s) => `<span class="ps-c ps-${s}"><b>${counts[s]}</b> ${s}</span>`).join("")}<span class="ps-c"><b>${shown.unconfirmed.length}</b> unconfirmed</span></div>
       <div class="ps-known">${knownHtml(shown.known)}</div>
@@ -289,10 +336,11 @@ export function renderLive(root, ro, task, { onStep, horizon }) {
 
   function draw(shown) {
     week = shown.last ? task : known(shown);
-    if (scene.task !== week) {
+    const quay = shown.wind ? inTruth(week) : week;
+    if (scene.task !== quay) {
       const keep = { anim: scene.anim, userMoved: scene.userMoved };
       const [pos, target] = [scene.camera.position.clone(), scene.controls.target.clone()];
-      scene.setTask(week);
+      scene.setTask(quay);
       scene._goto(pos, target, false);
       Object.assign(scene, keep);
     }

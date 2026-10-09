@@ -1,7 +1,8 @@
 """`agent-env portsim sweep`: dock-v1-eval tasks over models and reps under a spend cap, one `agent-env run` process
 per attempt, retried and resumed from results.jsonl; and the report against the published dock-eval50 run. With --live,
 the live weeks on portsim-live, reported against the stored rolling and naive references; with --marine, the marine
-weeks on portsim-marine, against theirs.
+weeks on portsim-marine, against theirs; with --wind, the wind weeks on portsim-wind, against the hindsight optimum, the
+anchor and the rolling, blind, hold-every-warning and naive references.
 
 G2_TASKS is fixed from the pack alone: the tiers share ten slots by largest remainder, and each tier gives the midpoints
 of equal slices of its tasks ordered by ship count."""
@@ -22,9 +23,13 @@ import click
 from agent_env.config import get_config
 from agent_env.store.routing import namespace_routing
 from agent_env.task.store import get_task_instance_store
+from berth_core import Task
+from berth_core.reward import score_v3
 
 from . import marine as marine_weeks
 from . import tasks
+from . import wind as wind_weeks
+from .schedule import WIND_PACK
 
 AGENT_ENV = [sys.executable, "-m", "agent_env.cli"]
 RUNS = Path("results/runs")
@@ -62,6 +67,7 @@ class Sweep:
     live: bool = False
     marine: bool = False
     hf_bill_to: str | None = None
+    wind: bool = False
 
     @property
     def out(self) -> Path:
@@ -122,11 +128,11 @@ def trajectory(uri: str) -> bytes:
         return get_config().get_object_store_at(uri).get(uri)
 
 
-def task_ids(spec: str, live: bool = False, marine: bool = False) -> list[str]:
-    """Live or marine, ``all`` is the G2 weeks first, then the fewest watches, so a spend stop drops the costliest
+def task_ids(spec: str, live: bool = False, marine: bool = False, wind: bool = False) -> list[str]:
+    """Live, marine or wind, ``all`` is the G2 weeks first, then the fewest watches, so a spend stop drops the costliest
     weeks."""
-    if live or marine:
-        refs = marine_weeks.references() if marine else tasks.live_references()
+    if live or marine or wind:
+        refs = wind_weeks.references() if wind else marine_weeks.references() if marine else tasks.live_references()
         watches = {r["task_id"]: len(r["watch_hours"]) for r in refs if r["qualifies"]}
         known = sorted(watches, key=lambda t: (t not in G2_TASKS, watches[t], t))
     else:
@@ -137,8 +143,8 @@ def task_ids(spec: str, live: bool = False, marine: bool = False) -> list[str]:
         return [t for t in G2_TASKS if t in known]
     ids = spec.split(",")
     if unknown := [i for i in ids if i not in known]:
-        mode = "marine " if marine else "live " if live else ""
-        raise click.UsageError(f"not {mode}{EVAL_PACK} task ids: {', '.join(unknown)}")
+        pack = WIND_PACK if wind else ("marine " if marine else "live " if live else "") + EVAL_PACK
+        raise click.UsageError(f"not {pack} task ids: {', '.join(unknown)}")
     return ids
 
 
@@ -148,13 +154,15 @@ def prepare(sweep: Sweep) -> None:
         raise click.UsageError("a sweep's name is 1 to 41 lowercase letters, digits and dashes, starting with no dash")
     path = sweep.out / "sweep.json"
     if path.is_file():
-        if {"live": False, "marine": False, "hf_bill_to": None, **json.loads(path.read_text())} != asdict(sweep):
+        if {"live": False, "marine": False, "hf_bill_to": None, "wind": False,
+                **json.loads(path.read_text())} != asdict(sweep):
             raise click.UsageError(f"{path} is another sweep; run it with its own models, tasks, k and episode cap: "
                                    f"{path.read_text().strip()}")
         return
     tasks.generate(EVAL_PACK, sweep.out / "bundle", task_ids=sweep.tasks, episode_cap_usd=sweep.episode_cap_usd,
-                   live=sweep.live, marine=sweep.marine, hf_bill_to=sweep.hf_bill_to)
-    spec = {key: value for key, value in asdict(sweep).items() if key not in ("live", "marine", "hf_bill_to") or value}
+                   live=sweep.live, marine=sweep.marine, hf_bill_to=sweep.hf_bill_to, wind=sweep.wind)
+    spec = {key: value for key, value in asdict(sweep).items()
+            if key not in ("live", "marine", "hf_bill_to", "wind") or value}
     path.write_text(json.dumps(spec, indent=2) + "\n")
 
 
@@ -539,21 +547,31 @@ def _reference(ref: dict) -> str:
 
 class Live(Pooled):
     """Live sweeps pooled per model and week, next to the stored rolling and naive references of the same weeks; marine
-    sweeps next to the marine references."""
+    and wind sweeps next to theirs, the wind weeks from the wind pack."""
 
     def __init__(self, sweeps: list[Sweep]):
         super().__init__(sweeps)
-        self.marine = sweeps[0].marine
-        self.refs = {r["task_id"]: r for r in (marine_weeks.references() if self.marine else tasks.live_references())}
+        self.marine, self.wind = sweeps[0].marine, sweeps[0].wind
+        self.refs = {r["task_id"]: r for r in (wind_weeks.references() if self.wind else marine_weeks.references()
+                                               if self.marine else tasks.live_references())}
+        if self.wind:
+            self.pack = {t.task_id: t for t in sorted(wind_weeks.pack().tasks, key=lambda t: t.task_id)}
+
+    def usage(self, model: str, rows: list[dict]) -> list[str]:
+        """Median turns, tokens, cached tokens and cost per episode, and the model's spend."""
+        turns = [r["turns"] for r in rows if r["turns"] is not None]
+        cached = [r["cached_tokens"] for r in rows if r["cached_tokens"] is not None]
+        costs = [r["cost_usd"] for r in rows if r["cost_usd"] is not None]
+        known, unknown, _ = self.spend(self.attempts(model))
+        return [f"{statistics.median(turns):g}" if turns else "–", _tokens(rows),
+                f"{statistics.mean(cached) / 1000:.1f}k" if cached else "–",
+                f"${statistics.mean(costs):.4f}" if costs else "–",
+                f"${known:.2f}" + (f" + {unknown} unknown" if unknown else "")]
 
     def model_line(self, model: str) -> str:
         by_task = self.by_task(model)
         ours = {t: statistics.mean(r["reward"] for r in rs) for t, rs in by_task.items()}
         rows = [r for rs in by_task.values() for r in rs]
-        turns = [r["turns"] for r in rows if r["turns"] is not None]
-        cached = [r["cached_tokens"] for r in rows if r["cached_tokens"] is not None]
-        costs = [r["cost_usd"] for r in rows if r["cost_usd"] is not None]
-        known, unknown, _ = self.spend(self.attempts(model))
         return "| " + " | ".join([
             model, str(len(ours)), f"{len(rows)}/{sum(key[1] == model for key in self.runs)}",
             _with_ci(list(ours.values())), _mean([self.refs[t]["rolling"]["reward"] for t in ours]),
@@ -562,10 +580,7 @@ class Live(Pooled):
             _count(_per_rep(by_task, lambda r: r["feasible"] and r["plan_cost"] <= r["optimal_cost"])),
             _mean([r["regret"] for r in rows if r["regret"] is not None]),
             _mean([r["excused_cost"] for r in rows]),
-            f"{statistics.median(turns):g}" if turns else "–", _tokens(rows),
-            f"{statistics.mean(cached) / 1000:.1f}k" if cached else "–",
-            f"${statistics.mean(costs):.4f}" if costs else "–",
-            f"${known:.2f}" + (f" + {unknown} unknown" if unknown else ""),
+            *self.usage(model, rows),
         ]) + " |"
 
     def weeks(self, model: str) -> list[str]:
@@ -611,21 +626,114 @@ def live_report(sweeps: list[Sweep]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _mode(live: bool, marine: bool) -> str | None:
-    return "marine" if marine else "live" if live else None
+def _played(ref: dict | None) -> str:
+    """A blind or hold reference, or – where it wasn't played or none of its configurations finished."""
+    return _reference(ref) if ref and "reward" in ref else "–"
+
+
+def _hindsight_reward(ref: dict, task: Task) -> float:
+    """The hindsight optimum's reward against the anchor: it is feasible on the wind that blew, with nothing excused."""
+    return score_v3(ref["hindsight_cost"], True, 1.0, ref["optimal_cost"], int(task.rules.get("gap_k", 100)),
+                    ref["unavoidable_cost"])[0]
+
+
+def _regret(xs: list[int]) -> str:
+    return _count(statistics.mean(xs)) if xs else "–"
+
+
+class Wind(Live):
+    """Wind sweeps pooled per model and week, next to the hindsight optimum on the wind that blew, the anchor the
+    rewards are scored against, and the rolling, blind, hold-every-warning and naive references of the same weeks."""
+
+    def __init__(self, sweeps: list[Sweep]):
+        super().__init__(sweeps)
+        self.weather = {p["task_id"]: f"{p['iso_week']} {p['kind']}" for p in wind_weeks.pack().manifest["pairs"]}
+
+    def hindsight_regret(self, task: str, rows: list[dict]) -> list[int]:
+        return [r["plan_cost"] - self.refs[task]["hindsight_cost"] for r in rows if r["feasible"]]
+
+    def model_line(self, model: str) -> str:
+        by_task = self.by_task(model)
+        ours = {t: statistics.mean(r["reward"] for r in rs) for t, rs in by_task.items()}
+        rows = [r for rs in by_task.values() for r in rs]
+        blind = [self.refs[t]["blind"] for t in ours]
+        return "| " + " | ".join([
+            model, str(len(ours)), f"{len(rows)}/{sum(key[1] == model for key in self.runs)}",
+            _with_ci(list(ours.values())), _mean([self.refs[t]["rolling"]["reward"] for t in ours]),
+            _mean([b["reward"] for b in blind if "reward" in b]),
+            _mean([self.refs[t]["naive"]["reward"] for t in ours]),
+            _count(_per_rep(by_task, lambda r: r["submitted"])), _count(_per_rep(by_task, lambda r: r["feasible"])),
+            _count(_per_rep(by_task, lambda r: r["feasible"] and r["plan_cost"] <= r["optimal_cost"])),
+            _mean([r["regret"] for r in rows if r["regret"] is not None]),
+            _mean([x for t, rs in by_task.items() for x in self.hindsight_regret(t, rs)]),
+            _mean([r["excused_cost"] for r in rows]),
+            *self.usage(model, rows),
+        ]) + " |"
+
+    def weeks(self, model: str) -> list[str]:
+        mine = [s for s in self.sweeps if model in s.models]
+        reps = [(s.name, rep) for s in mine for rep in range(1, s.k + 1)]
+        lines = ["", f"### {model}", "",
+                 "| Task | Weather | Tier | Ships | Watches | Hindsight | Anchor | Rolling | Blind | Hold | Naive | "
+                 + " | ".join(_rep_labels(reps)) + " | Mean | Regret vs hindsight | Regret vs anchor |",
+                 "|---|---|---|---:|---:|---|---|---|---|---|---|" + "---:|" * (len(reps) + 3)]
+        for t in [t for t in self.pack if any(t in s.tasks for s in mine)]:
+            ref, task = self.refs[t], self.pack[t]
+            values = [self.scored.get((name, model, t, rep)) for name, rep in reps]
+            scored = [v for v in values if v]
+            lines.append(" | ".join([
+                f"| {t}", self.weather[t], task.difficulty, str(len(task.ships)), str(len(ref["watch_hours"])),
+                f"{ref['hindsight_cost']} ({_hindsight_reward(ref, task):.3f})", f"{ref['optimal_cost']} (1.000)",
+                _reference(ref["rolling"]), _played(ref["blind"]), _played(ref.get("hold")), _reference(ref["naive"]),
+                *(f"{v['reward']:.3f}" if v else "–" for v in values),
+                f"{statistics.mean(v['reward'] for v in scored):.3f}" if scored else "–",
+                _regret(self.hindsight_regret(t, scored)), _regret([v["regret"] for v in scored if v["feasible"]]),
+            ]) + " |")
+        return lines
+
+
+def wind_report(sweeps: list[Sweep]) -> str:
+    """results/wind.md: each model's scored wind weeks next to the hindsight optimum, the anchor and the references of
+    the same weeks. A week's value is the mean of its scored reps across the sweeps; the CIs bootstrap over weeks."""
+    pooled = Wind(sweeps)
+    lines = [*pooled.header("# PortSim wind: portsim-llm on the live weeks in real Barcelona wind",
+                            "Harness: portsim-llm. References, on the same weeks (data/wind/references.jsonl): "
+                            "hindsight, the CP-SAT optimum on the wind that blew; the anchor that rewards and regret "
+                            "are scored against, the lower of hindsight and the best cost of the rolling re-planner "
+                            "following the forecasts; that rolling re-planner; blind, the same without the forecasts; "
+                            "hold, in bust weeks, the same holding every warning; and the naive online policy."),
+             "", "## Per model", "",
+             "| Model | Tasks | Runs scored/planned | Mean reward (95% CI) | Rolling reference | Blind reference "
+             "| Naive reference | Reached done per rep | Feasible | At the anchor | Mean regret vs anchor "
+             "| Mean regret vs hindsight | Mean excused cost | Median turns | Tokens in/out per episode "
+             "| Cached tokens per episode | Cost per episode | Spend |",
+             "|---|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---:|---:|---:|",
+             *(pooled.model_line(m) for m in pooled.models),
+             "", "## Week by week", "",
+             "Hindsight, the anchor and the references as cost (reward); hold is played in bust weeks only.",
+             *(line for m in pooled.models for line in pooled.weeks(m)),
+             "", "## Unscored runs", "", *pooled.unscored(),
+             "", "## Runs whose agent reward differs from the verifier's", "",
+             "Only runs whose agent saw the week end.", "", *pooled.differs(live=True)]
+    return "\n".join(lines) + "\n"
+
+
+def _mode(live: bool, marine: bool, wind: bool) -> str | None:
+    return "wind" if wind else "marine" if marine else "live" if live else None
 
 
 @click.group("sweep")
 def sweep_group():
-    """Sweeps: dock-v1-eval tasks, the live weeks or the marine weeks, over models and reps under a spend cap, and
-    their reports."""
+    """Sweeps: dock-v1-eval tasks, the live weeks, the marine weeks or the wind weeks, over models and reps under a
+    spend cap, and their reports."""
 
 
 @sweep_group.command("run")
 @click.option("--name", required=True, help="The sweep's name: its results go to results/runs/<name>/.")
 @click.option("--models", required=True, help="Comma-separated LiteLLM model ids, e.g. anthropic/claude-sonnet-5-5.")
 @click.option("--tasks", "task_spec", required=True,
-              help="all, g2, or comma-separated dock-v1-eval task ids; with --live or --marine, of those weeks.")
+              help="all, g2, or comma-separated dock-v1-eval task ids; with --live, --marine or --wind, of those "
+                   "weeks.")
 @click.option("--cap-usd", type=float, required=True,
               help="The model spend the sweep stays within: no attempt starts that could take it past this at the "
                    "episode cap.")
@@ -635,16 +743,19 @@ def sweep_group():
 @click.option("--parallel", type=click.IntRange(min=1), default=4, show_default=True, help="Attempts at a time.")
 @click.option("--live", is_flag=True, help="Play the live weeks on portsim-live.")
 @click.option("--marine", is_flag=True, help="Play the marine weeks on portsim-marine, with pilots and tugs.")
+@click.option("--wind", is_flag=True, help="Play the wind weeks on portsim-wind, in real Barcelona wind.")
 @click.option("--hf-bill-to", metavar="ORG", help=tasks.HF_BILL_TO_HELP)
 def run_command(name: str, models: str, task_spec: str, cap_usd: float, k: int, episode_cap_usd: float,
-                parallel: int, live: bool, marine: bool, hf_bill_to: str | None):
+                parallel: int, live: bool, marine: bool, wind: bool, hf_bill_to: str | None):
     """Play each model on each task k times, one `agent-env run` per attempt, logged under results/runs/<name>/logs.
     Each attempt is a line of results.jsonl; a failed one is retried up to twice, and running the sweep again plays
     the runs that aren't final yet. Ctrl-C tears the running attempts down."""
     if "" in models.split(","):
         raise click.UsageError("--models takes comma-separated model ids, none empty")
-    sweep = Sweep(name, models.split(","), task_ids(task_spec, live, marine), k, episode_cap_usd, live or marine,
-                  marine, hf_bill_to)
+    if wind and marine:
+        raise click.UsageError("--wind and --marine play different envs: pick one")
+    sweep = Sweep(name, models.split(","), task_ids(task_spec, live, marine, wind), k, episode_cap_usd,
+                  live or marine or wind, marine, hf_bill_to, wind)
     prepare(sweep)
     raise SystemExit(run(sweep, cap_usd, parallel))
 
@@ -653,24 +764,29 @@ def run_command(name: str, models: str, task_spec: str, cap_usd: float, k: int, 
 @click.argument("names", nargs=-1, required=True)
 @click.option("--live", is_flag=True, help="Report live sweeps against the rolling and naive references.")
 @click.option("--marine", is_flag=True, help="Report marine sweeps against the marine rolling and naive references.")
+@click.option("--wind", is_flag=True,
+              help="Report wind sweeps against the hindsight optimum, the anchor and the wind references.")
 @click.option("--out", type=click.Path(dir_okay=False, path_type=Path),
-              help="The Markdown file to write. Default: results/parity.md, or results/live.md with --live, or "
-                   "results/marine.md with --marine.")
-def report_command(names: tuple[str, ...], live: bool, marine: bool, out: Path | None):
+              help="The Markdown file to write. Default: results/parity.md, or results/live.md with --live, "
+                   "results/marine.md with --marine, or results/wind.md with --wind.")
+def report_command(names: tuple[str, ...], live: bool, marine: bool, wind: bool, out: Path | None):
     """Compare the sweeps NAMES with the published dock-eval50 run, per model, tier and week; with --live, the live
-    sweeps with the rolling and naive references, per model and week; with --marine, the marine sweeps with theirs."""
+    sweeps with the rolling and naive references, per model and week; with --marine, the marine sweeps with theirs;
+    with --wind, the wind sweeps with the hindsight optimum, the anchor and the wind references."""
+    if wind and marine:
+        raise click.UsageError("--wind and --marine report different envs: pick one")
     sweeps = [load(name) for name in names]
-    wanted = _mode(live, marine)
+    wanted = _mode(live, marine, wind)
     other: dict[str | None, list[str]] = {}
     for s in sweeps:
-        if (mode := _mode(s.live, s.marine)) != wanted:
+        if (mode := _mode(s.live, s.marine, s.wind)) != wanted:
             other.setdefault(mode, []).append(s.name)
     if other:
         raise click.UsageError("; ".join(
             f"{mode} sweeps: {', '.join(found)}; report them with --{mode}" if mode
             else f"not {wanted} sweeps: {', '.join(found)}; report them without --{wanted}"
             for mode, found in other.items()))
-    text = (live_report if wanted else report)(sweeps)
+    text = (wind_report if wanted == "wind" else live_report if wanted else report)(sweeps)
     out = out or Path(f"results/{wanted or 'parity'}.md")
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(text)

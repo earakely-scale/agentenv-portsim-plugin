@@ -16,8 +16,8 @@ from fastmcp import FastMCP
 from fastmcp.server.middleware import Middleware
 from pydantic import BaseModel, Field, TypeAdapter
 
-from .live import PortSimLiveEnv, PortSimMarineEnv
-from .schedule import LIVE_ENV, MARINE_ENV
+from .live import PortSimLiveEnv, PortSimMarineEnv, PortSimWindEnv
+from .schedule import LIVE_ENV, MARINE_ENV, WIND_ENV
 
 PACKS = files("agentenv_portsim") / "data"
 MAX_CHECKS = 10
@@ -179,7 +179,8 @@ class Episode(Middleware):
 
 def main() -> None:
     name = os.environ.get("ENVIRONMENT_NAME")
-    env = PortSimMarineEnv() if name == MARINE_ENV else PortSimLiveEnv() if name == LIVE_ENV else PortSimEnv()
+    env = (PortSimWindEnv() if name == WIND_ENV else PortSimMarineEnv() if name == MARINE_ENV
+           else PortSimLiveEnv() if name == LIVE_ENV else PortSimEnv())
     env.create_app().run(transport="http", host=os.environ.get("MCP_HOST", "0.0.0.0"),
                          port=int(os.environ.get("MCP_PORT", "18765")), show_banner=False)
 

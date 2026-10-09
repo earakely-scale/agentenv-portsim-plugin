@@ -1,0 +1,281 @@
+[
+  {
+    "id": "deploy",
+    "type": "deploy_env",
+    "env_id": "portsim-wind"
+  },
+  {
+    "id": "load-task",
+    "type": "apply_server_config",
+    "env_id": "portsim-wind",
+    "directives": [
+      {
+        "service": "portsim-wind",
+        "uri": "urn:portsim:live-load/v1",
+        "args": {
+          "task_id": "dock-24B-w06x1-busy-0-e15"
+        }
+      }
+    ]
+  },
+  {
+    "id": "hide-port-notice",
+    "type": "modify_env_tool_access",
+    "env_id": "portsim-wind",
+    "action": "disable",
+    "role": "default",
+    "tools": [
+      "port_notice"
+    ]
+  },
+  {
+    "id": "watches",
+    "type": "register_env_triggers",
+    "env_id": "portsim-wind",
+    "watch_roles": [
+      "default"
+    ],
+    "triggers": [
+      {
+        "id": "watch-1",
+        "when": {
+          "type": "action",
+          "tool": "advance",
+          "where": {
+            "result.watch": {
+              "equals": 1
+            }
+          }
+        },
+        "barrier": {
+          "at": "provoking_call",
+          "timeout_seconds": 60
+        },
+        "actions": [
+          {
+            "type": "tool",
+            "tool": "port_notice",
+            "args": {
+              "event_id": "crane_outage-5",
+              "name": "Terminal ops",
+              "text": "2 of the terminal's 9 quay cranes are out of service from hour 49 to hour 83 (gantry repair): 7 cranes in that window."
+            }
+          },
+          {
+            "type": "tool",
+            "tool": "port_notice",
+            "args": {
+              "event_id": "forecast-10",
+              "name": "Barcelona Port Control",
+              "text": "Wind forecast issued Mon 21:00 (ECMWF, adjusted to the Dique Sur anemometer), to hour 84: no hour above 25 kn, peak 21 kn."
+            }
+          }
+        ]
+      },
+      {
+        "id": "watch-2",
+        "when": {
+          "type": "action",
+          "tool": "advance",
+          "where": {
+            "result.watch": {
+              "equals": 2
+            }
+          }
+        },
+        "barrier": {
+          "at": "provoking_call",
+          "timeout_seconds": 60
+        },
+        "actions": [
+          {
+            "type": "tool",
+            "tool": "port_notice",
+            "args": {
+              "event_id": "late-3",
+              "name": "NANTO",
+              "text": "Ship 5 NANTO was delayed leaving Alicante: it now arrives at hour 74 (planned slot hour 54). Its planned departure stays hour 67."
+            }
+          },
+          {
+            "type": "tool",
+            "tool": "port_notice",
+            "args": {
+              "event_id": "forecast-11",
+              "name": "Barcelona Port Control",
+              "text": "Wind forecast issued Tue 03:00 (ECMWF, adjusted to the Dique Sur anemometer), to hour 90: above 25 kn hours 44–48, peak 41 kn; above 30 kn 44–48."
+            }
+          }
+        ]
+      },
+      {
+        "id": "watch-3",
+        "when": {
+          "type": "action",
+          "tool": "advance",
+          "where": {
+            "result.watch": {
+              "equals": 3
+            }
+          }
+        },
+        "barrier": {
+          "at": "provoking_call",
+          "timeout_seconds": 60
+        },
+        "actions": [
+          {
+            "type": "tool",
+            "tool": "port_notice",
+            "args": {
+              "event_id": "extra-0",
+              "name": "FOS EXPRESS",
+              "text": "Unscheduled call: ship 16 FOS EXPRESS (294 m, 7 sections) arrives at hour 69, has 1344 moves and asks to sail by hour 91. It has no planned slot, so placing it anywhere costs no move penalty."
+            }
+          },
+          {
+            "type": "tool",
+            "tool": "port_notice",
+            "args": {
+              "event_id": "late-4",
+              "name": "ONE FREEDOM",
+              "text": "Ship 6 ONE FREEDOM was delayed leaving Damietta: it now arrives at hour 72 (planned slot hour 66). Its planned departure stays hour 106."
+            }
+          },
+          {
+            "type": "tool",
+            "tool": "port_notice",
+            "args": {
+              "event_id": "tug_outage-7",
+              "name": "Tug company",
+              "text": "2 of the port's 8 tugs are out of service from hour 66 to hour 90: 6 tugs in that window."
+            }
+          },
+          {
+            "type": "tool",
+            "tool": "port_notice",
+            "args": {
+              "event_id": "pilot_shortage-8",
+              "name": "Pilot station",
+              "text": "2 of the port's 7 pilots on duty are unavailable from hour 66 to hour 78: 5 pilots in that window."
+            }
+          },
+          {
+            "type": "tool",
+            "tool": "port_notice",
+            "args": {
+              "event_id": "forecast-12",
+              "name": "Barcelona Port Control",
+              "text": "Wind forecast issued Tue 15:00 (ECMWF, adjusted to the Dique Sur anemometer), to hour 102: above 25 kn hours 44–48, peak 37 kn; above 30 kn 45–47."
+            }
+          }
+        ]
+      },
+      {
+        "id": "watch-4",
+        "when": {
+          "type": "action",
+          "tool": "advance",
+          "where": {
+            "result.watch": {
+              "equals": 4
+            }
+          }
+        },
+        "barrier": {
+          "at": "provoking_call",
+          "timeout_seconds": 60
+        },
+        "actions": [
+          {
+            "type": "tool",
+            "tool": "port_notice",
+            "args": {
+              "event_id": "forecast-13",
+              "name": "Barcelona Port Control",
+              "text": "Wind forecast issued Wed 21:00 (ECMWF, adjusted to the Dique Sur anemometer), to hour 132: above 25 kn hours 92–96, peak 29 kn."
+            }
+          }
+        ]
+      },
+      {
+        "id": "watch-5",
+        "when": {
+          "type": "action",
+          "tool": "advance",
+          "where": {
+            "result.watch": {
+              "equals": 5
+            }
+          }
+        },
+        "barrier": {
+          "at": "provoking_call",
+          "timeout_seconds": 60
+        },
+        "actions": [
+          {
+            "type": "tool",
+            "tool": "port_notice",
+            "args": {
+              "event_id": "forecast-14",
+              "name": "Barcelona Port Control",
+              "text": "Wind forecast issued Thu 21:00 (ECMWF, adjusted to the Dique Sur anemometer), to hour 156: above 25 kn hours 96–98, 130–141, peak 32 kn; above 30 kn 134–139."
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "deploy-agent",
+    "type": "deploy_agent",
+    "a2a_agent_id": "portsim-llm",
+    "env_ids": [
+      "portsim-wind"
+    ],
+    "env_vars": {
+      "PORTSIM_MAX_COST_USD": "5"
+    }
+  },
+  {
+    "id": "clock",
+    "type": "sync_env_clock",
+    "env_id": "portsim-wind",
+    "virtual_time": "2024-02-05T00:00:00Z",
+    "virtual_seconds_per_real_second": 0,
+    "tolerate_missing_sync_time": false
+  },
+  {
+    "id": "play",
+    "type": "prompt_agent",
+    "prompt_id": "dock-24B-w06x1-busy-0-e15",
+    "system_prompt": "You are the berth planner for this quay. The published plan no longer works. Make a new berth plan for every ship in the table: when it berths, where, and how many quay cranes work it.\n\nRules (a plan that breaks any of them is infeasible):\n- A ship berths at or after its arrival hour.\n- It gets between its min and max cranes. Hours alongside = ceil(moves / (28 x cranes)); it departs when the work is done, unless that hour is inside a no-movement window for that ship, in which case it waits alongside (still occupying its sections, cranes free) until the window ends.\n- No ship may berth inside a no-movement window that applies to it.\n- It occupies `sections` consecutive sections starting at the section you give, all within 2-22.\n- No two ships may use the same section in the same hour. Ships already alongside and closed sections are off limits for the hours listed.\n  A ship that leaves at hour h frees its sections for a ship berthing at hour h.\n- In every hour, the cranes of all ships alongside (including ships already alongside) may not exceed the cranes available that hour.\n- At most 3 movements per hour: a ship berthing at hour h and a ship leaving at hour h each count as one movement in hour h.\n\nCost (lower is better):\n- Delay: for each ship, (its sections) x (hours it departs after its planned departure). Leaving early earns nothing.\n- Moves: 5 for each scheduled ship you put on a different starting section than planned. Changing the hour or the cranes costs nothing beyond delay. Unscheduled calls have no planned section.\n- Priority ships (notes column): their delay counts that many times. Emergency ships (notes column): each hour they dock after their deadline adds the stated amount.\n\nPlan format - one entry per ship, using the ids from the table:\n[{\"ship\": 0, \"berth_hour\": 36, \"section\": 22, \"cranes\": 3}, {\"ship\": 1, \"berth_hour\": 163, \"section\": 24, \"cranes\": 2}, ...]\n\nHow the week runs:\n- The week is played in watches, starting at watch 0 on Monday 00:00 (hour 0). The table shows the week as the port knows it now. News reaches you as messages in tool results: ships report delays and unscheduled calls, the harbour master issues emergencies, terminal ops announce closures and crane outages, the line desk flags priority cargo, and Barcelona Port Control sends the wind forecast at every watch.\n- Time only passes when you call advance: the port moves to the next bulletin, ships berth and sail on their confirmed windows, and the bulletin's messages arrive with your next tool result. Call advance and get_situation together in one turn.\n- From watch 1 on, a window that starts before the freeze line (6 hours after the current hour) is frozen: it can't be changed, and new or changed windows must start at or after the freeze line. At watch 0 every window is open.\n- You have 3 planning calls (check_plan or confirm_berths) per watch.\n\nTools:\n- get_situation(): the hour, the week as known now, your confirmed windows (departed, berthed, frozen or open), the ships still without a window, and new messages.\n- check_plan(plan): your entries over your confirmed windows, checked on the week as known now: the ships with a problem or a cost, the plan's cost, and the entries confirm_berths would refuse. Problems and cost that news brought to a frozen window are listed as excused and not counted. It confirms nothing.\n- confirm_berths(plan): confirms windows with the ships; ships you leave out keep their windows.\n- advance(): ends the watch. After the last watch it returns \"done\": the rest of the week runs on your confirmed windows.\n\nThe week is graded once, on the windows you confirmed and the week as it really happened, in the wind that really blew: an infeasible week scores low, a feasible one higher the closer its cost is to the best possible. Cost or rule breaks that news, or wind the forecast didn't show, brings to a window after your last chance to change it are not charged to you; wind the forecast showed then is. Every ship needs a confirmed window before the week ends; if you stop before the last watch, the rest of the week runs on the windows you confirmed.",
+    "prompt": "# APM Terminals Barcelona, Port of Barcelona - quay 24B, week 6 of 2024\nHour 0 is Monday 05 February 2024 00:00 UTC. Times are whole hours from then.\nThe quay is sections 2-22 (about 42 m each). A ship needs its number of consecutive sections for its hours alongside.\n\n## Notices\n- Sections 9-14 are closed from hour 164 to hour 207 (quay crane rail repair).\n- Sections 14-22 are closed from hour 104 to hour 126 (dredging along the berth).\n- Priority: ship 2 CMA CGM DALILA carries transshipment cargo for a connecting service; each hour it leaves after its planned departure (hour 45) costs three times the usual.\n- Wind forecast issued Sun 21:00 (ECMWF, adjusted to the Dique Sur anemometer), to hour 60: no hour above 25 kn, peak 18 kn.\n\n## Already alongside at hour 0 (cannot move)\n- MAERSK NORFOLK: sections 15-19 until hour 7\n\n## Closed sections\n- sections 9-14, hours 164-207 (quay crane rail repair)\n- sections 14-22, hours 104-126 (dredging along the berth)\n\n## Quay cranes and movements\n- The terminal has 9 quay cranes.\n- At most 3 ships may berth or leave in any one hour (pilots and tugs).\n- A crane handles 28 container moves per hour: hours alongside = ceil(moves / (28 x cranes)).\n- Each ship already alongside keeps 2 cranes until it leaves.\n\n## Ships to berth\n\n| id | ship | length m | sections | arrives (hour) | workload (moves) | cranes min-max | planned berth (hour @ section, cranes) | planned departure (hour) | notes |\n|---|---|---|---|---|---|---|---|---|---|\n| 0 | PERSEUS | 140 | 4 | 0 | 196 | 1-2 | 0 @ 4, 1 cranes | 7 |  |\n| 1 | NAVIOS INDIGO | 261 | 6 | 7 | 1008 | 1-5 | 7 @ 9, 3 cranes | 19 |  |\n| 2 | CMA CGM DALILA | 334 | 8 | 24 | 2352 | 2-6 | 24 @ 7, 4 cranes | 45 | priority: lateness x3 |\n| 3 | STEEN | 138 | 4 | 36 | 280 | 1-2 | 36 @ 3, 1 cranes | 46 |  |\n| 4 | SEASPAN OCEANIA | 334 | 8 | 48 | 2912 | 2-6 | 48 @ 7, 4 cranes | 74 |  |\n| 5 | NANTO | 151 | 4 | 54 | 364 | 1-3 | 54 @ 3, 1 cranes | 67 |  |\n| 6 | ONE FREEDOM | 366 | 8 | 66 | 4480 | 2-7 | 66 @ 15, 4 cranes | 106 |  |\n| 7 | VERONICA B | 141 | 4 | 84 | 924 | 1-2 | 84 @ 4, 1 cranes | 117 |  |\n| 8 | CAPE CITIUS | 186 | 5 | 97 | 1344 | 1-3 | 97 @ 8, 2 cranes | 121 |  |\n| 9 | NAGOYA EXPRESS | 335 | 8 | 111 | 2128 | 2-6 | 111 @ 15, 4 cranes | 130 |  |\n| 10 | MIRROR | 141 | 4 | 121 | 280 | 1-2 | 121 @ 4, 1 cranes | 131 |  |\n| 11 | CMA CGM MONTREAL | 200 | 5 | 130 | 672 | 1-4 | 130 @ 8, 2 cranes | 142 |  |\n| 12 | WEC MAJORELLE | 122 | 4 | 139 | 224 | 1-2 | 139 @ 4, 1 cranes | 147 |  |\n| 13 | NANTO | 151 | 4 | 149 | 476 | 1-3 | 149 @ 8, 1 cranes | 166 |  |\n| 14 | RUTH BORCHARD | 159 | 4 | 157 | 336 | 1-3 | 157 @ 4, 1 cranes | 169 |  |\n| 15 | ZIM ATLANTIC | 262 | 6 | 168 | 1932 | 1-5 | 168 @ 9, 3 cranes | 191 |  |\n\n## Pilots and tugs\n- Each berthing and each departure takes a pilot and tugs in its hour, from the port's 7 pilots and 8 tugs on duty, shared with the port's other traffic. In any hour your ships may need no more pilots or tugs than are free for them; each ship moving in an hour short of either breaks this rule.\n- Tugs per movement: 0 under 120 m, 1 under 200 m, 2 under 300 m, 3 from 300 m.\n- Your ships take 3 tugs: ships 2, 4, 6, 9; 2 tugs: ships 1, 11, 15; 1 tug: ships 0, 3, 5, 7, 8, 10, 12, 13, 14.\n- Free for your ships after the other traffic, the cuts and the wind, pilots | tugs, each hour from 00:00 in blocks of 6 hours:\n- Mon: 667274 644776 666655 157045 | 888585 846887 888687 568677\n- Tue: 656767 667666 777656 174355 | 857868 678667 888758 886888\n- Wed: 566664 466677 555667 165335 | 667766 768788 647688 787768\n- Thu: 657755 756635 666776 146356 | 648855 867866 668888 838887\n- Fri: 567755 535573 566674 256257 | 768864 647384 767687 867888\n- Sat: 666556 655576 474663 543566 | 877576 768688 381777 674767\n- Sun: 757767 757656 776776 654366 | 888868 878867 887888 767888\n- +7d: 755565 266666 764766 354136 | 877675 286888 867888 854765\n- +8d: 475667 644667 565657 166235 | 385668 858668 577778 885865\n- +9d: 746646 467574 475735 155345 | 837667 468786 384857 773867\n- +10d: 767656 655664 767565 257166 | 868547 788684 888688 848787\n- From hour 264: 7 pilots and 8 tugs free.\n\n## Wind at the Dique Sur\n- Above 25 kn (10-minute mean) ships of 300 m or more may not berth or leave and every movement takes one more tug; above 30 kn no ship moves. The rules follow the wind that blows; these windows are forecast.\n- Barcelona Port Control, issued Sun 21:00 (ECMWF, adjusted to this anemometer), to hour 60: no hour above 25 kn, peak 18 kn.\n- kn every 3 h from hour 6: 18 13 12 7 9 7 6 11 8 10 7 2 5 11 10 10 10 12 6\n- Observed since hour 0: no hour above 25 kn.\n\nIt is watch 0, Monday 00:00. Confirm berth windows with confirm_berths, then call advance.",
+    "max_turns": 52,
+    "model_params": {
+      "max_tokens": 32000
+    },
+    "timeout_seconds": 7200
+  },
+  {
+    "id": "end-week",
+    "type": "apply_server_config",
+    "env_id": "portsim-wind",
+    "directives": [
+      {
+        "service": "portsim-wind",
+        "uri": "urn:portsim:end-week/v1",
+        "args": {}
+      }
+    ]
+  },
+  {
+    "id": "grade",
+    "type": "env_outcome_verifier",
+    "env_id": "portsim-wind",
+    "file_artifact_id": "portsim-live-verifier",
+    "verifier_id": "portsim",
+    "score_aggregator": "weighted_average"
+  }
+]

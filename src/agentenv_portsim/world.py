@@ -106,6 +106,7 @@ def grade_week(task: Task, plan: Plan, excused_problems: Iterable[tuple[int, str
 
 class Week:
     evaluate = staticmethod(evaluate)
+    notice_excuse = True
 
     def __init__(self, task: Task):
         self.task = task
@@ -263,7 +264,7 @@ class Week:
         if event_id not in self.revealed:
             fixed, before = self.fixed, self.view
             self.revealed.append(event_id)
-            if fixed:
+            if fixed and self.notice_excuse:
                 problems, cost = excuse(before, self.view, fixed, evaluate=self.evaluate)
                 self.excused_problems += [{"event_id": event_id, "ship": s, "rule": r, "problem": p}
                                           for s, r, p in problems]

@@ -426,3 +426,100 @@ public licenses.
 
 Creative Commons may be contacted at creativecommons.org.
 
+
+=======================================================================
+
+The wind data: data/wind/ and data/dock-v1-wind/
+
+These files add real weather to weeks of the dock-v1 task packs. What
+they take from the task packs is licensed under the licence above. The
+weather in them is not: it comes from two sources and keeps their
+terms, set out here.
+
+  a. Forecasts. The forecast knots and forecast windows are modified
+     ECMWF open data, licensed by ECMWF under CC BY 4.0 with this
+     wording:
+
+       Copyright: © 2023-2026 European Centre for Medium-Range Weather
+       Forecasts (ECMWF).
+       Source: www.ecmwf.int
+       Licence Statement: This data is published under a Creative
+       Commons Attribution 4.0 International (CC BY 4.0).
+       https://creativecommons.org/licenses/by/4.0/
+       Disclaimer: ECMWF does not accept any liability whatsoever for
+       any error or omission in the data, their availability, or for
+       any loss or damage arising from their use.
+       This data is based on data and products of the European Centre
+       for Medium-Range Weather Forecasts (ECMWF).
+       Modified: each run's 10 m wind at one grid point, every 3 hours
+       to 72 hours, mapped to the Y7 anemometer by quantiles and
+       rounded to whole knots.
+       Terms of use: https://apps.ecmwf.int/datasets/licences/general/
+
+  b. Observed wind. The observed windows, the hours the wind was above
+     25 or 30 kn, are derived from the readings of the Servei
+     Meteorològic de Catalunya's (Meteocat) XEMA station Y7 (Port de
+     Barcelona – Bocana Sud) in the dataset "Dades meteorològiques de la
+     XEMA", nzvn-apee, of the Generalitat de Catalunya's open data
+     portal. No reading is included.
+
+       Font: Servei Meteorològic de Catalunya (Meteocat), estació XEMA
+       Y7; dades extretes el 2026-10-08; finestres derivades
+       https://analisi.transparenciacatalunya.cat/d/nzvn-apee
+
+     The windows are not licensed under the licence above: the terms
+     that apply to them are those published there. The portal lists
+     the dataset's licence as "See Terms of Use"; its description gives
+     the licence type as Meteocat's intellectual and industrial
+     property, with Meteocat's legal notice,
+
+       https://www.meteo.cat/wpweb/avis-legal/
+
+     and its attribution link,
+
+       https://administraciodigital.gencat.cat/ca/dades/dades-obertes/informacio-practica/llicencies/
+
+     redirects to the Generalitat's open data licences,
+
+       https://web.gencat.cat/ca/generalitat/dades-indicadors/dades-obertes/llicencies
+
+     The Generalitat's licence asks that the information not be altered
+     or its meaning distorted, that the source be cited and that the
+     date of its last update be given; it does not authorise
+     sublicensing, and a dataset's own licence or notice prevails over
+     it. Meteocat's legal notice sets the same four conditions for
+     information not subject to its intellectual property; for content
+     that is, as the dataset declares, it forbids extracting or reusing
+     all or a substantial part of a database, or repeatedly or
+     systematically extracting parts of it, and directs reusers to
+     Meteocat for a licence.
+
+The files:
+
+  - data/wind/weather.jsonl: one record per weather week: the observed
+    windows, merged, each with the share of its readings not yet
+    validated, and unmerged (b); and every forecast run in force
+    during the week, as whole knots every 3 hours with its windows
+    (a).
+
+  - data/wind/weather-sources.json: the pins of the sources: each ECMWF
+    message of the runs the weather weeks use (object key, byte range,
+    sha256, Last-Modified), with ECMWF's wording (a); each month of Y7
+    readings used, by row count and sha256 (b); and a description of
+    the calibration, without its quantile maps or pins of the runs it
+    was fitted on (a, b).
+
+  - data/dock-v1-wind/tasks.jsonl: weeks of data/dock-v1-marine/
+    (licence above), each with the windows that blew as its
+    no-movement rules (b) and, at every watch, the forecast run in
+    force (a) with the windows observed before the watch (b).
+
+  - data/dock-v1-wind/manifest.json: the pack's sha256 and its pairs of
+    weeks with their windows (b); the ECMWF block of
+    weather-sources.json, its messages given by that file's sha256 and
+    count (a); its Y7 and calibration blocks (a, b); and the public
+    sources of the wind rules.
+
+  - data/wind/references.jsonl: reference plans, costs and rewards
+    computed on data/dock-v1-wind/, and each week's watch hours, which
+    its forecasts set (a).
