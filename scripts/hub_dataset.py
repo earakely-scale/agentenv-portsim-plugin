@@ -15,7 +15,7 @@ agentenv-hf's check for keys and token shapes before anything is written, and --
 on top of the commit it read, removing what the build no longer writes.
 
     uv run python scripts/hub_dataset.py --out build/hub/dataset
-    uv run python scripts/hub_dataset.py --out build/hub/dataset --repo earakely-scale/PortSimEnv-AgentEnv --tag v0.4.4
+    uv run python scripts/hub_dataset.py --out build/hub/dataset --repo earakely-scale/PortSimEnv-AgentEnv --tag v0.4.5
 """
 
 import argparse
@@ -133,8 +133,8 @@ def episode_rows(sweep_dir: Path, version: str, by_id: dict, episode_ids: dict[s
                "difficulty": task.difficulty, "quay": task.quay, "num_ships": len(task.ships), "reward": r["reward"],
                "feasible": r["feasible"], "cost": r["plan_cost"], "optimal_cost": r["optimal_cost"],
                "turns": r["turns"], "tool_calls": r["tool_calls"], "input_tokens": r["input_tokens"],
-               "output_tokens": r["output_tokens"], "cost_usd": r["cost_usd"], "seconds": r["wall_seconds"],
-               "end_reason": r["end_reason"], "sweep": sweep_dir.name}
+               "output_tokens": r["output_tokens"], "cost_usd": r["cost_usd"], "seconds": record["seconds"],
+               "wall_seconds": r["wall_seconds"], "end_reason": r["end_reason"], "sweep": sweep_dir.name}
         if version == "v1":
             row |= {"submitted": r["submitted"], "checks": r["checks"]}
         else:
@@ -376,7 +376,7 @@ def main():
     ap.add_argument("--plugin-ref", default=f"v{VERSION}",
                     help="The plugin tag the card's bundles pin, for agent-env hf run.")
     ap.add_argument("--repo", help="Push the folder to this dataset repo after writing it.")
-    ap.add_argument("--tag", help="Tag the pushed commit, e.g. v0.4.4.")
+    ap.add_argument("--tag", help="Tag the pushed commit, e.g. v0.4.5.")
     ap.add_argument("--message", default="Publish PortSimEnv on AgentEnv")
     args = ap.parse_args()
     plugin = f"agentenv-portsim @ git+https://github.com/earakely-scale/agentenv-portsim-plugin@{args.plugin_ref}"

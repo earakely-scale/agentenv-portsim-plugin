@@ -164,6 +164,13 @@ as the dataset's `results` table and as `results/v2.json` to `results/v4.json`, 
 data; every run, with its transcript, is in `v2_episodes` to `v4_episodes` and replays in the
 [Space](https://huggingface.co/spaces/earakely-scale/PortSimEnv-AgentEnv).
 
+These scores are not comparable with upstream's v1 eval. The live, marine and wind weeks are new environments: the
+agent re-plans with four tools, at most 3 planning calls a watch and 47 turns a week (52 on the wind port), where v1
+plans the week in one go with 12 turns and 10 checks; and each version plays 15 weeks drawn from the one-week standard
+and busy eval weeks, where v1's eval plays 50 weeks across four tiers. Rankings don't carry over: on v1 GLM-5.3-Flash
+scores above GLM-5.3, here below. The like-for-like v1 check is
+[The comparison with the published eval](#the-comparison-with-the-published-eval).
+
 ## Run it yourself
 
 You need [Docker](https://docs.docker.com/get-docker/), running and usable without `sudo`, with its buildx plugin,
@@ -171,7 +178,7 @@ You need [Docker](https://docs.docker.com/get-docker/), running and usable witho
 
 ```bash
 uv tool install agentenv-framework \
-    --with "agentenv-portsim @ git+https://github.com/earakely-scale/agentenv-portsim-plugin@v0.4.4"
+    --with "agentenv-portsim @ git+https://github.com/earakely-scale/agentenv-portsim-plugin@v0.4.5"
 agent-env portsim setup              # build the env image for this machine; register the envs "portsim", "portsim-live", "portsim-marine" and "portsim-wind"
 agent-env run portsim --task smoke   # load a task, submit its optimal plan, grade it
 ```
@@ -188,7 +195,7 @@ runs on the Hugging Face router, with a token that can make calls to Inference P
 agent-env portsim setup --agent        # also builds and registers portsim-llm, the agent that plays the model
 export HF_TOKEN=hf_...                  # with "Make calls to Inference Providers", on an account with credits
 export LITELLM_BASE_URL=https://router.huggingface.co/v1 LITELLM_API_KEY=$HF_TOKEN
-agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.4.4 --task dock-36A-w06x1-standard-0-e07 \
+agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.4.5 --task dock-36A-w06x1-standard-0-e07 \
     --model zai-org/GLM-5.3-Flash:baseten   # the shortest wind week, 4 watches
 ```
 
@@ -359,7 +366,7 @@ the differences without a pass or fail line. The first run, sweep `g2` on Modal 
 
 | Model | Ours, mean of 10 weeks | Published, same 10 weeks | Weeks within ±0.05 | Tokens in/out per episode, ours / published |
 |---|---:|---:|---:|---|
-| GPT-6.1 Sol | 0.907 | 0.872 | 8 of 10 | 30.3k/6.7k / 29.4k/6.6k |
+| GPT-6.1 Sol | 0.907 | 0.872 | 9 of 10 | 30.3k/6.7k / 29.4k/6.6k |
 | Claude Sonnet 5.5 | 0.778 | 0.839 | 7 of 10 | 48.1k/26.2k / 107.2k/30.4k |
 
 Each week is one episode on each side, so a single week can differ by a lot: GPT-6.1 Sol scored 1.0 on
@@ -671,7 +678,7 @@ and `portsim-live` envs and their tasks are unchanged.
 </p>
 <p align="center"><sub><b>The marine port (v3):</b> GPT-6.1 Sol runs a week at APM Terminals Barcelona as it unfolds on AgentEnv's virtual clock, with the port's pilots and tugs shared with the rest of its real 2024 traffic. The week opens with a quay closure; an unscheduled call, an emergency, late ships, a crane outage, a gale and bunched arrivals come in as bulletins, and on Tuesday 06:00 the tug company and the pilot station announce 2 tugs and 2 pilots out from hour 54. At hour 54 it moves one ship with the last 2 free tugs; it re-plans each watch and ends at the hindsight optimum (reward 1.0), where v2's naive re-plan breaks the rules. Replayed on PortSimEnv's 3D viewer; <a href="https://github.com/earakely-scale/agentenv-portsim-plugin/releases/tag/replays-2026-10-08">full film</a>. Twin © OpenStreetMap contributors (ODbL).</sub></p>
 
-GPT-6.1 Sol averages 0.905 on the 15 marine weeks and Claude Sonnet 5.5 0.932 on 14 of them, against 1.000 for the
+GPT-6.1 Sol averages 0.905 on the 15 marine weeks and Claude Sonnet 5.5 0.932, against 1.000 for the
 rolling re-planner and 0.187 for v2's naive policy, which knows nothing of pilots and tugs
 ([Marine results](#marine-results)).
 
@@ -808,26 +815,28 @@ PYTHONPATH=tests .venv/bin/python scripts/live_e2e.py --env portsim-marine --tas
 
 ### Marine results
 
-GPT-6.1 Sol and Claude Sonnet 5.5 played the 15 marine weeks once each on local Docker, in sweeps `marine-pilot-*`
-and `marine-*`, for $8.32 recorded ([`results/marine.md`](results/marine.md)):
+GPT-6.1 Sol and Claude Sonnet 5.5 played the 15 marine weeks once each on local Docker, in sweeps `marine-pilot-*`,
+`marine-*` and `marine-sonnet-2`, for $8.69 recorded ([`results/marine.md`](results/marine.md)):
 
 | Model | Weeks scored | Mean reward (95% CI) | Rolling reference | Naive reference | Feasible | Optimal weeks | Median turns | Cost per episode |
 |---|---:|---|---:|---:|---:|---:|---:|---:|
 | GPT-6.1 Sol | 15 of 15 | 0.905 (0.790 to 0.977) | 1.000 | 0.187 | 14 of 15 | 7 | 14 | $0.08 |
-| Claude Sonnet 5.5 | 14 of 15 | 0.932 (0.886 to 0.971) | 1.000 | 0.187 | 14 of 14 | 5 | 11 | $0.45 |
+| Claude Sonnet 5.5 | 15 of 15 | 0.932 (0.892 to 0.967) | 1.000 | 0.187 | 15 of 15 | 5 | 11 | $0.45 |
 
 - Every scored run reached the end of its week and passed the validity audit, and none needed an excuse.
 - GPT-6.1 Sol's infeasible week is `dock-24B-w35x1-busy-0` (0.171). At its last watch it confirmed windows before
   checking them; `check_plan` then reported `pilots short at hour 161: your ships need 2, 1 free`, but that was the
   watch's third planning call, and it advanced with the short hour in its plan. Without that week its mean is 0.957,
   its live-port mean.
-- Claude Sonnet 5.5's unscored week is `dock-36A-w10x1-standard-0`. On the first attempt the model's second reply
-  never came: after one tool call, the request ran through the agent's 15-minute request timeout, and the run ended
-  after 904 s without a recorded instance or spend. The second attempt was stopped by hand with the sweep, after
-  217 s, before recording its spend, so the report counts it at its $3.50 cap. GPT-6.1 Sol scored 1.0 on that week.
+- Claude Sonnet 5.5's `dock-36A-w10x1-standard-0` went unscored in its first sweep. On the first attempt the model's
+  second reply never came: after one tool call, the request ran through the agent's 15-minute request timeout, and
+  the run ended after 904 s without a recorded instance or spend. The second attempt was stopped by hand with the
+  sweep, after 217 s, before recording its spend, so the report counts it at its $3.50 cap. The week was played again
+  in `marine-sonnet-2`: its first two attempts failed to deploy while the local Docker VM restarted, and the third
+  scored 0.933. GPT-6.1 Sol scored 1.0 on that week.
 - Two other attempts lost the provider's stream in their first turn and passed on retry.
 
-On the same 14 weeks, Claude Sonnet 5.5 averaged 0.901 on the live port. With one run per week, neither model's change
+On the same 15 weeks, Claude Sonnet 5.5 averaged 0.904 on the live port. With one run per week, neither model's change
 from the live port is beyond noise. The naive policy, which knows nothing of pilots and tugs, is infeasible in 9 of
 the 15 weeks.
 
@@ -1108,7 +1117,7 @@ GPT-6.1 Sol and Claude Sonnet 5.5 played the 15 wind weeks first, once each on l
 - Claude Sonnet 5.5's `dock-24B-w35x1-busy-0-e00` took three attempts: the first two ended in provider errors, after 6
   turns and 1, and their $1.77 is counted in its spend.
 
-On the marine port's 15 weeks the averages were 0.932 for Claude Sonnet 5.5 (14 weeks) and 0.905 for GPT-6.1 Sol.
+On the marine port's 15 weeks the averages were 0.932 for Claude Sonnet 5.5 and 0.905 for GPT-6.1 Sol.
 The wind weeks use 11 of those schedules, three of them more than once, so the sets differ, and with one run per
 week neither model's change is beyond noise. A wind week has more watches than its marine week (8 at the median
 against 6), and Claude Sonnet 5.5's cost per episode rises from $0.45 to $0.80.
@@ -1176,7 +1185,7 @@ PortSimEnv's 3D viewer; both are in one
 plugin depends on [agentenv-hf](https://github.com/earakely-scale/agentenv-hf-plugin), an agent-env plugin that
 publishes bundles and their runs as Hub datasets and runs bundles from them, so installing this plugin adds
 `agent-env hf run` and `agent-env hf publish`. Each release tags the dataset with the plugin's version; the commands
-below pin `v0.4.4`.
+below pin `v0.4.5`.
 
 ### The dataset
 
@@ -1221,12 +1230,12 @@ string, GPT-6.1 Sol a list). PortSim's other columns that hold JSON (`watches`, 
 import json
 from datasets import load_dataset
 
-weeks = load_dataset("earakely-scale/PortSimEnv-AgentEnv", "v4_tasks", split="eval", revision="v0.4.4")
+weeks = load_dataset("earakely-scale/PortSimEnv-AgentEnv", "v4_tasks", split="eval", revision="v0.4.5")
 print(weeks[0]["situation"])                        # what the agent gets at hour 0
 for watch in json.loads(weeks[0]["watches"]):       # what arrives later, Port Control's forecast included
     print(watch["hour"], [n["from"] for n in watch["notices"]])
 
-runs = load_dataset("earakely-scale/PortSimEnv-AgentEnv", "v4_episodes", split="eval", revision="v0.4.4")
+runs = load_dataset("earakely-scale/PortSimEnv-AgentEnv", "v4_episodes", split="eval", revision="v0.4.5")
 print(runs[0]["reward"], len(runs[0]["messages"]))  # the grade, and the transcript as chat messages
 ```
 
@@ -1240,7 +1249,7 @@ which part carries which terms, as does this README's [Licence and credits](#lic
 
 ### The Space
 
-The Space serves `agent-env portsim view` ([Watch a run](#watch-a-run)) from the plugin's `v0.4.4` tag over the
+The Space serves `agent-env portsim view` ([Watch a run](#watch-a-run)) from the plugin's `v0.4.5` tag over the
 dataset's `runs/`, which it downloads when it starts: every recorded run of the four versions, replayed from its
 records, with no model called. A link opens one run, such as
 [GPT-6.1 Sol's wind film week](https://earakely-scale-portsimenv-agentenv.hf.space/viewer/#/run/wind-pilot-gpt/openai%2Fgpt-6.1-sol/dock-24B-w37x1-standard-0-e01).
@@ -1248,9 +1257,9 @@ records, with no model called. A link opens one run, such as
 ### Run a bundle from the Hub
 
 ```bash
-agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.4.4 --task dock-36A-w06x1-standard-0-e07 \
+agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.4.5 --task dock-36A-w06x1-standard-0-e07 \
     --model zai-org/GLM-5.3-Flash:baseten          # the default bundle: dock-v1-eval-wind (v4)
-agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.4.4 --bundle dock-v1-eval-marine \
+agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.4.5 --bundle dock-v1-eval-marine \
     --task dock-24B-w07x1-busy-0 --model zai-org/GLM-5.3-Flash:baseten   # v3; dock-v1-eval-live is v2, dock-v1-eval v1
 ```
 
@@ -1258,7 +1267,7 @@ agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.4.4 --bundle dock-v1-eval
   `~/.cache/agentenv-hf/earakely-scale/PortSimEnv-AgentEnv/<commit>`. Without `--bundle` it runs the card's default,
   `dock-v1-eval-wind`.
 - The card's `agentenv` table names what each bundle needs: the plugin,
-  `agentenv-portsim @ git+https://github.com/earakely-scale/agentenv-portsim-plugin@v0.4.4`, and the setup command,
+  `agentenv-portsim @ git+https://github.com/earakely-scale/agentenv-portsim-plugin@v0.4.5`, and the setup command,
   `agent-env portsim setup --agent`. `hf run` checks that the plugin is installed and, if it isn't, stops with the
   `agent-env plugin add` command; it never installs or runs anything the card names. It checks the plugin by name,
   not by version, so an older install passes and has to be upgraded to this release first. If an env or the agent

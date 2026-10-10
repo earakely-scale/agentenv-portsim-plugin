@@ -1,11 +1,19 @@
 # The model board: twelve models on the live, marine and wind ports
 
-On 9 October 2026 twelve models played every week of the live port (v2), the marine port (v3) and the wind port (v4)
-once each: 15 weeks a version, 540 runs. Every run is in the dataset
+Between 7 and 9 October 2026 twelve models played every week of the live port (v2), the marine port (v3) and the
+wind port (v4) once each: 15 weeks a version, 540 runs. Every run is in the dataset
 [earakely-scale/PortSimEnv-AgentEnv](https://huggingface.co/datasets/earakely-scale/PortSimEnv-AgentEnv)
 (`v2_episodes` to `v4_episodes`; the board as the `results` table and `results/v2.json` to `results/v4.json`) and
 replays in the [Space](https://huggingface.co/spaces/earakely-scale/PortSimEnv-AgentEnv). The sweep reports, which
 count every attempt, are [wind.md](wind.md), [marine.md](marine.md) and [live.md](live.md).
+
+**Not comparable with PortSimEnv's v1 eval** ([FineEnvs/PortSimEnv-Eval](https://huggingface.co/spaces/FineEnvs/PortSimEnv-Eval)).
+These are new environments, played another way: the agent re-plans the week as it unfolds, with four tools
+(`get_situation`, `check_plan`, `confirm_berths`, `advance`), at most 3 planning calls a watch and 47 turns a week (52
+on the wind port), where v1 plans the whole week in one go with 12 turns, 10 checks and one `submit_plan`. Each version
+plays 15 weeks drawn from the one-week standard and busy eval weeks on which a rolling re-planner reaches the optimum,
+where v1's eval plays 50 weeks across four tiers. Rankings don't carry over either: on v1, GLM-5.3-Flash scores above
+GLM-5.3; here it scores below. The plugin's like-for-like v1 check is in [parity.md](parity.md).
 
 ## Summary
 
@@ -31,8 +39,9 @@ Mean reward on each version and over all 45 weeks (each week weighs the same), b
    and below them on the live ones. Opus and Sonnet broke no rule in any of their 45 weeks, Astra in one.
 2. **The best open models score like a small closed one, but break far more rules.** Over the 45 weeks Claude Haiku
    5.5 averages 0.639 and the three best open models, Qwen3.8-2.4T, DeepSeek V4.1 Flash and GLM-5.3, 0.603 to 0.622,
-   within noise of it (DeepSeek and GLM-5.3 beat it on the live weeks). But Haiku keeps 44 of its 45 weeks feasible,
-   and each of them 28. The open models break a rule in 38% to 60% of their weeks, and Qwen3.8-27B in every one.
+   within noise of it (DeepSeek and GLM-5.3 score above it on the live weeks, also within noise). But Haiku keeps 44
+   of its 45 weeks feasible, and each of them 28. The open models break a rule in 38% to 60% of their weeks, and
+   Qwen3.8-27B in every one.
 3. **The wind port is the hardest.** Eight of the twelve models score lower at each step from the live port to the
    marine port to the wind port; GPT-6.1 Sol falls the most, from 0.957 to 0.745. The versions' weeks differ (the
    wind weeks reuse 11 of the marine weeks' schedules), so this is a pattern across the sets, not a paired comparison.
@@ -180,8 +189,9 @@ much a week as the leaders, Kimi K3 more.
 ## How it was run
 
 - **Harness:** `portsim-llm`, PortSimEnv's harness loop as an agent-env agent, with the same prompts, tools, nudges and
-  limits for every model: 32,000 output tokens a reply (16,384 for Qwen3.8-27B, Groq's limit), the provider's default
-  reasoning (effort `medium` on the Responses API), one run per model and week, on local Docker.
+  limits for every model: 47 turns a week (52 on the wind port) and at most 3 planning calls a watch, 32,000 output
+  tokens a reply (16,384 for Qwen3.8-27B, Groq's limit), the provider's default reasoning (effort `medium` on the
+  Responses API), one run per model and week, on local Docker.
 - **Routes:** all through Scale's LiteLLM proxy. Claude on Anthropic's API; GPT on the Responses API, served by Azure
   OpenAI; Kimi K3, GLM-5.3, GLM-5.3-Flash, Qwen3.8-2.4T and DeepSeek V4.1 Flash on Fireworks; Qwen3.8-27B on Groq.
   Four of the open models are those of PortSimEnv's own eval, which ran them on other providers through the Hugging
