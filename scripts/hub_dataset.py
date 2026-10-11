@@ -329,7 +329,8 @@ def card_text(plugin: str, boards: dict[str, str] | None = None) -> str:
     return text
 
 
-def build(sweeps: list[str], runs_dir: Path, out: Path, plugin: str) -> dict[str, bytes]:
+def build(sweeps: list[str], runs_dir: Path, out: Path, plugin: str,
+          summary: tuple[str, ...] = LIVE_VERSIONS) -> dict[str, bytes]:
     pack = tasks.pack_tasks(EVAL_PACK)
     by_version = {"v1": {t.task_id: t for t in pack}, "v2": {t.task_id: t for t in pack},
                   "v3": {t.task_id: t for t in marine.pack().tasks}, "v4": {t.task_id: t for t in wind.pack().tasks},
@@ -378,7 +379,7 @@ def build(sweeps: list[str], runs_dir: Path, out: Path, plugin: str) -> dict[str
                     files[f"runs/{d.name}/{rel.as_posix()}"] = path.read_bytes()
     files["results/board.parquet"] = table_bytes(board_rows)
     if board_rows:
-        boards["all"] = summary_markdown(board_rows)
+        boards["all"] = summary_markdown([r for r in board_rows if r["version"] in summary])
     return files | {"README.md": card_text(plugin, boards).encode()}
 
 
@@ -415,12 +416,14 @@ def main():
     ap.add_argument("--repo", help="Push the folder to this dataset repo after writing it.")
     ap.add_argument("--tag", help="Tag the pushed commit, e.g. v0.5.0.")
     ap.add_argument("--message", default="Publish PortSimEnv on AgentEnv")
+    ap.add_argument("--summary-versions", default=",".join(LIVE_VERSIONS),
+                    help="The versions the all-weeks summary covers, e.g. v4,v3,v2 while v5 is still being played.")
     args = ap.parse_args()
     plugin = f"agentenv-portsim @ git+https://github.com/earakely-scale/agentenv-portsim-plugin@{args.plugin_ref}"
     sweeps = args.sweeps or [s for s in SWEEPS if (args.runs / s / "sweep.json").is_file()]
     print("sweeps:", " ".join(sweeps))
     with namespace_routing():
-        files = build(sweeps, args.runs, args.out, plugin)
+        files = build(sweeps, args.runs, args.out, plugin, tuple(args.summary_versions.split(",")))
     scan(files, known_values())
     write(files, args.out)
     counts = {p: pq.read_metadata(io.BytesIO(c)).num_rows for p, c in files.items() if p.endswith(".parquet")}
