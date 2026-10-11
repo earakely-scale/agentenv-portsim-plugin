@@ -289,8 +289,6 @@ def test_other_ships_reports_keep_their_scheduled_text():
         n.text for n in plain.scheduled.values() if n.event_id in ("eta-3-24", "call-3-1")]
 
 
-@pytest.mark.xfail(strict=True, reason="a bunching notice with one ship agreed is replaced whole by that ship's line, "
-                                       "dropping the other ships' news from the message")
 def test_a_bunching_notice_with_one_ship_agreed_still_gives_the_others_news():
     task = PACK.get("dock-24B-w07x1-busy-0-e04")
     bunching = next(e for e in task.disruptions if e["type"] == "bunching")
@@ -315,3 +313,15 @@ def test_asking_an_agent_answers_from_the_truth_even_before_the_news_of_a_delay(
         elif week.hour == 30:
             assert (week.told[5], arrival(week, 5)) == ((30, notice["eta"]), notice["eta"])
             break
+
+
+def test_the_notices_list_adds_the_agreement_to_an_agreed_late_ships_delay_notice():
+    """The situation's notices keep the delay text and add the agreed arrival after it."""
+    week = LinesWeek(E15)
+    [late] = [i for i, e in enumerate(E15.disruptions) if e["type"] == "late" and e["ship"] == 5]
+    reach = week.reach(5, week.hour)
+    assert week.request(lines.firm(E15, 5), 5, reach[0] + 2)["agreed"]
+    week.revealed.append(f"late-{late}")
+    [text] = [t for e, t in zip(week.view.disruptions, week.view.notices, strict=True)
+              if e["type"] == "late" and e["ship"] == 5]
+    assert text == E15.notices[late] + " Since then: " + week.agreement(5)

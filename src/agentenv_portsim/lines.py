@@ -225,10 +225,14 @@ class LinesWeek(WindWeek):
         ships = [event["ship"]] if "ship" in event else event.get("ships", [])
         agreed = [s for s in ships if s in self.locks and event["type"] in (*REPORTS, *NEWS_ETA)]
         if agreed and via != "load":
-            self.messages[-1]["text"] = " ".join(
-                f"{self.task.ships[s].name} (ship {s}): arriving hour {self.actual(s)} ({label(self.actual(s))}), "
-                f"as agreed; turn hour {self.turn(s)}." for s in agreed)
+            lines = " ".join(self.agreement(s) for s in agreed)
+            last = self.messages[-1]
+            last["text"] = lines if len(agreed) == len(ships) else f"{last['text']} Since then: {lines}"
         return out
+
+    def agreement(self, sid: int) -> str:
+        return (f"{self.task.ships[sid].name} (ship {sid}): arriving hour {self.actual(sid)} "
+                f"({label(self.actual(sid))}), as agreed; turn hour {self.turn(sid)}.")
 
     def _tell(self, sid: int, as_of: int, eta: int) -> None:
         if sid not in self.locks and (sid not in self.told or self.told[sid][0] <= as_of):
@@ -253,8 +257,15 @@ class LinesWeek(WindWeek):
     def view(self) -> Task:
         view = wind.known(self.task, self.revealed)
         visible = {s.id for s in view.ships}
-        return with_arrivals(view, {s: self.known_arrival(view, s) for s in visible},
+        notices = [text + "".join(f" Since then: {self.agreement(s)}" for s in self._news_ships(e) if s in self.locks)
+                   for e, text in zip(view.disruptions, view.notices, strict=True)]
+        return with_arrivals(replace(view, notices=notices), {s: self.known_arrival(view, s) for s in visible},
                              {s: self.known_turn(view, s) for s in visible})
+
+    @staticmethod
+    def _news_ships(event: dict) -> list[int]:
+        return ([event["ship"]] if event["type"] in ("late", "extra") else event["ships"]
+                if event["type"] == "bunching" else [])
 
     def truth(self) -> Task:
         ids = range(len(self.task.ships))
