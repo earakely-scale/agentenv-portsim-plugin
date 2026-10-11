@@ -98,8 +98,8 @@ function capsText(caps) {
   return `model spend capped per episode at ${[...caps].map(([m, c]) => `$${c} for ${nameOf(m)}`).join(", ")}`;
 }
 
-/** The run the README and the cards film and link: GPT-6.1 Sol's wind week with the berth no forecast showed. */
-const FEATURED = { run: "wind-pilot-gpt", model: "openai/gpt-6.1-sol", task_id: "dock-24B-w37x1-standard-0-e01" };
+/** The run the README and the cards film and link: GPT-6 Astra's lines week, every ship's arrival agreed. */
+const FEATURED = { run: "lines-astra", model: "openai/gpt-6-astra", task_id: "dock-36A-w05x1-busy-0-e09" };
 
 function showcase(groups) {
   const first = groups[0];

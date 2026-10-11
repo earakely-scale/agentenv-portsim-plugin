@@ -100,7 +100,7 @@ def step_url(mcp_url: str) -> str:
         name="portsim-line",
         description="A ship's agent at the Port of Barcelona: reports and answers for its line's ships, and agrees an "
                     "arrival time when a ship can make it. Message it with structured requests.",
-        version="0.5.0",
+        version="0.5.1",
     ),
     config=AgentConfig,
     extensions=(MCP_CONFIG_V1,),
