@@ -143,7 +143,9 @@ function answerText(reply, asked) {
   if (reply.arrived != null) return `arrived h${reply.arrived}`;
   if (asked == null) return `ETA h${reply.eta}${reply.agreed ? ", as agreed" : ""}`;
   if (reply.agreed) return `agreed h${reply.arrival}${reply.slowing ? ", slowing" : ""}`;
-  return `refused: ${reply.reason}${reply.eta != null ? ` (ETA h${reply.eta})` : ""}`;
+  const offer = reply.earliest != null ? ` (earliest h${reply.earliest})` : reply.latest != null ? ` (latest h${reply.latest})`
+    : reply.eta != null ? ` (ETA h${reply.eta})` : "";
+  return `refused: ${reply.reason}${offer}`;
 }
 
 const answerDot = (reply) => `<i class="dot ${reply.error || reply.agreed === false ? "bad" : "ok"}"></i>`;

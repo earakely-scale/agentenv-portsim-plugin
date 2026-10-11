@@ -97,18 +97,22 @@ LINES_RULES = WIND_RULES.replace(
     "each ship's agent reports its ETA and calls in before it arrives, the line desk reports unscheduled calls, the "
     "harbour master").replace(
     "Cost or rule breaks that news, or wind the forecast didn't show,",
-    "An ETA that proves wrong is not news: a ship that arrives later than its agent said berths when it gets in, and "
-    "the lateness, clashes and queue breaks that follow are charged unless you agreed that ship's arrival. Cost or "
+    "An ETA that proves wrong is not news: a ship that arrives later than its agent said berths when it gets in, one "
+    "that arrives earlier waits at anchor, and the lateness, hours at anchor, clashes and queue breaks that follow are "
+    "charged unless you agreed that ship's arrival. Cost or "
     "rule breaks that news, or wind the forecast didn't show,") + """
 
 The ships' agents:
 - Each ship's agent, the firm that deals with the port for its line, reports the ship's ETA 48 and 24 hours out and \
-calls in an hour before the ship arrives. ETAs are optimistic: most ships arrive later than their agent says, by less \
-as they near.
-- message_agent(agent, requests) sends one agent requests for its ships: {"ship": 7, "ask": "eta"} for the latest ETA, \
-{"ship": 9, "request_arrival": 130} to ask the ship to arrive at that hour. The agent agrees when the ship can make it \
-at cruising speed, or by slowing once it has left its previous port; the ship then arrives at that hour. A refusal \
-says whether the ship can't arrive that early or can't slow down that much.
+calls in an hour before the ship arrives. The published schedule is the lines' estimate from about three days out. \
+Both are optimistic: most ships arrive later than they say, by less as they near.
+- message_agent(agent, requests) sends one agent requests for its ships: {"ship": 7, "ask": "eta", \
+"request_arrival": null} for the latest ETA, {"ship": 9, "ask": null, "request_arrival": 130} to ask the ship to \
+arrive at that hour. The agent agrees when the ship can make it \
+at cruising speed, or by slowing once it has left its previous port; the ship then arrives at that hour. Otherwise it \
+answers with the earliest or the latest hour the ship can make.
+- Until the port's news about a delayed ship, its agent works from the plan as it stood. The news keeps an earlier \
+agreement only if the ship can still make that hour; otherwise the agreement lapses.
 - A ship can't berth before it arrives: a window that starts earlier begins when the ship gets in, or once the \
 wind lets it move, and the berth waits for it.
 - Ships berth first come, first served: no ship may start berthing while a ship earlier in the queue waits at \

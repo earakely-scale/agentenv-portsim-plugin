@@ -10,7 +10,7 @@ from berth_core.model import MOVE_PENALTY
 from berth_core.reward import score_v3
 from berth_core.solve import _Ledger, naive_replan
 
-from .schedule import FREEZE_HOURS, HARBOUR_MASTER, PLANNING_CALLS, label, schedule
+from .schedule import FREEZE_HOURS, HARBOUR_MASTER, PLANNING_CALLS, Notice, label, schedule
 
 RULES = [("missing", r"^missing from the plan$"), ("no_move", r"inside the no-movement window"),
          ("cranes", r"^gets -?\d+ cranes"), ("arrival", r"cannot arrive before hour"),
@@ -111,6 +111,8 @@ class Week:
     notice_excuse = True
     untimed: tuple[str, ...] = ()
     """Notice kinds that report rather than announce, so the audit holds them to no lead."""
+    anchor_rows = False
+    """Whether check_plan's rows show the hours each ship waits at anchor, which the week charges."""
 
     def __init__(self, task: Task):
         self.task = task
@@ -215,14 +217,16 @@ class Week:
         except PlanError as e:
             return {"error": str(e), "planning_calls_left": self.calls_left}
         ships = charge(self.evaluate(view, plan), *self.excuses())
+        arrivals = {s.id: s.arrival for s in view.ships}
         rows = []
         for r, charged, forgiven, waived in ships:
             if r.berth_hour is None:
                 rows.append({"ship": r.ship, "problems": charged})
             elif r.problems or r.cost > 0:
                 rows.append({"ship": r.ship, "berth_hour": r.berth_hour, "section": r.section, "cranes": r.cranes,
-                             "departure": r.departure, "delay_h": r.delay_h, "moved": r.moved, "cost": r.cost,
-                             "problems": charged}
+                             "departure": r.departure, "delay_h": r.delay_h}
+                            | ({"anchor_h": max(0, r.berth_hour - arrivals[r.ship])} if self.anchor_rows else {})
+                            | {"moved": r.moved, "cost": r.cost, "problems": charged}
                             | ({"excused": forgiven, "excused_cost": waived} if forgiven or waived else {}))
         feasible = not any(charged for _, charged, _, _ in ships)
         excused_cost = sum(w for *_, w in ships)
@@ -268,6 +272,7 @@ class Week:
         if event_id not in self.revealed:
             fixed, before = self.fixed, self.view
             self.revealed.append(event_id)
+            self.revealing(scheduled)
             if fixed and self.notice_excuse:
                 problems, cost = excuse(before, self.view, fixed, evaluate=self.evaluate)
                 self.excused_problems += [{"event_id": event_id, "ship": s, "rule": r, "problem": p}
@@ -276,6 +281,9 @@ class Week:
         if via != "load":
             self.messages.append({"hour": self.hour, "from": name, "text": text})
         return {"applied": event_id, "watch": self.watch}
+
+    def revealing(self, notice: Notice) -> None:
+        """What the news changes in the week beyond the view, before its excuses are weighed."""
 
     def excuses(self) -> tuple[set[tuple[int, str]], dict[int, int]]:
         cost: dict[int, int] = {}

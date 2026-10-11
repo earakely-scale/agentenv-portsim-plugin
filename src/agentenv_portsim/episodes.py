@@ -202,9 +202,10 @@ class Runs:
         moves = sum(r.moved for r in evaluate(task, week.plan).ships) if g["feasible"] else None
         delivered = {"load": lambda e: 0, "trigger": lambda e: opened[e["watch"]], "env": lambda e: len(steps) - 1}
         bulletins = [{"event_id": e["event_id"], "kind": e["kind"], "from": e["name"],
-                      "text": week.scheduled[e["event_id"]].text,
+                      "text": e.get("text", week.scheduled[e["event_id"]].text),
                       "event_hour": week.scheduled[e["event_id"]].event_hour, "watch": e["watch"], "hour": e["hour"],
-                      "time": label(e["hour"]), "via": e["via"], "step": delivered[e["via"]](e)} for e in week.log]
+                      "time": label(e["hour"]), "via": e["via"], "step": delivered[e["via"]](e)}
+                     for e in week.log if e.get("text", "") is not None]
         reference = {"optimal_cost": ref["optimal_cost"], "unavoidable_cost": ref["unavoidable_cost"],
                      "rolling": _played(ref["rolling"]), "naive": ref["naive"]}
         if isinstance(week, WindWeek):

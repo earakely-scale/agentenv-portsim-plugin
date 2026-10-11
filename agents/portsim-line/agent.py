@@ -24,8 +24,8 @@ from agentenv_protocol.a2a_agent import (
 log = logging.getLogger("portsim-line")
 ROLE_HEADER = "AgentEnv-Role"
 MAX_REQUESTS = 20
-USAGE = ('send {"requests": [{"ship": 7, "ask": "eta"}, {"ship": 9, "request_arrival": 130}]}: one entry per ship, '
-         "asking for its ETA or requesting an arrival hour")
+USAGE = ('send {"requests": [{"ship": 7, "ask": "eta", "request_arrival": null}, {"ship": 9, "ask": null, '
+         '"request_arrival": 130}]}: one entry per ship, asking for its ETA or requesting an arrival hour')
 
 
 def requests_of(request: TaskRequest) -> list[dict]:
@@ -57,8 +57,9 @@ def sentence(reply: dict) -> str:
         return (f"{who} will arrive at hour {reply['arrival']}" + (", reducing speed" if reply.get("slowing") else "")
                 + f"; it keeps its turn, hour {reply['turn']}.")
     if reply.get("agreed") is False:
-        return f"{who} can't make hour {reply.get('asked')}: {reply['reason']}" + (
-            f"; ETA hour {reply['eta']}." if "eta" in reply else ".")
+        offer = (f"; it can arrive at hour {reply['earliest']} at the earliest" if "earliest" in reply else
+                 f"; it can arrive at hour {reply['latest']} at the latest" if "latest" in reply else "")
+        return f"{who} can't make hour {reply.get('asked')}: {reply['reason']}{offer}."
     return f"{who}: ETA hour {reply['eta']}."
 
 
@@ -98,8 +99,9 @@ def step_url(mcp_url: str) -> str:
 @a2a_agent(
     identity=AgentIdentity(
         name="portsim-line",
-        description="A ship's agent at the Port of Barcelona: reports and answers for its line's ships, and agrees an "
-                    "arrival time when a ship can make it. Message it with structured requests.",
+        description="A ship's agent at the Port of Barcelona: reports and answers for its line's ships, agrees an "
+                    "arrival time when a ship can make it, and otherwise offers the earliest or latest it can. Message "
+                    "it with structured requests.",
         version="0.5.2",
     ),
     config=AgentConfig,

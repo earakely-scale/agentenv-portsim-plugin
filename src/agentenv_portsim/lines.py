@@ -1,14 +1,17 @@
 """PortSim lines: the wind week with the shipping lines answering back. Each ship's agent, the firm that deals with the
-port for its line, reports the ship's ETA 48 and 24 hours out and calls in an hour before it arrives; the ETAs are
-optimistic and firm up as the ship nears. The planner can ask a firm for a ship's ETA and request an arrival time,
-which the firm agrees when the ship can make it by slowing down. A window that starts before its ship gets in begins
-when it does: the berth waits, and the ship's lateness and any clash it then causes are the planner's. Ships berth
-first come, first served: none may start while a ship earlier in the queue waits at anchor, unless the wind holds
-that ship; a ship's turn is its arrival at cruising speed, so a ship slowed on request keeps it. An hour at anchor
-costs what an hour late does.
+port for its line, reports the ship's ETA 48 and 24 hours out and calls in an hour before it arrives; the published
+schedule is the same estimate from 72 hours out, and the ETAs are optimistic and firm up as the ship nears. The
+planner can ask a firm for a ship's ETA and request an arrival time, which the firm agrees when the ship can make it
+by slowing down, or answers with the earliest or latest hour it can make. Until the port's news about a delayed ship,
+its agent works from the plan as it stood; the news keeps an earlier agreement only if the ship can still make it. A
+window that starts before its ship gets in begins when it does: the berth waits, and the ship's lateness and any
+clash it then causes are the planner's. Ships berth first come, first served: none may start while a ship earlier in
+the queue waits at anchor, unless the wind holds that ship; a ship's turn is its arrival at cruising speed, so a ship
+slowed on request keeps it. An hour at anchor costs what an hour late does.
 
-``rules["lines"]`` holds each ship's firm, its previous port's distance and its ETA bias; the truth is each ship's
-``arrival`` (at cruising speed) and the arrival times agreed during the week."""
+``rules["lines"]`` holds each ship's firm, its previous port's distance, its ETA bias, its scheduled arrival, its
+arrival before its news (for a delayed ship) and its v4 arrival, from which the news is timed; the truth is each
+ship's ``arrival`` (at cruising speed) and the arrival times agreed during the week."""
 
 import json
 import math
@@ -32,6 +35,7 @@ STRETCH = CRUISE_KN / SLOWEST_KN
 REPORT_LEADS = (48, 24)
 CALL_LEAD = 1
 ETA_ERROR = 0.2
+ETA_HORIZON = 72
 SPEAKER = "Ship's agent"
 REPORTS = ("eta", "call")
 NEWS_ETA = ("late", "bunching", "extra")
@@ -74,61 +78,105 @@ def leg_hours(task: Task, sid: int) -> float | None:
     return None if nm is None else nm / CRUISE_KN
 
 
-def departure(task: Task, sid: int) -> float | None:
-    """The hour the ship leaves its previous port, sailing at cruising speed; None when that is beyond the week's
-    reach."""
+def departure(task: Task, sid: int, arrival: int | None = None) -> float | None:
+    """The hour the ship leaves its previous port to arrive at ``arrival`` (its true arrival by default) at cruising
+    speed; None when that is beyond the week's reach."""
     leg = leg_hours(task, sid)
-    return None if leg is None else task.ships[sid].arrival - leg
+    return None if leg is None else (task.ships[sid].arrival if arrival is None else arrival) - leg
 
 
-def estimate(task: Task, sid: int, hour: int) -> int:
-    """The firm's ETA for an unslowed ship at ``hour``: off by a share of the hours left, mostly early (the ship arrives
-    later), exact from the arrival call."""
-    a = task.ships[sid].arrival
+def slowest(task: Task, sid: int, hour: int, arrival: int) -> int:
+    """The latest an unslowed ship due at ``arrival`` can arrive, slowing from ``hour`` or once it leaves its previous
+    port."""
+    dep = departure(task, sid, arrival)
+    start = hour if dep is None else max(hour, dep)
+    return math.floor(start + (arrival - start) * STRETCH + 1e-9)
+
+
+def estimate(task: Task, sid: int, hour: int, arrival: int | None = None) -> int:
+    """The firm's ETA at ``hour`` for an unslowed ship due at ``arrival`` (its true arrival by default): off by a share
+    of the hours left, as from 72 hours out at most, mostly early (the ship arrives later); never later than the
+    slowest it can arrive, and exact from the arrival call."""
+    a = task.ships[sid].arrival if arrival is None else arrival
     if a - hour <= CALL_LEAD:
         return a
-    return max(hour + 1, a - round(ETA_ERROR * meta(task, sid)["bias"] * (a - hour)))
+    eta = a - round(ETA_ERROR * meta(task, sid)["bias"] * min(a - hour, ETA_HORIZON))
+    return min(max(hour + 1, eta), slowest(task, sid, hour, a))
+
+
+def as_v4(task: Task) -> Task:
+    """The task with v4's arrivals, from which v4's news is timed, so the watches don't move."""
+    ships = task.rules["lines"]["ships"]
+    return replace(task, ships=[replace(s, arrival=ships[s.id].get("v4_arrival", s.arrival)) for s in task.ships])
+
+
+def scheduled(task: Task, sid: int) -> int | None:
+    """The arrival the published schedule gives, the line's estimate from 72 hours out; None for an unscheduled call."""
+    return meta(task, sid).get("scheduled")
+
+
+def before_news(task: Task, sid: int) -> int | None:
+    """When a delayed or bunched ship would have arrived without the news about it."""
+    return meta(task, sid).get("before_news")
+
+
+def news_of(task: Task) -> dict[int, str]:
+    """The event that brings each delayed or bunched ship's news."""
+    out = {}
+    for i, e in enumerate(task.disruptions):
+        if e["type"] in ("late", "bunching"):
+            out |= {s: f"{e['type']}-{i}" for s in ([e["ship"]] if e["type"] == "late" else e["ships"])}
+    return out
 
 
 def first_known(task: Task) -> dict[int, int]:
-    """The hour a ship's own news first reaches the planner, for the ships whose arrival v4 announced: an unscheduled
-    call when its notice reveals it, a late or bunched ship when the notice about it comes. Their agents' reports start
-    after it, so no report gives the news away early."""
+    """The hour of the watch that first brings a ship's own news, for the ships whose arrival v4 announced: an
+    unscheduled call when its notice reveals it, a late or bunched ship when the notice about it comes."""
     out = {}
-    for w in v4_schedule(task):
+    for w in v4_schedule(as_v4(task)):
         for n in w.notices:
             if n.kind in NEWS_ETA:
                 for s in [n.event["ship"]] if n.kind != "bunching" else n.event["ships"]:
-                    out[s] = max(out.get(s, n.hour), n.hour)
+                    out[s] = max(out.get(s, w.hour), w.hour)
     return out
 
 
 def timetable(task: Task) -> list[Watch]:
     """v4's watches, unchanged, each also carrying the ETA reports and arrival calls made since the watch before:
     routine reports add no watch, so they wait for the next bulletin, and the latest one made before hour 0 opens the
-    week."""
-    watches = v4_schedule(task)
+    week. A delayed or bunched ship's reports before its news come from the plan as it stood, and only those that
+    reach the planner before the news; an unscheduled call's start with its notice."""
+    watches = v4_schedule(as_v4(task))
     hours = [w.hour for w in watches]
     news = first_known(task)
     reports: dict[int, list[Notice]] = {k: [] for k in range(len(watches))}
     for s in task.ships:
-        made = [(s.arrival - lead, "eta", lead) for lead in REPORT_LEADS] + [(s.arrival - CALL_LEAD, "call", CALL_LEAD)]
+        made = [(s.arrival - lead, "eta", lead, "") for lead in REPORT_LEADS] + [
+            (s.arrival - CALL_LEAD, "call", CALL_LEAD, "")]
         if s.id in news:
             made = [m for m in made if m[0] > news[s.id]]
+            if (planned := before_news(task, s.id)) is not None:
+                made += [m for m in _opening([(planned - lead, "eta", lead, "-plan") for lead in REPORT_LEADS])
+                         if next((h for h in hours if h >= m[0]), news[s.id]) < news[s.id]]
         else:
-            before = [m for m in made if m[0] <= 0]
-            made = [m for m in made if m[0] > 0] + ([max(before)] if before else [])
-        for hour, kind, lead in made:
+            made = _opening(made)
+        for hour, kind, lead, tag in made:
             k = next((k for k, h in enumerate(hours) if h >= hour), None)
             if k is None:
                 continue
-            at = max(hour, 0)
+            at, arrival = max(hour, 0), before_news(task, s.id) if tag else s.arrival
             event = {"type": kind, "ship": s.id, "hour": at, "lead": lead,
-                     "eta": s.arrival if kind == "call" else estimate(task, s.id, at)}
-            reports[k].append(Notice(f"{kind}-{s.id}-{lead}", -1, kind, firm_name(task, firm(task, s.id)), at,
-                                     s.arrival, report_text(task, event), event))
+                     "eta": arrival if kind == "call" else estimate(task, s.id, at, arrival)}
+            reports[k].append(Notice(f"{kind}-{s.id}-{lead}{tag}", -1, kind, firm_name(task, firm(task, s.id)), at,
+                                     arrival, report_text(task, event), event))
     return [Watch(w.index, w.hour, w.notices + tuple(sorted(reports[w.index], key=lambda n: (n.hour, n.event_id))))
             for w in watches]
+
+
+def _opening(made: list[tuple]) -> list[tuple]:
+    """The reports made during the week, and the latest made before it, which opens it."""
+    before = [m for m in made if m[0] <= 0]
+    return [m for m in made if m[0] > 0] + ([max(before)] if before else [])
 
 
 def report_text(task: Task, event: dict) -> str:
@@ -203,31 +251,66 @@ class LinesWeek(WindWeek):
     evaluate = staticmethod(evaluate)
     untimed = REPORTS
 
+    anchor_rows = True
+
     def __init__(self, task: Task):
         self.locks: dict[int, tuple[float, float, int]] = {}
         self.told: dict[int, tuple[int, int]] = {}
         self.arrived: set[int] = set()
         self.exchanges: list[dict] = []
+        self.news = news_of(task)
+        self.outcomes: dict[str, list[str]] = {}
+        self.floor: dict[int, int] = {}
         super().__init__(task)
+
+    def revealing(self, notice: Notice) -> None:
+        """A delayed or bunched ship's news: an agreement made before it stands if the ship can still make that hour,
+        else it lapses; the news's ETA becomes what the planner knows."""
+        event = notice.event
+        if event["type"] not in NEWS_ETA:
+            return
+        etas = dict(zip(event["ships"], event["etas"], strict=True)) if event["type"] == "bunching" else {
+            event["ship"]: event["eta"]}
+        said = []
+        for sid, eta in etas.items():
+            self.floor.pop(sid, None)
+            if sid in self.locks:
+                at, truth = self.locks[sid][2], self.task.ships[sid].arrival
+                earliest, latest = self.reach(sid, self.hour, truth)
+                if earliest <= at <= latest:
+                    self.locks[sid] = (*self.remaining(sid, self.hour, truth), at)
+                    said.append(f"The earlier agreement stands: {self.agreement(sid)}")
+                    continue
+                del self.locks[sid]
+                said.append(f"{self.task.ships[sid].name} (ship {sid}) can no longer arrive at hour {at}: the earlier "
+                            "agreement no longer holds.")
+            self._tell(sid, self.hour, eta)
+        self.outcomes[notice.event_id] = said
 
     def notice(self, event_id: str, name: str, text: str, via: str) -> dict:
         out = super().notice(event_id, name, text, via)
         event = self.scheduled[event_id].event
-        if event["type"] in REPORTS:
-            self._tell(event["ship"], event["hour"], event["eta"])
+        reported = event["type"] in REPORTS
+        eta = max(event["eta"], self.floor.get(event["ship"], 0)) if reported else None
+        if reported:
+            self._tell(event["ship"], event["hour"], eta)
             if event["type"] == "call" and event["ship"] not in self.locks:
                 self.arrived.add(event["ship"])
-        elif event["type"] in ("late", "extra"):
-            self._tell(event["ship"], self.hour, event["eta"])
-        elif event["type"] == "bunching":
-            for s, eta in zip(event["ships"], event["etas"], strict=True):
-                self._tell(s, self.hour, eta)
-        ships = [event["ship"]] if "ship" in event else event.get("ships", [])
-        agreed = [s for s in ships if s in self.locks and event["type"] in (*REPORTS, *NEWS_ETA)]
-        if agreed and via != "load":
-            lines = " ".join(self.agreement(s) for s in agreed)
+        delivered = text
+        if via != "load":
             last = self.messages[-1]
-            last["text"] = lines if len(agreed) == len(ships) else f"{last['text']} Since then: {lines}"
+            if reported and event["ship"] in self.locks:
+                last["text"] = self.agreement(event["ship"])
+            elif reported and eta != event["eta"]:
+                last["text"] = report_text(self.task, event | {"eta": eta})
+            elif said := self.outcomes.get(event_id):
+                last["text"] = " ".join([last["text"], *said])
+            delivered = last["text"]
+            if (reported and event["ship"] in self.locks and self.actual(event["ship"]) < self.hour) or any(
+                    m["hour"] == self.hour and m["text"] == delivered for m in self.messages[:-1]):
+                self.messages.pop()
+                delivered = None
+        self.log[-1]["text"] = delivered
         return out
 
     def agreement(self, sid: int) -> str:
@@ -242,13 +325,25 @@ class LinesWeek(WindWeek):
         """When the ship really arrives: at the agreed time, else at cruising speed."""
         return self.locks[sid][2] if sid in self.locks else self.task.ships[sid].arrival
 
+    def pending(self, sid: int) -> bool:
+        """Whether the ship's news has yet to reach the planner, so its agent still works from the plan as it stood."""
+        return sid in self.news and self.news[sid] not in self.revealed
+
+    def basis(self, sid: int) -> int:
+        """The cruising-speed arrival the ship's agent works from: the plan as it stood until its news, then the
+        truth."""
+        return before_news(self.task, sid) if self.pending(sid) else self.task.ships[sid].arrival
+
     def turn(self, sid: int) -> int:
-        return self.task.ships[sid].arrival
+        return self.basis(sid)
 
     def known_arrival(self, view: Task, sid: int) -> int:
+        """The arrival as the planner knows it: agreed or called in, else the latest ETA or the published schedule, and
+        no earlier than the next hour for a ship that hasn't called in."""
         if sid in self.locks or sid in self.arrived:
             return self.actual(sid)
-        return self.told[sid][1] if sid in self.told else view.ships[sid].arrival
+        eta = self.told[sid][1] if sid in self.told else scheduled(self.task, sid)
+        return max(view.ships[sid].arrival if eta is None else eta, self.hour + 1)
 
     def known_turn(self, view: Task, sid: int) -> int:
         return self.turn(sid) if sid in self.locks or sid in self.arrived else self.known_arrival(view, sid)
@@ -297,19 +392,21 @@ class LinesWeek(WindWeek):
         out = super().situation()
         return out | {"situation": out["situation"] + "\n\n" + section(self)}
 
-    def remaining(self, sid: int, hour: int) -> tuple[float, float]:
-        """(the hour from which the ship can change pace, the hours it still needs at cruising speed then)."""
-        dep = departure(self.task, sid)
+    def remaining(self, sid: int, hour: int, arrival: int | None = None) -> tuple[float, float]:
+        """(the hour from which the ship can change pace, the hours it still needs at cruising speed then), as agreed or
+        from its agent's basis, or for an unslowed ship due at ``arrival``."""
+        a = self.basis(sid) if arrival is None else arrival
+        dep = departure(self.task, sid, a)
         start = hour if dep is None else max(hour, dep)
-        if sid in self.locks:
+        if sid in self.locks and arrival is None:
             ref, left, at = self.locks[sid]
             start = max(start, ref)
             return start, left * (at - start) / (at - ref) if at > ref else 0.0
-        return start, self.task.ships[sid].arrival - start
+        return start, a - start
 
-    def reach(self, sid: int, hour: int) -> tuple[int, int]:
+    def reach(self, sid: int, hour: int, arrival: int | None = None) -> tuple[int, int]:
         """The earliest and latest hours the ship can arrive, from ``hour`` on."""
-        start, left = self.remaining(sid, hour)
+        start, left = self.remaining(sid, hour, arrival)
         return math.ceil(start + left - 1e-9), math.floor(start + left * STRETCH + 1e-9)
 
     def _ship(self, firm_id: str, sid) -> int:
@@ -324,13 +421,13 @@ class LinesWeek(WindWeek):
     def status(self, firm_id: str, sid) -> dict:
         sid = self._ship(firm_id, sid)
         name, hour = self.task.ships[sid].name, self.hour
-        if self.actual(sid) <= hour:
+        if not self.pending(sid) and self.actual(sid) <= hour:
             out = {"ship": sid, "name": name, "arrived": self.actual(sid), "turn": self.turn(sid)}
             self.arrived.add(sid)
         elif sid in self.locks:
             out = {"ship": sid, "name": name, "eta": self.actual(sid), "agreed": True, "turn": self.turn(sid)}
         else:
-            eta = estimate(self.task, sid, hour)
+            eta = max(estimate(self.task, sid, hour, self.basis(sid)), self.floor.get(sid, 0))
             self._tell(sid, hour, eta)
             out = {"ship": sid, "name": name, "eta": eta, "as_of": hour}
         self.exchanges.append({"watch": self.watch, "hour": hour, "firm": firm_id, "ship": sid, "ask": "eta",
@@ -342,7 +439,7 @@ class LinesWeek(WindWeek):
         if not isinstance(arrival, int) or isinstance(arrival, bool):
             raise ValueError(f"request_arrival must be an hour, got {arrival!r}")
         name, hour = self.task.ships[sid].name, self.hour
-        if self.actual(sid) <= hour:
+        if not self.pending(sid) and self.actual(sid) <= hour:
             out = {"ship": sid, "name": name, "agreed": False, "reason": f"already arrived at hour {self.actual(sid)}"}
         else:
             earliest, latest = self.reach(sid, hour)
@@ -351,10 +448,15 @@ class LinesWeek(WindWeek):
                 self.told[sid] = (hour, arrival)
                 out = {"ship": sid, "name": name, "agreed": True, "arrival": arrival, "turn": self.turn(sid),
                        "slowing": arrival > earliest}
+            elif arrival < earliest:
+                if sid not in self.locks:
+                    self.floor[sid] = max(self.floor.get(sid, 0), earliest)
+                self._tell(sid, hour, earliest)
+                out = {"ship": sid, "name": name, "agreed": False, "reason": "can't arrive that early",
+                       "earliest": earliest}
             else:
-                eta = self.actual(sid) if sid in self.locks else estimate(self.task, sid, hour)
-                out = {"ship": sid, "name": name, "agreed": False, "eta": eta, "reason": (
-                    "can't arrive that early" if arrival < earliest else "can't slow down that much")}
+                out = {"ship": sid, "name": name, "agreed": False, "reason": "can't slow down that much",
+                       "latest": latest}
         self.exchanges.append({"watch": self.watch, "hour": hour, "firm": firm_id, "ship": sid,
                                "ask": "request_arrival", "arrival": arrival, "call": self.calls, "reply": out})
         return out
@@ -389,11 +491,14 @@ def section(week: LinesWeek) -> str:
     lines = [
         "## Arrivals and the ships' agents",
         "- Each ship's agent reports its ETA 48 and 24 hours out, and the ship calls in an hour before it arrives; "
-        "reports made between watches arrive with the next one. ETAs are optimistic: most ships arrive later than "
-        "their agent says, by less as they near.",
+        "reports made between watches arrive with the next one. The published schedule is the lines' estimate from "
+        "about three days out. Both are optimistic: most ships arrive later than they say, by less as they near.",
         "- Message a ship's agent to ask for its ETA or to request an arrival time. The agent agrees when the ship can "
         f"make it at {CRUISE_KN} kn or by slowing to as little as {SLOWEST_KN} kn once it has left its previous port, "
-        "and the ship then arrives at that hour.",
+        "and the ship then arrives at that hour; otherwise it answers with the earliest or the latest hour the ship "
+        "can make.",
+        "- Until the port's news about a delayed ship, its agent works from the plan as it stood. The news keeps an "
+        "earlier agreement only if the ship can still make that hour; otherwise the agreement lapses.",
         "- A ship can't berth before it arrives: a window that starts earlier begins when the ship gets in, or once "
         "the wind lets it move.",
         "- Ships berth first come, first served: no ship may start berthing while a ship earlier in the queue waits at "
