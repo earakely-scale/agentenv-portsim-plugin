@@ -137,19 +137,20 @@ def with_lines(task: Task, by_imo: dict[str, list[dict]]) -> Task:
 
 
 def news_etas(task: Task) -> Task:
-    """v4's late, bunching and unscheduled-call notices as the agents' ETAs at the watch they reach the planner."""
+    """v4's late, bunching and unscheduled-call notices as the agents' ETAs at the watch they reach the planner; a
+    delay notice never gives an ETA at or before the slot the ship is late for."""
     at = {n.event_id: w.hour for w in schedule.schedule(task) for n in w.notices}
     events, notices = [], []
     for i, (e, text) in enumerate(zip(task.disruptions, task.notices, strict=True)):
         hour = at.get(f"{e['type']}-{i}")
         if e["type"] == "late":
-            eta = lines.estimate(task, e["ship"], hour)
+            eta = max(lines.estimate(task, e["ship"], hour), task.ships[e["ship"]].arrival - e["hours"] + 1)
             e, text = e | {"eta": eta}, re.sub(r"it now arrives at hour \d+", f"its agent now gives ETA hour {eta}", text)
         elif e["type"] == "extra":
             eta = lines.estimate(task, e["ship"], hour)
             e, text = e | {"eta": eta}, re.sub(r"arrives at hour \d+", f"has ETA hour {eta} from its agent", text)
         elif e["type"] == "bunching":
-            etas = [lines.estimate(task, s, hour) for s in e["ships"]]
+            etas = [max(lines.estimate(task, s, hour), task.ships[s].planned_hour + 1) for s in e["ships"]]
             e, text = e | {"etas": etas}, re.sub(
                 r"now arrive together between hours \d+ and \d+ \(each ship's arrival hour is in the table\)",
                 "now arrive together; their agents' ETAs: "

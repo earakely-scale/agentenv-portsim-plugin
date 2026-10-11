@@ -97,9 +97,9 @@ LINES_RULES = WIND_RULES.replace(
     "each ship's agent reports its ETA and calls in before it arrives, the line desk reports unscheduled calls, the "
     "harbour master").replace(
     "Cost or rule breaks that news, or wind the forecast didn't show,",
-    "An ETA that proves wrong is not news: a window a ship misses because it arrived later than its agent said, or "
-    "a queue it jumps because a ship arrived earlier, is charged unless you agreed that ship's arrival. Cost or rule "
-    "breaks that news, or wind the forecast didn't show,") + """
+    "An ETA that proves wrong is not news: a ship that arrives later than its agent said berths when it gets in, and "
+    "the lateness, clashes and queue breaks that follow are charged unless you agreed that ship's arrival. Cost or "
+    "rule breaks that news, or wind the forecast didn't show,") + """
 
 The ships' agents:
 - Each ship's agent, the firm that deals with the port for its line, reports the ship's ETA 48 and 24 hours out and \
@@ -109,6 +109,8 @@ as they near.
 {"ship": 9, "request_arrival": 130} to ask the ship to arrive at that hour. The agent agrees when the ship can make it \
 at cruising speed, or by slowing once it has left its previous port; the ship then arrives at that hour. A refusal \
 says whether the ship can't arrive that early or can't slow down that much.
+- A ship can't berth before it arrives: a window that starts earlier begins when the ship gets in, or once the \
+wind lets it move, and the berth waits for it.
 - Ships berth first come, first served: no ship may start berthing while a ship earlier in the queue waits at \
 anchor, unless the wind holds that ship. A ship's turn is when it would arrive at cruising speed, so a ship slowed at \
 your request keeps its turn.

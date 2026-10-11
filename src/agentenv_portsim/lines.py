@@ -1,7 +1,8 @@
 """PortSim lines: the wind week with the shipping lines answering back. Each ship's agent, the firm that deals with
 the port for its line, reports the ship's ETA 48 and 24 hours out and calls in an hour before it arrives; the ETAs are
 optimistic and firm up as the ship nears. The planner can ask a firm for a ship's ETA and request an arrival time, which
-the firm agrees when the ship can make it by slowing down. Ships berth first come, first served: none may start while a
+the firm agrees when the ship can make it by slowing down. A window that starts before its ship gets in begins when it
+does: the berth waits, and the ship's lateness and any clash it then causes are the planner's. Ships berth first come, first served: none may start while a
 ship earlier in the queue waits at anchor, unless the wind holds that ship; a ship's turn is its arrival at cruising
 speed, so a ship slowed on request keeps it. An hour at anchor costs what an hour late does.
 
@@ -153,9 +154,25 @@ def _queued(task: Task, plan: Plan, res: PlanResult) -> None:
                 break
 
 
+def executed(task: Task, plan: Plan) -> Plan:
+    """The windows as the port runs them: a ship can't berth before it arrives, so a window that starts earlier begins
+    when the ship gets in, or once the wind lets it move; the berth waits for it."""
+    out = {}
+    for sid, (hour, section, cranes) in plan.items():
+        ship = task.ships[sid] if 0 <= sid < len(task.ships) else None
+        start = hour
+        if ship is not None and hour < ship.arrival:
+            start = ship.arrival
+            while any(a <= start < b for a, b in task.no_move_windows(ship)):
+                start += 1
+        out[sid] = (start, section, cranes)
+    return out
+
+
 def evaluate(task: Task, plan: Plan) -> PlanResult:
-    """marine.evaluate with the queue rule, and each hour a ship waits at anchor charged as an hour late is: its
-    sections times the hours between its arrival and its berthing."""
+    """marine.evaluate of the windows as run, with the queue rule, and each hour a ship waits at anchor charged as an
+    hour late is: its sections times the hours between its arrival and its berthing."""
+    plan = executed(task, plan)
     res = marine.evaluate(task, plan)
     for r in res.ships:
         arrival = task.ships[r.ship].arrival
@@ -197,13 +214,19 @@ class LinesWeek(WindWeek):
         event = self.scheduled[event_id].event
         if event["type"] in REPORTS:
             self._tell(event["ship"], event["hour"], event["eta"])
-            if event["type"] == "call":
+            if event["type"] == "call" and event["ship"] not in self.locks:
                 self.arrived.add(event["ship"])
         elif event["type"] in ("late", "extra"):
             self._tell(event["ship"], self.hour, event["eta"])
         elif event["type"] == "bunching":
             for s, eta in zip(event["ships"], event["etas"], strict=True):
                 self._tell(s, self.hour, eta)
+        ships = [event["ship"]] if "ship" in event else event.get("ships", [])
+        agreed = [s for s in ships if s in self.locks and event["type"] in (*REPORTS, *NEWS_ETA)]
+        if agreed and via != "load":
+            self.messages[-1]["text"] = " ".join(
+                f"{self.task.ships[s].name} (ship {s}): arriving hour {self.actual(s)} ({label(self.actual(s))}), "
+                f"as agreed; turn hour {self.turn(s)}." for s in agreed)
         return out
 
     def _tell(self, sid: int, as_of: int, eta: int) -> None:
@@ -359,6 +382,8 @@ def section(week: LinesWeek) -> str:
         "- Message a ship's agent to ask for its ETA or to request an arrival time. The agent agrees when the ship can "
         f"make it at {CRUISE_KN} kn or by slowing to as little as {SLOWEST_KN} kn once it has left its previous port, "
         "and the ship then arrives at that hour.",
+        "- A ship can't berth before it arrives: a window that starts earlier begins when the ship gets in, or once "
+        "the wind lets it move.",
         "- Ships berth first come, first served: no ship may start berthing while a ship earlier in the queue waits at "
         "anchor, unless the wind holds that ship. A ship's turn is when it would arrive at cruising speed, so a ship "
         "slowed at your request keeps its turn.",
@@ -372,7 +397,8 @@ def section(week: LinesWeek) -> str:
         if s.id in week.locks:
             state = f"agreed hour {week.actual(s.id)}, turn {week.turn(s.id)}"
         elif s.id in week.arrived:
-            state = f"arrived hour {week.actual(s.id)}, turn {week.turn(s.id)}"
+            verb = "arrived" if week.actual(s.id) <= week.hour else "called in, arriving"
+            state = f"{verb} hour {week.actual(s.id)}, turn {week.turn(s.id)}"
         elif s.id in week.told:
             as_of, eta = week.told[s.id]
             state = f"ETA hour {eta}, as of {label(as_of)}"

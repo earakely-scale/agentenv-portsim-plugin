@@ -68,6 +68,14 @@ Data licensed under CC BY-SA 4.0 (data/LICENSE), not under the Apache License:
   computed from data/dock-v1-wind/.
 - src/agentenv_portsim/bundles/portsim-wind/tasks/: prompts and notices taken from data/dock-v1-wind/;
   the forecast notices keep their sources' terms (below).
+- data/dock-v1-lines/: the weeks of data/dock-v1-wind/ with each ship's agent, taken from the Port of
+  Barcelona's 2024 calls (above), its previous port's distance from NGA Pub. 151, Distances Between Ports
+  (11th edition, 2001; a work of the United States government, no copyright claimed), and a drawn ETA
+  bias; the weather in it keeps its sources' terms (below).
+- data/lines/references.jsonl: hindsight, follower, silent and naive reference plans and costs computed
+  from data/dock-v1-lines/.
+- src/agentenv_portsim/bundles/portsim-lines/tasks/: prompts and notices taken from data/dock-v1-lines/;
+  the forecast notices keep their sources' terms (below).
 - tests/wind/fixtures/: weeks of data/dock-v1-marine/ in synthetic weather; no reading or forecast in
   them is real.
 - data/published/dock-eval50/index.json: the published dock-eval50 results, copied unchanged from
@@ -85,9 +93,9 @@ Open Database License 1.0 (https://www.openstreetmap.org/copyright), with terrai
 AWS (twin/SOURCES.md). Images and videos rendered from it carry the attribution "© OpenStreetMap
 contributors (ODbL)".
 
-The weather in data/wind/weather.jsonl, data/wind/weather-sources.json and data/dock-v1-wind/, and in
-the task text that shows it, is not licensed under CC BY-SA 4.0 by this product. It comes from two
-sources, under their terms (data/LICENSE sets out each file):
+The weather in data/wind/weather.jsonl, data/wind/weather-sources.json, data/dock-v1-wind/ and
+data/dock-v1-lines/, and in the task text that shows it, is not licensed under CC BY-SA 4.0 by this
+product. It comes from two sources, under their terms (data/LICENSE sets out each file):
 
 The forecasts are modified ECMWF open data.
   Copyright: © 2023-2026 European Centre for Medium-Range Weather Forecasts (ECMWF).

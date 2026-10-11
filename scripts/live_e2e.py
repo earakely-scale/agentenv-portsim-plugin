@@ -8,7 +8,8 @@ still between turns, data/get held the week as played in process, and the week s
 portsim-marine the opening and every get_situation must also carry the pilots and tugs as the port knows them at that
 watch; on portsim-wind the situation in each must end with the pilots and tugs and then the wind as the port knows
 them then. On portsim-lines the stand-in model also messages the ships' agents as the reference follower did, every
-reply must be the one the follower got in process, and the agent must never see the agents' tools.
+reply must be the one the follower got in process, each watch's messages must be the ones the week sent in process
+(an agreed ship's reports give its agreed arrival), and the agent must never see the agents' tools.
 
 Run it from the checkout after `agent-env portsim setup --agent`, with the dev extra installed:
 
@@ -184,7 +185,8 @@ def check(task, fake: FakeLiteLLM, ctx: dict, env: str, expected: dict, played: 
         due = []
         if name == "advance" and "watch" in result:
             watch = result["watch"]
-            due = [{"hour": watches[watch].hour, "from": n.name, "text": n.text} for n in watches[watch].notices]
+            due = ([m for m in played.messages if m["hour"] == watches[watch].hour] if env == LINES_ENV else
+                   [{"hour": watches[watch].hour, "from": n.name, "text": n.text} for n in watches[watch].notices])
     if calls[-1] != ("advance", {"done": True, "feasible": expected["feasible"], "cost": expected["cost"],
                                  "reward": expected["reward"], "messages": []}):
         problems.append(f"the episode ended on {calls[-1]}")
