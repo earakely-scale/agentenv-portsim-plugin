@@ -1,5 +1,6 @@
 """Recorded sweep runs as the episode summaries and rollouts PortSimEnv's viewer reads: a v1 run regraded from its
-final plan, a live run replayed through its Week from the recorded tool calls."""
+final plan, a live run replayed through its Week from the recorded tool calls; a lines run also from the planner's
+messages to the ships' agents, each played on the week as the agent asks the env."""
 
 import json
 from dataclasses import dataclass
@@ -10,16 +11,21 @@ import click
 from berth_core import MOVE_PENALTY, Plan, PlanError, Task, TaskPack, evaluate, grade, parse_plan, plan_to_list
 from pydantic import TypeAdapter
 
-from . import marine, tasks, wind
+from . import lines, marine, tasks, wind
+from .lines import LinesWeek, step_lines
 from .live import WindowsArg, _json, _raw
 from .marine import MarineWeek, step_marine
-from .schedule import FREEZE_HOURS, LIVE_ENV, MARINE_ENV, TOOLS, WIND_ENV, label, virtual_time
+from .schedule import FREEZE_HOURS, LINES_ENV, LIVE_ENV, MARINE_ENV, TOOLS, WIND_ENV, label, virtual_time
 from .sweep import EVAL_PACK, Sweep, results
 from .wind import WindWeek, step_wind
 from .world import Week, charge
 
 ARGS = TypeAdapter(WindowsArg)
+INT = TypeAdapter(int)
 STEPS = ("check_plan", "confirm_berths", "advance")
+MESSAGE_TOOL = "message_agent"
+MAX_REQUESTS = 20
+"""portsim-line's cap on the requests in one message."""
 
 
 class ReplayError(Exception):
@@ -36,11 +42,12 @@ class Run:
 
 
 def env(sweep: Sweep) -> str:
-    return WIND_ENV if sweep.wind else MARINE_ENV if sweep.marine else LIVE_ENV if sweep.live else "portsim"
+    return (LINES_ENV if sweep.lines else WIND_ENV if sweep.wind else MARINE_ENV if sweep.marine
+            else LIVE_ENV if sweep.live else "portsim")
 
 
 def week_of(sweep: Sweep) -> type[Week]:
-    return WindWeek if sweep.wind else MarineWeek if sweep.marine else Week
+    return LinesWeek if sweep.lines else WindWeek if sweep.wind else MarineWeek if sweep.marine else Week
 
 
 class Runs:
@@ -64,6 +71,7 @@ class Runs:
                 self.runs[run_id] = Run(run_id, sweep, rep, root / name,
                                         {(r["model"], r["task_id"]): r for r in scored if r["rep"] == rep})
         self.wind_tasks = {t for run in self.runs.values() if run.sweep.wind for t in run.sweep.tasks}
+        self.lines_tasks = {t for run in self.runs.values() if run.sweep.lines for t in run.sweep.tasks}
 
     @cached_property
     def wind_pack(self) -> TaskPack:
@@ -73,9 +81,17 @@ class Runs:
     def wind_references(self) -> dict[str, dict]:
         return {r["task_id"]: r for r in wind.references()}
 
+    @cached_property
+    def lines_pack(self) -> TaskPack:
+        return lines.pack()
+
+    @cached_property
+    def lines_references(self) -> dict[str, dict]:
+        return {r["task_id"]: r for r in lines.references()}
+
     def has(self, task_id: str) -> bool:
-        """A week the explorer serves: dock-v1-eval's, whose ids the marine pack shares, or a wind sweep's."""
-        return task_id in self.pack._by_id or task_id in self.wind_tasks
+        """A week the explorer serves: dock-v1-eval's, whose ids the marine pack shares, or a wind or lines sweep's."""
+        return task_id in self.pack._by_id or task_id in self.wind_tasks or task_id in self.lines_tasks
 
     def tasks(self) -> list[dict]:
         ids = sorted({task_id for run in self.runs.values() for _, task_id in run.rows})
@@ -84,19 +100,24 @@ class Runs:
                 for t in map(self.task, ids)]
 
     def task(self, task_id: str) -> Task:
-        """The explorer's week: a wind sweep's from the wind pack; else the marine one when every run of the task is
-        marine, else dock-v1-eval's, the two packs sharing task ids."""
+        """The explorer's week: a wind sweep's from the wind pack, else a lines sweep's from the lines pack, the two
+        sharing task ids; else the marine one when every run of the task is marine, else dock-v1-eval's, the two packs
+        sharing task ids."""
         if task_id in self.wind_tasks:
             return self.wind_pack.get(task_id)
+        if task_id in self.lines_tasks:
+            return self.lines_pack.get(task_id)
         marine_runs = [run.sweep.marine for run in self.runs.values() if any(t == task_id for _, t in run.rows)]
         return (self.marine_pack if marine_runs and all(marine_runs) else self.pack).get(task_id)
 
     def pack_of(self, run: Run) -> TaskPack:
-        return self.wind_pack if run.sweep.wind else self.marine_pack if run.sweep.marine else self.pack
+        return (self.lines_pack if run.sweep.lines else self.wind_pack if run.sweep.wind
+                else self.marine_pack if run.sweep.marine else self.pack)
 
     def references_of(self, week: type[Week]) -> dict[str, dict]:
-        return (self.wind_references if issubclass(week, WindWeek) else self.marine_references
-                if issubclass(week, MarineWeek) else self.references)
+        return (self.lines_references if issubclass(week, LinesWeek) else self.wind_references
+                if issubclass(week, WindWeek) else self.marine_references if issubclass(week, MarineWeek)
+                else self.references)
 
     def index(self) -> list[dict]:
         out = []
@@ -149,6 +170,11 @@ class Runs:
                     "rolling_cost": refs[task.task_id]["rolling"]["cost"]}
         if run.sweep.wind:
             out |= {"weather": refs[task.task_id]["weather"], "hindsight_cost": refs[task.task_id]["hindsight_cost"]}
+        if run.sweep.lines:
+            ref = refs[task.task_id]
+            out |= {"weather": task.task_id.rsplit("-", 1)[1], "hindsight_cost": ref["hindsight_cost"],
+                    "silent_cost": ref["silent"]["cost"], "anchor_hours": g["anchor_hours"],
+                    "messages": len(ro["live"]["lines"]["exchanges"])}
         return out
 
     def rollout(self, run_id: str, model: str, task_id: str) -> dict:
@@ -183,8 +209,8 @@ class Runs:
                      "rolling": _played(ref["rolling"]), "naive": ref["naive"]}
         if isinstance(week, WindWeek):
             reference |= {"hindsight_cost": ref["hindsight_cost"]} | {
-                mode: _played(ref[mode]) for mode in ("blind", "hold") if mode in ref}
-        return {
+                mode: _played(ref[mode]) for mode in ("blind", "hold", "silent") if mode in ref}
+        out = {
             "steps": steps, "reward": g["reward"],
             "final": {"submitted": week.end_reason == "done", "plan": plan_to_list(week.plan),
                       "grade": g | {"naive_cost": ref["naive"]["cost"], "moves": moves,
@@ -198,11 +224,14 @@ class Runs:
                      "excused": {"problems": week.excused_problems, "cost": week.excused_cost},
                      "audit": week.audit(), "reference": reference},
         }
+        if isinstance(week, LinesWeek):
+            out["live"]["lines"] = {"firms": task.rules["lines"]["firms"], "exchanges": week.exchanges}
+        return out
 
 
 def _played(policy: dict) -> dict:
-    """A reference policy's outcome, without its plans and configurations."""
-    return {k: v for k, v in policy.items() if k not in ("plans", "configs")}
+    """A reference policy's outcome, without its plans, configurations and messages."""
+    return {k: v for k, v in policy.items() if k not in ("plans", "configs", "exchanges")}
 
 
 def regrade(task: Task, plan) -> dict:
@@ -216,8 +245,9 @@ def regrade(task: Task, plan) -> dict:
 
 def replay(task: Task, messages: list[dict], week: type[Week] = Week) -> tuple[Week, list[dict], dict[int, int]]:
     """The recorded calls to the env's tools played back on a Week, each output checked against the recording, then
-    the rest of the week run as end_week runs it. Returns the week, a step per planning call and advance, and the step
-    that opened each watch."""
+    the rest of the week run as end_week runs it; on a LinesWeek, the planner's messages to the ships' agents too, in
+    their place among the calls. Returns the week, a step per planning call, advance and message that reached the env,
+    and the step that opened each watch."""
     week, steps, opened, calls, turn = week(task), [], {}, {}, 0
     for m in messages:
         if m["role"] == "assistant":
@@ -225,6 +255,10 @@ def replay(task: Task, messages: list[dict], week: type[Week] = Week) -> tuple[W
             calls |= {c["id"]: (turn, c) for c in m.get("tool_calls") or []}
         elif m["role"] == "tool":
             at, call = calls[m["tool_call_id"]]
+            if call["name"] == MESSAGE_TOOL and isinstance(week, LinesWeek) and not week.done:
+                if sent := sent_to_agent(week, call, m["content"]):
+                    steps.append(step(week, at, call, sent["requests"], _parsed(m["content"]), week.plan))
+                continue
             if call["name"] not in TOOLS or week.done or not isinstance(args := _parsed(call["arguments"]), dict):
                 continue
             if call["name"] in ("check_plan", "confirm_berths") and "plan" not in args:
@@ -269,6 +303,61 @@ def play(week: Week, name: str, args: dict) -> tuple[dict, Plan]:
     return {**result, "messages": week.drain()}, week.plan
 
 
+def sent_to_agent(week: LinesWeek, call: dict, content: str) -> dict | None:
+    """The message_agent call's arguments once its requests are played on the week, each reply checked against the
+    recorded one; None when the message never reached the env: the harness refused it, or the agent didn't answer.
+    No replies to requests the agent had to answer is the agent failing after it asked the env (it words its answer
+    once every request is answered), so the week keeps them unchecked."""
+    recorded = _parsed(content)
+    if not isinstance(recorded, dict) or not isinstance(recorded.get("replies"), list):
+        return None
+    args = _parsed(call["arguments"])
+    replies = answers(week, args) if isinstance(args, dict) else None
+    if replies is None or recorded["replies"] and [_shape(r) for r in replies] != [
+            _shape(r) for r in recorded["replies"]]:
+        raise ReplayError(f"{MESSAGE_TOOL} {call['id']} got {_json(replies)}, recorded {_json(recorded['replies'])}")
+    return args
+
+
+def answers(week: LinesWeek, args: dict) -> list[dict] | None:
+    """What the ship's agent (portsim-line) replies to the planner's message: each request asked of the env under its
+    role, as ship_status or agree_arrival; None when the planner's harness refuses the message before sending it."""
+    agent, requests = args.get("agent"), args.get("requests")
+    if agent not in week.task.rules["lines"]["firms"] or not isinstance(requests, list) or not requests:
+        return None
+    if len(requests) > MAX_REQUESTS:
+        return []
+    return [_answer(week, agent, entry) for entry in requests]
+
+
+def _answer(week: LinesWeek, firm: str, entry) -> dict:
+    if not isinstance(entry, dict) or "ship" not in entry:
+        return {"error": "each request names a ship"}
+    if entry.get("ask") == "eta":
+        out = _asked(week.status, firm, entry["ship"])
+        return out | ({"agreed_before": True} if out.get("agreed") else {})
+    if "request_arrival" in entry:
+        return _asked(week.request, firm, entry["ship"], entry["request_arrival"]) | {"asked": entry["request_arrival"]}
+    return {"ship": entry["ship"], "error": "ask for the ETA or request an arrival"}
+
+
+def _asked(tool, firm: str, *args) -> dict:
+    """The env tool's answer, its integer arguments validated as the tool's input schema validates them, or the error
+    the agent passes on."""
+    try:
+        return tool(firm, *(INT.validate_python(a) for a in args))
+    except ValueError as e:
+        return {"error": str(e)}
+
+
+def _shape(reply) -> object:
+    """A reply as replay compares it: an error by its presence alone, its text being the env's or the agent's
+    wording."""
+    if not isinstance(reply, dict) or "error" not in reply:
+        return reply
+    return {k: v for k, v in reply.items() if k != "error"} | {"error": True}
+
+
 def step(week: Week, turn: int, call: dict, entries, result: dict, plan: Plan) -> dict:
     view = week.view
     ships = charge(week.evaluate(view, plan), *week.excuses())
@@ -285,4 +374,5 @@ def step(week: Week, turn: int, call: dict, entries, result: dict, plan: Plan) -
             "known": {"feasible": not problems, "problems": problems, "excused_cost": excused,
                       "cost": sum(r.cost for r, *_ in ships) - excused if not problems else None}} | (
         {"marine": step_marine(view, plan)} if isinstance(week, MarineWeek) else {}) | (
-        {"wind": step_wind(view)} if isinstance(week, WindWeek) else {})
+        {"wind": step_wind(view)} if isinstance(week, WindWeek) else {}) | (
+        {"lines": step_lines(week)} if isinstance(week, LinesWeek) else {})

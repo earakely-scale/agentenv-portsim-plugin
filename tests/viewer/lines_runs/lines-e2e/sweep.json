@@ -1,0 +1,13 @@
+{
+  "name": "lines-e2e",
+  "models": [
+    "anthropic/claude-sonnet-5-5"
+  ],
+  "tasks": [
+    "dock-24B-w06x1-busy-0-e15"
+  ],
+  "k": 1,
+  "episode_cap_usd": 5.0,
+  "live": true,
+  "lines": true
+}
