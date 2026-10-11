@@ -16,7 +16,7 @@ agentenv-hf's check for keys and token shapes before anything is written, and --
 on top of the commit it read, removing what the build no longer writes.
 
     uv run python scripts/hub_dataset.py --out build/hub/dataset
-    uv run python scripts/hub_dataset.py --out build/hub/dataset --repo earakely-scale/PortSimEnv-AgentEnv --tag v0.4.5
+    uv run python scripts/hub_dataset.py --out build/hub/dataset --repo earakely-scale/PortSimEnv-AgentEnv --tag v0.5.0
 """
 
 import argparse
@@ -261,8 +261,12 @@ def board_markdown(version: str, rows: list[dict], weeks: int) -> str:
 
 def summary_markdown(rows: list[dict]) -> str:
     """Each model on every live version with runs: its mean on each and over all their weeks, each week weighing the
-    same, best first; only models that played all of them."""
-    versions = [v for v in LIVE_VERSIONS if any(r["version"] == v for r in rows)]
+    same, best first; only models that played all of them. A version some model has played fewer weeks of than another,
+    one still running, is left out."""
+    weeks: dict[str, set[int]] = {}
+    for r in rows:
+        weeks.setdefault(r["version"], set()).add(r["weeks"])
+    versions = [v for v in LIVE_VERSIONS if len(weeks.get(v, ())) == 1]
     by: dict[str, dict[str, dict]] = {}
     for r in rows:
         if r["version"] in versions:
@@ -409,7 +413,7 @@ def main():
     ap.add_argument("--plugin-ref", default=f"v{VERSION}",
                     help="The plugin tag the card's bundles pin, for agent-env hf run.")
     ap.add_argument("--repo", help="Push the folder to this dataset repo after writing it.")
-    ap.add_argument("--tag", help="Tag the pushed commit, e.g. v0.4.5.")
+    ap.add_argument("--tag", help="Tag the pushed commit, e.g. v0.5.0.")
     ap.add_argument("--message", default="Publish PortSimEnv on AgentEnv")
     args = ap.parse_args()
     plugin = f"agentenv-portsim @ git+https://github.com/earakely-scale/agentenv-portsim-plugin@{args.plugin_ref}"

@@ -133,20 +133,23 @@ def test_the_board_ranks_models_by_their_mean_over_weeks_with_each_tier_and_port
     assert hub.board_json("v5", [kimi, luna], 2)["env"] == "portsim-lines"
 
 
-def test_the_summary_weighs_every_week_alike_and_leaves_out_a_model_missing_a_version():
+def test_the_summary_weighs_every_week_alike_and_leaves_out_a_model_missing_a_version_and_a_version_still_running():
     played = [("v4", "a", 0.5, 15), ("v3", "a", 1.0, 15), ("v2", "a", 1.0, 30), ("v4", "b", 0.9, 15),
-              ("v3", "b", 0.9, 15), ("v2", "b", 0.9, 15), ("v4", "c", 1.0, 15), ("v1", "a", 0.0, 10)]
+              ("v3", "b", 0.9, 15), ("v2", "b", 0.9, 30), ("v4", "c", 1.0, 15), ("v1", "a", 0.0, 10)]
     rows = [{"version": v, "model": m, "model_name": m.upper(), "provider": "P", "mean_reward": mean, "weeks": weeks,
              "feasible": weeks} for v, m, mean, weeks in played]
     head, _, first, second = hub.summary_markdown(rows).splitlines()
     assert "v4, the wind port" in head and "All weeks" in head and "v5" not in head
-    assert first.startswith("| B | P | 0.900 | 0.900 | 0.900 | **0.900** | 45 of 45")
+    assert first.startswith("| B | P | 0.900 | 0.900 | 0.900 | **0.900** | 60 of 60")
     assert second.startswith("| A | P | 0.500 | 1.000 | 1.000 | **0.875** | 60 of 60")
     lines_b = {"version": "v5", "model": "b", "model_name": "B", "provider": "P", "mean_reward": 0.6, "weeks": 15,
                "feasible": 15}
     head, _, only = hub.summary_markdown([*rows, lines_b]).splitlines()
     assert head.startswith("| Model | Provider | v5, the lines port | v4, the wind port")
-    assert only.startswith("| B | P | 0.600 | 0.900 | 0.900 | 0.900 | **0.825** | 60 of 60")
+    assert only.startswith("| B | P | 0.600 | 0.900 | 0.900 | 0.900 | **0.840** | 75 of 75")
+    running_a = lines_b | {"model": "a", "model_name": "A", "weeks": 9, "feasible": 9}
+    head, _, *both = hub.summary_markdown([*rows, lines_b, running_a]).splitlines()
+    assert "v5" not in head and len(both) == 2
 
 
 def test_the_card_carries_each_versions_board_between_its_markers():
