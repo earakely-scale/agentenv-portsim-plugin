@@ -119,7 +119,7 @@ This dataset holds the weeks and the recorded runs of that environment on the
   agent, the firm the port's 2024 record names for its call, is its own A2A agent, which the planner messages with a
   `message_agent` tool. The agents' ETAs firm up as their ships near, a ship agrees a requested arrival time when it
   can make it by slowing down, ships berth first come, first served, and an hour at anchor costs what an hour late
-  does. The week is graded against the best online player, not the clairvoyant optimum
+  does. As in v4, the week is graded against the lower of the hindsight optimum and a re-planner's best cost
   ([The lines port](#the-lines-port-v5)).
 - **v4, the wind port** (env `portsim-wind`): v3's marine week moved into a real Barcelona weather week of 2023 to 2025.
   The wind that blew at Meteocat's station Y7, standing in for the Dique Sur anemometer of the port's traffic
@@ -185,11 +185,12 @@ the wind week:
 ETA that proves wrong is not news, so the excuse never waives it: a ship that arrives later than its agent said berths
 when it gets in, and the lateness, clashes and queue breaks that follow are charged, unless the planner agreed that
 ship's arrival. Rewards are scored against the
-**anchor**, the best cost of the **follower** over its 4 solver configurations: a CP-SAT re-planner that re-plans at
-every watch on the arrivals as known and requests arrival times through the agents, for each ship whose window would
-freeze before the next watch, each ship it plans to slow and each ship due within 12 hours of the next watch. The
-**hindsight** optimum knows every arrival and slows ships from the first watch it could ask, which no player learning
-arrivals as they come can, so it is a lower bound, not the anchor; it is below the anchor in all 15 weeks. The
+**anchor**, as in v4 the lower of the **hindsight** optimum's cost and the **follower**'s best over its 4 solver
+configurations. Hindsight knows every arrival and slows ships from the first watch it could ask; it is the anchor in
+all 15 weeks, and planners that lock arrivals through the agents play close to it. The follower is a CP-SAT re-planner
+that re-plans at every watch on the arrivals as known and requests arrival times through the agents, for each ship
+whose window would freeze before the next watch, each ship it plans to slow and each ship due within 12 hours of the
+next watch; its best cost is 1.05 to 5.75 times hindsight's. The
 **silent** follower re-plans the same way but never asks the agents, and the naive policy is v2's. A week qualifies
 when (a) at least 3 of the follower's 4 configurations finish feasible, (b) the silent follower scores 0.9 or less in
 at least 3 of its 4, so asking the agents matters, and (c) the week has at most 10 watches; all 15 wind weeks do.
@@ -234,7 +235,7 @@ own, one family per version:
 | `v5_tasks` (default) | `eval` | 15 | the lines weeks: what the agent is told at the start, with the ships' agents and the arrivals as known, each watch's news with the agents' ETA reports and Port Control's forecast, the wind that blew, and the reference costs |
 | `results` | `eval` | 38 | the model board: one row per version and model, with its mean reward over the weeks and its 95% CI, each tier's mean, and how many weeks it finished, kept feasible and played to the optimum (v4 and v5: the anchor), with its tokens, cost and time ([Results](#results)) |
 | `v5_episodes` | `eval` | – | models on the lines weeks: the grade, the hours ships waited at anchor, every request to the ships' agents with its reply, the tool calls and the full transcript |
-| `v5_references` | `eval` | 15 | for each lines week, the hindsight lower bound, the follower, the silent follower and the naive policy, and the conditions it qualified on |
+| `v5_references` | `eval` | 15 | for each lines week, the hindsight optimum, the follower, the silent follower and the naive policy, and the conditions it qualified on |
 | `v4_tasks` | `eval` | 15 | the wind weeks: what the agent is told at the start, each watch's news with Port Control's forecast, the wind that blew, and the reference costs |
 | `v4_episodes` | `eval` | 180 | twelve models on the wind weeks, once each: the grade, the tool calls and the full transcript |
 | `v4_references` | `eval` | 15 | for each wind week, the hindsight optimum, the forecast-following and forecast-blind re-planners and the naive policy, and the conditions it qualified on |
@@ -317,12 +318,12 @@ pack, which all five versions use, not this dataset's version.
 - **Optimum**: the cost of the best plan CP-SAT, a constraint solver, finds for the week as it really happened. A
   **solver configuration** is one of the 4 ways the references run CP-SAT: 1 or 8 workers, each with or without an
   earliest-finish tie-break. **Hindsight** (v4, v5): that optimum with the whole week known, in the wind that blew; in
-  v5 it also knows every arrival and slows ships from the first watch it could ask, which makes it a lower bound.
+  v5 it also knows every arrival and slows ships from the first watch it could ask.
   **Anchor** (v4, v5): what the week scores against, its `optimal_cost`. In v4, the lower of the hindsight optimum and
   the forecast-following re-planner's best cost over its 4 solver configurations: the agent's cost is net of its
   excuses while hindsight pays for all the wind, so following the forecast can cost less than hindsight, and the
-  anchor is below it in 5 of the 15 wind weeks. In v5, the follower's best cost over its 4 solver configurations,
-  since no player learning arrivals as they come can know what hindsight knows.
+  anchor is below it in 5 of the 15 wind weeks. In v5, the lower of the hindsight optimum and the follower's best
+  cost over its 4 solver configurations: hindsight in all 15 lines weeks.
 - **Rolling**: a CP-SAT re-planner that only knows what has been announced; in v4 that includes the forecast, so it
   is the forecast-following re-planner. **Blind** (v4): the same re-planner with the wind taken out of the week as
   known. **Hold** (v4, the false-alarm week): the same, holding every window any forecast so far has shown.
@@ -488,7 +489,7 @@ lists every option. The plugin README covers sweeps and filming a run.
 - v3 to v5: `pilots` and `tugs` (the pools on duty), `other_movements` (the number of berthings and departures of the
   port's other traffic the pools also serve; the movements themselves are in `task`). v3 only: `v2_optimal_cost` (the
   same week's optimum without pilots and tugs).
-- v4 and v5: `schedule` (the marine week it is built on), `hindsight_cost` (in v5, the lower bound), `weather_id`
+- v4 and v5: `schedule` (the marine week it is built on), `hindsight_cost`, `weather_id`
   (`e00` to `e15`), `weather_week` (the ISO week, e.g. `2023-W10`), `weather_monday_utc`, `weather_kind` (`storm` or
   `bust`), and `wind_windows`: the windows that blew, each with its `start` and `end` hour, `above_kn` (25 or 30) and
   `unvalidated`, the share of its Y7 readings not yet validated. The grade reads them; the agent sees only the wind
@@ -550,7 +551,7 @@ columns (`optimal_cost` is the anchor) and `schedule`, `weather`, `kind`, `hinds
 `clauses` (whether the week meets each of the four conditions above, `a` to `d`); in the false-alarm week, the
 hold-every-warning re-planner's `hold_cost` to `hold_excused_cost`, empty in the storm wind weeks. v5 has one row per
 lines week, with the same columns as v2's, where `optimal_cost` is the anchor and `rolling_*` the follower in its
-first solver configuration, and `hindsight_cost` (the lower bound), `wind_optimal_cost` (the week's anchor in the wind
+first solver configuration, and `hindsight_cost`, `wind_optimal_cost` (the week's anchor in the wind
 port), `ships`, `firms` (the number of its ships' agents), the silent follower's `silent_cost` to
 `silent_excused_cost`, each player's hours at anchor (`rolling_anchor_hours`, `silent_anchor_hours`,
 `naive_anchor_hours`), `rolling_exchanges` (the follower's requests to the agents: the watch, the ship, the hour
@@ -590,9 +591,9 @@ don't carry over either: on v1, GLM-5.3-Flash scores above GLM-5.3; here it scor
 <!-- /board:all -->
 
 **v5, the lines port**, one run per model and week, on the same harness, prompts, tools and limits as v4, with
-`message_agent` and 72 turns a week. On the same weeks the follower scores 0.857 in its first solver configuration
-(1.000 at its best, the anchor), the silent follower 0.116 and the naive policy 0.137; neither of those two keeps a
-week feasible.
+`message_agent` and 72 turns a week. On the same weeks the follower scores 0.485 in its first solver configuration
+(0.531 at its best), the silent follower 0.116 and the naive policy 0.137; neither of those two keeps a week
+feasible.
 
 <!-- board:v5 -->
 

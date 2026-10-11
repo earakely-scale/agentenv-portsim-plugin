@@ -3,7 +3,7 @@ per attempt, retried and resumed from results.jsonl; and the report against the 
 the live weeks on portsim-live, reported against the stored rolling and naive references; with --marine, the marine
 weeks on portsim-marine, against theirs; with --wind, the wind weeks on portsim-wind, against the hindsight optimum, the
 anchor and the rolling, blind, hold-every-warning and naive references; with --lines, the lines weeks on portsim-lines,
-against the hindsight lower bound, the anchor and the follower, silent and naive references.
+against the hindsight optimum, the anchor and the follower, silent and naive references.
 
 G2_TASKS is fixed from the pack alone: the tiers share ten slots by largest remainder, and each tier gives the midpoints
 of equal slices of its tasks ordered by ship count."""
@@ -742,7 +742,7 @@ def wind_report(sweeps: list[Sweep]) -> str:
 
 
 class Lines(Wind):
-    """Lines sweeps pooled per model and week, next to the hindsight lower bound, the anchor the rewards are scored
+    """Lines sweeps pooled per model and week, next to the hindsight optimum, the anchor the rewards are scored
     against, and the follower, silent and naive references of the same weeks, with each model's hours at anchor and
     messages to the ships' agents."""
 
@@ -758,7 +758,7 @@ class Lines(Wind):
 
 
 def lines_report(sweeps: list[Sweep]) -> str:
-    """results/lines.md: each model's scored lines weeks next to the hindsight lower bound, the anchor and the
+    """results/lines.md: each model's scored lines weeks next to the hindsight optimum, the anchor and the
     references of the same weeks. A week's value is the mean of its scored reps across the sweeps; the CIs bootstrap
     over weeks."""
     pooled = Lines(sweeps)
@@ -766,11 +766,11 @@ def lines_report(sweeps: list[Sweep]) -> str:
                             "Harness: portsim-llm, with each ship's agent a portsim-line agent it can message. "
                             "References, on the same weeks (data/lines/references.jsonl): hindsight, the clairvoyant "
                             "CP-SAT optimum that knows every arrival and slows ships from the first watch it could "
-                            "ask, a lower bound; the anchor that rewards and regret are scored against, the best cost "
-                            "of the follower's four solver configurations; the follower, in its first configuration, "
-                            "which re-plans at every watch on the arrivals as known and requests arrival times "
-                            "through the ships' agents; silent, the same never asking them; and the naive online "
-                            "policy."),
+                            "ask; the anchor that rewards and regret are scored against, the lower of that cost and "
+                            "the follower's best over its four solver configurations; the follower, in its first "
+                            "configuration, which re-plans at every watch on the arrivals as known and requests "
+                            "arrival times through the ships' agents; silent, the same never asking them; and the "
+                            "naive online policy."),
              "", "## Per model", "",
              "| Model | Tasks | Runs scored/planned | Mean reward (95% CI) | Follower reference | Silent reference "
              "| Naive reference | Reached done per rep | Feasible | At the anchor | Mean regret vs anchor "
@@ -779,7 +779,7 @@ def lines_report(sweeps: list[Sweep]) -> str:
              "|---|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---:|---:|---:|",
              *(pooled.model_line(m) for m in pooled.models),
              "", "## Week by week", "",
-             "Hindsight as its cost, a lower bound; the anchor and the references as cost (reward).",
+             "Hindsight as its cost; the anchor and the references as cost (reward).",
              *(line for m in pooled.models for line in pooled.weeks(m)),
              "", "## Unscored runs", "", *pooled.unscored(),
              "", "## Runs whose agent reward differs from the verifier's", "",
@@ -838,7 +838,7 @@ def run_command(name: str, models: str, task_spec: str, cap_usd: float, k: int, 
 @click.option("--wind", is_flag=True,
               help="Report wind sweeps against the hindsight optimum, the anchor and the wind references.")
 @click.option("--lines", is_flag=True,
-              help="Report lines sweeps against the hindsight lower bound, the anchor and the follower, silent and "
+              help="Report lines sweeps against the hindsight optimum, the anchor and the follower, silent and "
                    "naive references.")
 @click.option("--out", type=click.Path(dir_okay=False, path_type=Path),
               help="The Markdown file to write. Default: results/parity.md, or results/live.md with --live, "
@@ -847,7 +847,7 @@ def report_command(names: tuple[str, ...], live: bool, marine: bool, wind: bool,
     """Compare the sweeps NAMES with the published dock-eval50 run, per model, tier and week; with --live, the live
     sweeps with the rolling and naive references, per model and week; with --marine, the marine sweeps with theirs;
     with --wind, the wind sweeps with the hindsight optimum, the anchor and the wind references; with --lines, the
-    lines sweeps with the hindsight lower bound, the anchor and the lines references."""
+    lines sweeps with the hindsight optimum, the anchor and the lines references."""
     if len(picked := [f for f, on in (("--wind", wind), ("--marine", marine), ("--lines", lines)) if on]) > 1:
         raise click.UsageError(f"{' and '.join(picked)} report different envs: pick one")
     sweeps = [load(name) for name in names]

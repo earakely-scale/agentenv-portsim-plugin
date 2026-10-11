@@ -273,8 +273,8 @@ def test_the_lines_report_against_the_hindsight_bound_the_anchor_and_the_lines_r
         "Sweeps: `lines-pilot` (anthropic/claude-sonnet-5-5, openai/gpt-6.1-sol; 3 tasks, k=2, episode cap $5).",
         "Harness: portsim-llm, with each ship's agent a portsim-line agent it can message. References, on the same "
         "weeks (data/lines/references.jsonl): hindsight, the clairvoyant CP-SAT optimum that knows every arrival and "
-        "slows ships from the first watch it could ask, a lower bound; the anchor that rewards and regret are scored "
-        "against, the best cost of the follower's four solver configurations; the follower, in its first "
+        "slows ships from the first watch it could ask; the anchor that rewards and regret are scored against, the "
+        "lower of that cost and the follower's best over its four solver configurations; the follower, in its first "
         "configuration, which re-plans at every watch on the arrivals as known and requests arrival times through the "
         "ships' agents; silent, the same never asking them; and the naive online policy.", ""]
     assert found[5].endswith("Attempts: 5, retries: 1. Unscored runs: 8 of 12.")
@@ -301,7 +301,7 @@ def test_the_lines_report_against_the_hindsight_bound_the_anchor_and_the_lines_r
     assert (f"| {a} | {weather[a]} | {week.difficulty} | {len(week.ships)} | {len(ref['watch_hours'])} "
             f"| {ref['hindsight_cost']} | {ref['optimal_cost']} (1.000) | {sweep._reference(ref['rolling'])} "
             f"| {sweep._played(ref['silent'])} | {sweep._reference(ref['naive'])} | 0.900 | 1.000 | 0.950 ") in text
-    assert "Hindsight as its cost, a lower bound; the anchor and the references as cost (reward)." in found
+    assert "Hindsight as its cost; the anchor and the references as cost (reward)." in found
     unscored = found[found.index("## Unscored runs") + 4:found.index("## Runs whose agent reward differs from the "
                                                                      "verifier's") - 1]
     assert unscored == [f"| lines-pilot | {model} | {t} | {rep} | 0 | not run | $0.00 |" for model, t, rep in (

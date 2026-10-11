@@ -8,8 +8,9 @@ through the agents as the env's planner would: for each ship whose window would 
 ship it plans to slow, and each ship due within 12 hours of the next watch, which could otherwise arrive early unseen
 and hold up the queue; a refusal is a fact it keeps, and it probes until the ship agrees an hour, then re-plans, four
 rounds at most. The silent follower re-plans the same way but never asks. The naive policy is v2's. A week's reference
-cost, its anchor, is the follower's best over its four solver configurations, since no player that learns arrivals as
-they come can know what the hindsight optimum knows. A week qualifies when (a) at least 3 of the follower's
+cost, its anchor, is the lower of the hindsight optimum's cost and the follower's best over its four solver
+configurations, as in the wind port; planners that learn arrivals as they come play close to hindsight. A week
+qualifies when (a) at least 3 of the follower's
 configurations finish feasible, (b) the silent follower scores at most 0.9 in at least 3 of 4, so asking the agents
 matters, and (c) it has at most 10 watches.
 
@@ -416,7 +417,7 @@ def screened(task: Task) -> dict:
     if not costs:
         return row | {"hindsight_cost": best, "error": "no follower configuration finished feasible",
                       "configs": [r for r, _, _ in follow], "qualifies": False}
-    anchor = min(costs)
+    anchor = min([best, *costs])
     final = replace(task, reference=task.reference | {"optimal_cost": anchor, "optimal_plan": plan_to_list(plan),
                                                       "lower_bound": best, "proven_optimal": False,
                                                       "hindsight_arrivals": [arrivals[s.id] for s in task.ships]})

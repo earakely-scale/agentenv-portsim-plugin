@@ -39,8 +39,8 @@ V4.1 Flash on Fireworks; and Qwen3.8-27B on Groq.
   port's 2024 record names for its call, is its own A2A agent, which the planner messages: the agents report ETAs that
   firm up as their ships near, and a ship agrees a requested arrival time when it can make it by slowing down. Ships
   berth first come, first served, a ship slowed on request keeping its turn, and an hour at anchor costs what an hour
-  late does. The week is graded against the best online player, a re-planner that follows the agents' ETAs and asks
-  for arrival times; the clairvoyant optimum, which knows every arrival, is only a lower bound.
+  late does. As in v4, the week is graded against the lower of the hindsight optimum, which knows every arrival, and
+  the best cost of a re-planner that follows the agents' ETAs and asks for arrival times.
 - **v4, the wind port:** the marine week in real Barcelona wind. Each week is moved into a real weather week of 2023
   to 2025, and the wind that blew at Meteocat's XEMA station Y7 (Bocana Sud), standing in for the Dique Sur
   anemometer of the port's traffic ordinance, sets its no-movement windows: above 25 kn ships of 300 m or more may not

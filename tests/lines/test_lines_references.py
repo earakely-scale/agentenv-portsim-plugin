@@ -80,11 +80,11 @@ def test_the_silent_follower_and_the_naive_policy_replay_to_their_outcomes(ref):
 
 
 @pytest.mark.parametrize("ref", REFS)
-def test_the_anchor_is_the_followers_best_and_the_hindsight_optimum_its_lower_bound(ref):
+def test_the_anchor_is_the_lower_of_the_hindsight_optimum_and_the_followers_best(ref):
     task = PACK[ref["task_id"]]
     costs = [c["cost"] for c in ref["configs"] if c["cost"] is not None]
-    assert ref["optimal_cost"] == min(costs) == task.reference["optimal_cost"]
-    assert ref["hindsight_cost"] == task.reference["lower_bound"] <= ref["optimal_cost"]
+    assert ref["optimal_cost"] == min([ref["hindsight_cost"], *costs]) == task.reference["optimal_cost"]
+    assert ref["hindsight_cost"] == task.reference["lower_bound"]
     assert task.reference["proven_optimal"] is False
 
 

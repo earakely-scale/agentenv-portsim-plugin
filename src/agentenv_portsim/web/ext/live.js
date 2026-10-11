@@ -223,17 +223,17 @@ function gradeRows(gradeEl, ro, task) {
   ];
   if (wind) for (const dt of kv.querySelectorAll("dt")) if (dt.textContent === "Optimum") {
     dt.textContent = "Anchor";
-    dt.title = lines ? "The best cost of the follower's four solver configurations" : "The lower of the best plan in hindsight and the forecast-following re-planner's cost";
+    dt.title = lines ? "The lower of the best plan in hindsight and the follower's best cost" : "The lower of the best plan in hindsight and the forecast-following re-planner's cost";
   }
   kv.insertAdjacentHTML("beforeend", rows.map(([k, v, tip]) => `<dt title="${escapeHtml(tip)}">${escapeHtml(k)}</dt><dd>${v}</dd>`).join(""));
 }
 
 /** A wind week's other references: the optimum in hindsight, and the re-planner blind to the forecast or holding every
- * warning; a lines week's: hindsight, a lower bound, and the follower that never asks the ships' agents. */
+ * warning; a lines week's: hindsight, and the follower that never asks the ships' agents. */
 function extraRows(ref) {
   if (ref.hindsight_cost == null) return [];
   if (ref.silent) return [
-    ["Hindsight", fmtNum(ref.hindsight_cost), "The clairvoyant optimum that knows every arrival and slows ships from the first watch it could ask: a lower bound"],
+    ["Hindsight", fmtNum(ref.hindsight_cost), "The best plan in hindsight, knowing every arrival and slowing ships from the first watch it could ask"],
     ["Silent re-plan", replanHtml(ref.silent), "The follower never asking the ships' agents"],
   ];
   return [
