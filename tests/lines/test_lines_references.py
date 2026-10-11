@@ -1,6 +1,9 @@
 """data/lines/references.jsonl replayed without ortools: the follower's stored plans and requests, the silent follower's
-plans and the naive policy reproduce their stored outcomes through the lines week, the pack carries the anchor and the
-hindsight optimum, and a week qualifies by its three clauses."""
+plans and the naive policy reproduce their stored outcomes through the lines week, the follower takes each counter-offer
+at once, the pack carries the anchor and the hindsight optimum, which slows a ship from the watch that brings its news,
+and a week qualifies by its three clauses."""
+
+from collections import Counter
 
 import pytest
 from berth_core import plan_from_list
@@ -88,16 +91,41 @@ def test_the_anchor_is_the_lower_of_the_hindsight_optimum_and_the_followers_best
     assert task.reference["proven_optimal"] is False
 
 
+def test_every_week_qualifies_and_the_follower_beats_hindsight_only_where_the_news_excuses_more_of_its_cost():
+    """The hindsight player slows a ship only from the watch that brings its news; the follower's agreements made
+    before it may lapse, and v4's rule lets the news excuse what follows. Asking the agents pays: the follower averages
+    0.564, the silent follower 0.107 and the naive policy 0.075."""
+    assert all(r["qualifies"] for r in REFERENCES)
+    assert [r["task_id"] for r in REFERENCES if r["optimal_cost"] < r["hindsight_cost"]] == [
+        "dock-24B-w06x1-busy-0-e15", "dock-24B-w07x1-busy-0-e08"]
+    assert [round(sum(r[k]["reward"] for r in REFERENCES) / len(REFERENCES), 3)
+            for k in ("rolling", "silent", "naive")] == [0.564, 0.107, 0.075]
+
+
+def test_the_follower_takes_each_counter_offer_at_once():
+    offers = []
+    for ref in REFERENCES:
+        exchanges = replayed(PACK[ref["task_id"]], ref["rolling"]).exchanges
+        for asked, then in zip(exchanges, [*exchanges[1:], None], strict=True):
+            if not asked["reply"]["agreed"]:
+                offers.append("earliest" if "earliest" in asked["reply"] else "latest")
+                assert (then["watch"], then["ship"], then["arrival"], then["reply"]["agreed"]) == (
+                    asked["watch"], asked["ship"], asked["reply"][offers[-1]], True)
+    assert Counter(offers) == {"earliest": 203, "latest": 22}
+
+
 @pytest.mark.parametrize("ref", REFS)
-def test_the_hindsight_plan_grades_at_the_lower_bound_with_each_ship_slowed_from_the_first_watch_it_was_known(ref):
+def test_the_hindsight_plan_grades_at_the_lower_bound_with_each_ship_slowed_from_the_watch_that_brings_its_news(ref):
     """Each ship arrives at its berth hour when it can, no earlier than at cruising speed and no later than the slowest
-    it could still reach from the first watch the planner knew of it: no ship waits that need not."""
+    it could still reach from the watch that brings its news, or from hour 0 for a ship with none: no ship waits that
+    need not."""
     task = PACK[ref["task_id"]]
     plan, week, first = plan_from_list(task.reference["optimal_plan"]), LinesWeek(task), lines.first_known(task)
+    assert set(first.values()) <= {w.hour for w in week.watches}
     arrivals = {}
     for s in task.ships:
-        asked = next((w.hour for w in week.watches if w.hour >= first.get(s.id, 0)), None)
-        latest = s.arrival if asked is None or asked >= s.arrival else week.reach(s.id, asked)[1]
+        asked = first.get(s.id, 0)
+        latest = s.arrival if asked >= s.arrival else week.reach(s.id, asked, s.arrival)[1]
         arrivals[s.id] = min(max(plan[s.id][0], s.arrival), latest)
     truth = lines.with_arrivals(task, arrivals, {s.id: s.arrival for s in task.ships})
     res = lines.evaluate(truth, plan)

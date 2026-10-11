@@ -39,13 +39,13 @@ def test_with_arrivals_sets_each_ships_arrival_and_turn_and_nothing_else():
 
 def test_a_window_that_starts_before_its_ship_gets_in_begins_when_it_does():
     truth = cruising(E15)
-    assert truth.ships[3].arrival == 36
-    assert lines.executed(truth, {3: (30, 3, 1)}) == {3: (36, 3, 1)}
-    assert lines.executed(truth, {3: (36, 3, 1), 4: (60, 7, 4)}) == {3: (36, 3, 1), 4: (60, 7, 4)}
-    early, slid = marine.evaluate(truth, {3: (30, 3, 1)}).ships[3], lines.evaluate(truth, {3: (30, 3, 1)}).ships[3]
+    assert truth.ships[3].arrival == 47
+    assert lines.executed(truth, {3: (40, 3, 1)}) == {3: (47, 3, 1)}
+    assert lines.executed(truth, {3: (47, 3, 1), 4: (60, 7, 4)}) == {3: (47, 3, 1), 4: (60, 7, 4)}
+    early, slid = marine.evaluate(truth, {3: (40, 3, 1)}).ships[3], lines.evaluate(truth, {3: (40, 3, 1)}).ships[3]
     assert [world.rule(p) for p in early.problems] == ["arrival"]
-    on_time = marine.evaluate(truth, {3: (36, 3, 1)}).ships[3]
-    assert (slid.berth_hour, slid.problems, slid.cost) == (36, [], on_time.cost)
+    on_time = marine.evaluate(truth, {3: (47, 3, 1)}).ships[3]
+    assert (slid.berth_hour, slid.problems, slid.cost) == (47, [], on_time.cost)
 
 
 def test_a_slid_window_also_waits_out_the_wind_that_holds_its_ship():
@@ -64,7 +64,7 @@ def test_a_slid_window_also_waits_out_the_wind_that_holds_its_ship():
 
 def test_executed_passes_unknown_ship_ids_through():
     plan = {3: (30, 3, 1), len(E15.ships): (5, 2, 2), 99: (0, 4, 1), -1: (3, 1, 1)}
-    assert lines.executed(cruising(E15), plan) == plan | {3: (36, 3, 1)}
+    assert lines.executed(cruising(E15), plan) == plan | {3: (47, 3, 1)}
 
 
 @pytest.mark.parametrize("task", WEEKS)
@@ -98,25 +98,25 @@ def test_the_grade_runs_each_window_from_when_its_ship_gets_in_and_never_charges
 
 
 def test_no_ship_starts_while_one_earlier_in_the_queue_waits_at_anchor_unless_the_wind_holds_it():
-    """CMA CGM DALILA (334 m, turn 24) waits at anchor for hour 47; STEEN (138 m, turn 36) may not berth before it at
-    hour 43, but may at 45, when the wind above 25 kn holds the long ship and not the short one."""
+    """NAGOYA EXPRESS (335 m, turn 89) waits at anchor for hour 107; CAPE CITIUS (186 m, turn 92) may not berth before
+    it at hour 95, but may at 100, when the wind above 25 kn holds the long ship and not the short one."""
     truth = cruising(E15)
-    dalila, steen = truth.ships[2], truth.ships[3]
-    assert (dalila.length_m >= 300 > steen.length_m, dalila.arrival, steen.arrival) == (True, 24, 36)
-    assert (44, 47) in truth.no_move_windows(dalila) and (44, 47) not in truth.no_move_windows(steen)
-    jumped = lines.evaluate(truth, {2: (47, 7, 4), 3: (43, 3, 1)})
-    line = "berths at hour 43 while ship 2 CMA CGM DALILA, earlier in the queue, waits at anchor"
-    assert queue(jumped, 3) == [line] and queue(jumped, 2) == [] and not jumped.feasible
+    nagoya, citius = truth.ships[9], truth.ships[8]
+    assert (nagoya.length_m >= 300 > citius.length_m, nagoya.arrival, citius.arrival) == (True, 89, 92)
+    assert (97, 107) in truth.no_move_windows(nagoya) and (97, 107) not in truth.no_move_windows(citius)
+    jumped = lines.evaluate(truth, {9: (107, 15, 4), 8: (95, 8, 2)})
+    line = "berths at hour 95 while ship 9 NAGOYA EXPRESS, earlier in the queue, waits at anchor"
+    assert queue(jumped, 8) == [line] and queue(jumped, 9) == [] and not jumped.feasible
     assert world.rule(line) == "queue" and ("queue", r"earlier in the queue") in world.RULES
-    assert queue(lines.evaluate(truth, {2: (47, 7, 4), 3: (45, 3, 1)}), 3) == []
-    assert queue(lines.evaluate(truth, {2: (47, 7, 4), 3: (48, 3, 1)}), 3) == []
-    assert queue(lines.evaluate(truth, {2: (47, 7, 4), 3: (36, 3, 1)}), 3) == [
-        "berths at hour 36 while ship 2 CMA CGM DALILA, earlier in the queue, waits at anchor"]
+    assert queue(lines.evaluate(truth, {9: (107, 15, 4), 8: (100, 8, 2)}), 8) == []
+    assert queue(lines.evaluate(truth, {9: (107, 15, 4), 8: (108, 8, 2)}), 8) == []
+    assert queue(lines.evaluate(truth, {9: (107, 15, 4), 8: (92, 8, 2)}), 8) == [
+        "berths at hour 92 while ship 9 NAGOYA EXPRESS, earlier in the queue, waits at anchor"]
 
 
 def test_a_slowed_ship_keeps_its_turn_but_waits_in_the_queue_only_once_it_has_arrived():
     slowed = lines.with_arrivals(E15, CRUISING | {3: 50}, CRUISING)
-    assert (slowed.ships[3].arrival, slowed.rules["lines"]["turns"][3], slowed.ships[4].arrival) == (50, 36, 48)
+    assert (slowed.ships[3].arrival, slowed.rules["lines"]["turns"][3], slowed.ships[4].arrival) == (50, 47, 49)
     assert queue(lines.evaluate(slowed, {3: (60, 3, 1), 4: (50, 7, 4)}), 4) == [
         "berths at hour 50 while ship 3 STEEN, earlier in the queue, waits at anchor"]
     assert queue(lines.evaluate(slowed, {3: (60, 3, 1), 4: (49, 7, 4)}), 4) == []
@@ -127,15 +127,15 @@ def test_a_slowed_ship_keeps_its_turn_but_waits_in_the_queue_only_once_it_has_ar
 
 def test_only_the_first_ship_jumped_is_named():
     truth = cruising(E15)
-    res = lines.evaluate(truth, {1: (40, 9, 5), 2: (47, 7, 4), 3: (38, 3, 1)})
-    assert queue(res, 3) == ["berths at hour 38 while ship 1 NAVIOS INDIGO, earlier in the queue, waits at anchor"]
+    res = lines.evaluate(truth, {1: (50, 9, 5), 2: (55, 7, 4), 3: (48, 3, 1)})
+    assert queue(res, 3) == ["berths at hour 48 while ship 1 NAVIOS INDIGO, earlier in the queue, waits at anchor"]
 
 
 def test_an_eta_that_proved_wrong_is_charged_while_the_wind_no_forecast_showed_is_still_excused():
-    """Naive on e09: CARLOTA B's window froze at hour 87, the ETA its delay notice gave; it got in at 93, so its window
-    began then, and the lateness and the pilots it then lacked are charged, as the week as known then holds them too
-    with the truth's arrivals. MAERSK NUBA got in at 58 into wind no forecast showed: the wait to 62 and the tugs short
-    then are excused."""
+    """Naive on e09: NEXOE MAERSK's window froze at hour 24, after the ETA of hour 20 its agent gave; it got in at 44,
+    so its window began then, and the lateness, the clash with PERSEUS and the crane pool it then broke are charged, as
+    the week as known then holds them too with the truth's arrivals. MAERSK NUBA got in at 58 into wind no forecast
+    showed: the wait to 62 and the tugs short then are excused, as is NEXOE MAERSK's stay to 62."""
     views = []
 
     def policy(week: LinesWeek):
@@ -151,23 +151,24 @@ def test_an_eta_that_proved_wrong_is_charged_while_the_wind_no_forecast_showed_i
         known = week.past([e["event_id"] for e in week.log if e["watch"] <= decided], truth)
         return views[decided], known
 
-    eta, known = then(7)
-    assert (plan[7], next(s.arrival for s in eta.ships if s.id == 7), truth.ships[7].arrival, run[7]) == (
-        (87, 3, 1), 87, 93, (93, 3, 1))
-    assert lines.evaluate(eta, plan).ships[7].problems == []
-    late = lines.evaluate(truth, plan).ships[7]
-    assert late.problems == lines.evaluate(known, plan).ships[7].problems == [
-        "pilots short at hour 93: your ships need 2, 1 free"]
-    assert late.cost > lines.evaluate(eta, plan).ships[7].cost
-    assert {(7, late.problems[0]), (8, late.problems[0])} <= set(problems(week.grade["violations"]))
-    assert 7 not in week.excuses()[1]
+    eta, known = then(1)
+    assert (plan[1], next(s.arrival for s in eta.ships if s.id == 1), truth.ships[1].arrival, run[1]) == (
+        (24, 4, 2), 20, 44, (44, 4, 2))
+    assert lines.evaluate(eta, plan).ships[1].problems == []
+    late, held = lines.evaluate(truth, plan).ships[1], lines.evaluate(known, plan).ships[1]
+    assert [world.rule(p) for p in late.problems] == ["ship 4", "crane_pool", "moves", "tugs"]
+    assert [world.rule(p) for p in held.problems] == ["ship 4", "crane_pool"]
+    assert (lines.evaluate(eta, plan).ships[1].cost, held.cost, late.cost) == (120, 200, 205)
+    assert [v for v in problems(week.grade["violations"]) if v[0] == 1] == [(1, p) for p in late.problems[:2]]
     _, known = then(16)
     nuba = (lines.evaluate(known, plan).ships[16], lines.evaluate(truth, plan).ships[16])
     assert (plan[16], truth.ships[16].arrival, run[16], nuba[0].berth_hour) == ((57, 2, 2), 58, (62, 2, 2), 58)
     assert (57, 62) in truth.no_move_windows(truth.ships[16])
-    assert week.excuses()[1] == {16: nuba[1].cost - nuba[0].cost} and week.grade["excused_cost"] == 20
-    assert (16, "tugs short at hour 62: your ships need 3, 0 free") in problems(week.grade["excused"])
-    assert {world.rule(p) for _, p in problems(week.grade["excused"])} == {"no_move", "tugs"}
+    assert week.excuses()[1] == {1: late.cost - held.cost, 4: 20, 16: nuba[1].cost - nuba[0].cost} == {
+        1: 5, 4: 20, 16: 20}
+    assert week.grade["excused_cost"] == 45
+    assert (16, "tugs short at hour 62: your ships need 7, 0 free") in problems(week.grade["excused"])
+    assert {world.rule(p) for _, p in problems(week.grade["excused"])} == {"moves", "no_move", "tugs"}
     assert not week.grade["feasible"]
 
 
@@ -193,9 +194,9 @@ def test_the_floor_is_the_weeks_unavoidable_cost_at_cruising_speed(task):
 def test_slowing_a_ship_does_not_move_the_floor():
     def policy(week: LinesWeek):
         if week.watch == 0:
-            week.request("globalliner", 3, 42)
+            week.request("globalliner", 3, 53)
         return world.naive(week)
 
     week = world.play(E15, policy, week=LinesWeek)
-    assert (week.truth().ships[3].arrival, unavoidable_cost(week.truth())) == (42, 52)
-    assert week.grade["unavoidable_cost"] == unavoidable_cost(E15) == 48
+    assert (week.truth().ships[3].arrival, unavoidable_cost(week.truth())) == (53, 332)
+    assert week.grade["unavoidable_cost"] == unavoidable_cost(E15) == 308

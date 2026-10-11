@@ -15,7 +15,7 @@ from test_marine_viewer import opened
 from wind_fixtures import use
 
 from agentenv_portsim import lines, record
-from agentenv_portsim.episodes import MESSAGE_TOOL, ReplayError, Runs, env, week_of
+from agentenv_portsim.episodes import MESSAGE_TOOL, ReplayError, Runs, env, replay, week_of
 from agentenv_portsim.lines import LinesWeek
 from agentenv_portsim.schedule import LINES_ENV
 from agentenv_portsim.sweep import Sweep, results
@@ -63,6 +63,12 @@ def answered(e: dict) -> dict:
     return e["reply"] | {"asked": e["arrival"]}
 
 
+def basis(ship: int, watch: int) -> int:
+    """The arrival the ship's agent works from at the watch: the plan as it stood until its news, then the truth."""
+    pending = REF["watch_hours"][watch] < lines.first_known(TASK).get(ship, 0)
+    return lines.before_news(TASK, ship) if pending else TASK.ships[ship].arrival
+
+
 def played(policy: dict) -> dict:
     return {k: v for k, v in policy.items() if k not in ("plans", "configs", "exchanges")}
 
@@ -99,6 +105,18 @@ def test_a_lines_replay_gives_back_every_recorded_step_and_the_runs_grade(rollou
     assert [w["hour"] for w in rollout["live"]["watches"]] == REF["watch_hours"]
 
 
+def test_the_bulletins_leave_out_what_the_week_did_not_deliver(rollout):
+    """A repeat in one bulletin, and a report or call about an agreed ship once its agreed hour has passed, reach no
+    one: CMA CGM DALILA's call repeats its 24-hour report as the agreement at hour 24, and STEEN, agreed for 47, calls
+    in by the bulletin at 72."""
+    week, _, _ = replay(TASK, recorded()["messages"], LinesWeek)
+    assert [(b["event_id"], b["text"]) for b in rollout["live"]["bulletins"]] == [
+        (e["event_id"], e["text"]) for e in week.log if e["text"] is not None]
+    assert [(e["event_id"], e["hour"]) for e in week.log if e["text"] is None] == [
+        ("call-2-1", 24), ("eta-16-24", 72), ("call-3-1", 72), ("call-4-1", 72), ("call-6-1", 72), ("call-16-1", 72),
+        ("eta-8-24", 72), ("call-5-1", 96), ("call-7-1", 96)]
+
+
 def test_the_end_to_end_week_plays_the_follower_and_scores_its_reference(rollout):
     grade = rollout["final"]["grade"]
     assert (rollout["reward"], grade["cost"], grade["anchor_hours"]) == (
@@ -122,11 +140,14 @@ def test_each_message_is_a_step_with_the_replies_the_planner_got(rollout):
 
 
 def test_each_step_carries_this_watchs_exchanges_and_the_arrivals_agreed_so_far(rollout):
+    """An agreement leaves the list only when the ship's news undoes it: ONE FREEDOM's hour 67, made before its news,
+    which then put it in at 54 at the earliest and 62 at the latest."""
     agreed: set[int] = set()
+    lapsed = []
     for step in rollout["steps"]:
         known = {s["id"]: s["arrival"] for s in step["task"]["ships"]}
         assert all(e["watch"] == step["watch"] for e in step["lines"]["exchanges"])
-        assert {a["ship"] for a in step["lines"]["agreed"]} >= agreed
+        lapsed += [(step["watch"], s) for s in agreed - {a["ship"] for a in step["lines"]["agreed"]}]
         agreed = {a["ship"] for a in step["lines"]["agreed"]}
         assert all(known[a["ship"]] == a["arrival"] for a in step["lines"]["agreed"])
         assert [(a["ship"], a["arrival"]) for a in step["lines"]["arrivals"]] == list(known.items())
@@ -134,13 +155,19 @@ def test_each_step_carries_this_watchs_exchanges_and_the_arrivals_agreed_so_far(
     assert {a["ship"]: a["arrival"] for a in rollout["steps"][-1]["lines"]["agreed"]} == {
         e["ship"]: e["arrival"] for e in rollout["live"]["lines"]["exchanges"]
         if e["ask"] == "request_arrival" and e["reply"].get("agreed") is True}
+    assert lapsed == [(3, 6)] and lines.first_known(TASK)[6] == REF["watch_hours"][3]
+    assert [(e["watch"], e["arrival"]) for e in rollout["live"]["lines"]["exchanges"]
+            if e["ship"] == 6 and e["reply"]["agreed"]] == [(0, 67), (3, 62)]
 
 
 def test_the_end_to_end_week_slows_ships_that_keep_their_turns(rollout):
+    """A turn is the arrival the ship's agent works from: ONE FREEDOM's was 48 before its news, 54 after."""
     final, exchanges = rollout["steps"][-1]["lines"]["agreed"], rollout["live"]["lines"]["exchanges"]
     slowed = {a["ship"] for a in final if a["arrival"] > TASK.ships[a["ship"]].arrival}
-    assert slowed and all(e["reply"]["turn"] == TASK.ships[e["ship"]].arrival for e in exchanges
-                          if e["ship"] in slowed and e["reply"]["agreed"])
+    turns = [(e["ship"], e["reply"]["turn"]) for e in exchanges if e["ship"] in slowed and e["reply"]["agreed"]]
+    assert slowed and turns == [(e["ship"], basis(e["ship"], e["watch"])) for e in exchanges
+                                if e["ship"] in slowed and e["reply"]["agreed"]]
+    assert [t for s, t in turns if s == 6] == [48, 54]
 
 
 def test_a_reply_the_week_does_not_give_back_stops_the_replay(lines_runs, rollout):
@@ -194,11 +221,12 @@ def test_an_eta_query_and_another_firms_ship_replay_as_the_agent_answers(lines_r
     query = {"id": "query", "name": MESSAGE_TOOL, "arguments": json.dumps(
         {"agent": agent, "requests": [{"ship": ship, "ask": "eta"}, {"ship": other, "ask": "eta"}]})}
     reply = {"ship": ship, "name": TASK.ships[ship].name, "eta": agreed, "agreed": True,
-             "turn": TASK.ships[ship].arrival}
+             "turn": next(r["turn"] for r in json.loads(msgs[i]["content"])["replies"] if r["ship"] == ship)}
 
     def asked(eta: int) -> list[dict]:
         replies = [reply | {"eta": eta, "agreed_before": True},
-                   {"error": f"Error calling tool 'ship_status': ship {other} is not this agent's"}]
+                   {"error": f"Error calling tool 'ship_status': ship {other} {TASK.ships[other].name} is not this "
+                             f"agent's: {lines.firm_name(TASK, lines.firm(TASK, other))} handles it"}]
         return [*msgs[:a], msgs[a] | {"tool_calls": [*msgs[a]["tool_calls"], query]}, *msgs[a + 1:i + 1],
                 {"role": "tool", "tool_call_id": "query", "name": MESSAGE_TOOL,
                  "content": json.dumps({"agent": agent, "replies": replies, "text": ""})}, *msgs[i + 1:]]

@@ -22,6 +22,9 @@ def test_the_earlier_weeks_keep_v4s_timetable_and_hold_every_notice_to_its_lead(
     week = WindWeek(WIND.get(TASK_ID))
     assert week.watches == schedule.schedule(week.task)
     assert world.Week.evaluate is world.evaluate and lines.LinesWeek.evaluate is lines.evaluate
+    assert (world.Week.anchor_rows, MarineWeek.anchor_rows, WindWeek.anchor_rows, lines.LinesWeek.anchor_rows) == (
+        False, False, False, True)
+    assert world.Week.revealing is MarineWeek.revealing is WindWeek.revealing is not lines.LinesWeek.revealing
 
 
 def test_a_wind_weeks_target_is_the_week_as_known_until_it_is_done_then_the_truth():

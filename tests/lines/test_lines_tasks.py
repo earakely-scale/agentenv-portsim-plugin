@@ -99,20 +99,24 @@ def test_every_step_parses_with_agent_envs_step_types_keeping_what_it_sets():
 def test_the_watches_carry_the_agents_reports_after_each_bulletins_news():
     watches = BY_ID["watches"]
     assert (watches["watch_roles"], watches["triggers"]) == (["default"], triggers(lines.timetable(TASK)))
-    plain = triggers(schedule(TASK))
+    plain = triggers(schedule(lines.as_v4(TASK)))
     assert [t["id"] for t in watches["triggers"]] == [t["id"] for t in plain] == [f"watch-{k}" for k in range(1, 6)]
     for ours, theirs in zip(watches["triggers"], plain, strict=True):
         assert ours["actions"][:len(theirs["actions"])] == theirs["actions"]
         assert ours["when"] == theirs["when"] and ours["barrier"] == theirs["barrier"]
     assert [a["args"] for a in watches["triggers"][0]["actions"][len(plain[0]["actions"]):]] == [
-        {"event_id": "call-1-1", "name": "A. Pérez y Cía",
-         "text": "NAVIOS INDIGO (ship 1) calls in: at buoy S, arriving hour 7 (Mon 07:00)."},
+        {"event_id": "eta-2-24", "name": "CMA CGM Ibérica",
+         "text": "CMA CGM DALILA (ship 2): ETA Tue 01:00 (hour 25), as of Mon 01:00."},
+        {"event_id": "eta-4-48", "name": "COSCO Shipping Lines Spain",
+         "text": "SEASPAN OCEANIA (ship 4): ETA Wed 01:00 (hour 49), as of Mon 01:00."},
+        {"event_id": "eta-5-48-plan", "name": "Noatum Maritime",
+         "text": "NANTO (ship 5): ETA Wed 09:00 (hour 57), as of Mon 15:00."},
         {"event_id": "eta-3-24", "name": "Global Liner Agencias",
-         "text": "STEEN (ship 3): ETA Tue 08:00 (hour 32), as of Mon 12:00."},
+         "text": "STEEN (ship 3): ETA Tue 19:00 (hour 43), as of Mon 23:00."},
         {"event_id": "call-2-1", "name": "CMA CGM Ibérica",
-         "text": "CMA CGM DALILA (ship 2) calls in: at buoy S, arriving hour 24 (Tue 00:00)."},
-        {"event_id": "eta-4-24", "name": "COSCO Shipping Lines Spain",
-         "text": "SEASPAN OCEANIA (ship 4): ETA Wed 00:00 (hour 48), as of Tue 00:00."}]
+         "text": "CMA CGM DALILA (ship 2) calls in: at buoy S, arriving hour 25 (Tue 01:00)."},
+        {"event_id": "eta-6-24-plan", "name": "Ocean Network Express Spain",
+         "text": "ONE FREEDOM (ship 6): ETA Wed 06:00 (hour 54), as of Tue 00:00."}]
     assert {a["tool"] for t in watches["triggers"] for a in t["actions"]} == {"port_notice"}
 
 
@@ -133,13 +137,15 @@ def test_the_lines_rules_are_the_wind_rules_with_two_sentences_changed_and_the_a
         "",
         "The ships' agents:",
         "- Each ship's agent, the firm that deals with the port for its line, reports the ship's ETA 48 and 24 hours "
-        "out and calls in an hour before the ship arrives. ETAs are optimistic: most ships arrive later than their "
-        "agent says, by less as they near.",
-        "- message_agent(agent, requests) sends one agent requests for its ships: {\"ship\": 7, \"ask\": \"eta\"} for "
-        "the latest ETA, {\"ship\": 9, \"request_arrival\": 130} to ask the ship to arrive at that hour. The agent "
-        "agrees when the ship can make it at cruising speed, or by slowing once it has left its previous port; the "
-        "ship then arrives at that hour. A refusal says whether the ship can't arrive that early or can't slow down "
-        "that much.",
+        "out and calls in an hour before the ship arrives. The published schedule is the lines' estimate from about "
+        "three days out. Both are optimistic: most ships arrive later than they say, by less as they near.",
+        "- message_agent(agent, requests) sends one agent requests for its ships: {\"ship\": 7, \"ask\": \"eta\", "
+        "\"request_arrival\": null} for the latest ETA, {\"ship\": 9, \"ask\": null, \"request_arrival\": 130} to ask "
+        "the ship to arrive at that hour. The agent agrees when the ship can make it at cruising speed, or by slowing "
+        "once it has left its previous port; the ship then arrives at that hour. Otherwise it answers with the "
+        "earliest or the latest hour the ship can make.",
+        "- Until the port's news about a delayed ship, its agent works from the plan as it stood. The news keeps an "
+        "earlier agreement only if the ship can still make that hour; otherwise the agreement lapses.",
         "- A ship can't berth before it arrives: a window that starts earlier begins when the ship gets in, or once "
         "the wind lets it move, and the berth waits for it.",
         "- Ships berth first come, first served: no ship may start berthing while a ship earlier in the queue waits at "
@@ -156,8 +162,8 @@ def test_the_lines_rules_are_the_wind_rules_with_two_sentences_changed_and_the_a
     assert ours[len(wind_rules) - 1] == wind_rules[-1].replace(
         "Cost or rule breaks that news,",
         "An ETA that proves wrong is not news: a ship that arrives later than its agent said berths when it gets in, "
-        "and the lateness, clashes and queue breaks that follow are charged unless you agreed that ship's arrival. "
-        "Cost or rule breaks that news,")
+        "one that arrives earlier waits at anchor, and the lateness, hours at anchor, clashes and queue breaks that "
+        "follow are charged unless you agreed that ship's arrival. Cost or rule breaks that news,")
 
 
 def test_an_unscheduled_calls_firm_is_on_the_roster_from_the_start():
