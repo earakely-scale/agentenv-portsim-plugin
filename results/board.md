@@ -1,4 +1,4 @@
-# The model board: twelve models on the live, marine and wind ports, and the lines port
+# The model board: twelve models on the live, marine, wind and lines ports
 
 Between 7 and 9 October 2026 twelve models played every week of the live port (v2), the marine port (v3) and the
 wind port (v4) once each: 15 weeks a version, 540 runs. Every run is in the dataset
@@ -7,11 +7,8 @@ wind port (v4) once each: 15 weeks a version, 540 runs. Every run is in the data
 replays in the [Space](https://huggingface.co/spaces/earakely-scale/PortSimEnv-AgentEnv). The sweep reports, which
 count every attempt, are [wind.md](wind.md), [marine.md](marine.md) and [live.md](live.md).
 
-On 11 October 2026 seven of the twelve played every week of the lines port (v5) once each, 105 runs: Claude Opus,
-Sonnet and Haiku 5.5, GPT-6 Astra, GPT-6.1 Sol, GPT-6 Luna and Qwen3.8-27B (`v5_episodes`, `results/v5.json`; the
-sweep report is [lines.md](lines.md)). The five models on Fireworks are still playing it: they reason up to the
-32,000-token reply limit on most turns, so a lines week takes them an hour or more. The summary below covers v2 to v4
-until all twelve have played v5.
+On 11 October 2026 the same twelve played every week of the lines port (v5) once each, 180 runs
+(`v5_episodes`, `results/v5.json`; the sweep report is [lines.md](lines.md)).
 
 **Not comparable with PortSimEnv's v1 eval** ([FineEnvs/PortSimEnv-Eval](https://huggingface.co/spaces/FineEnvs/PortSimEnv-Eval)).
 These are new environments, played another way: the agent re-plans the week as it unfolds, with four tools
@@ -23,43 +20,48 @@ GLM-5.3; here it scores below. The plugin's like-for-like v1 check is in [parity
 
 ## Summary
 
-Mean reward on each version and over all 45 weeks (each week weighs the same), best first:
+Mean reward on each version and over all 60 weeks (each week weighs the same), best first:
 
-| Model | Provider | v4, the wind port | v3, the marine port | v2, the live port | All 45 weeks | Feasible weeks |
-|---|---|---:|---:|---:|---:|---:|
-| GPT-6 Astra | Azure OpenAI | 0.896 | 0.956 | 0.984 | **0.945** | 44 of 45 |
-| Claude Opus 5.5 | Anthropic | 0.906 | 0.951 | 0.976 | **0.944** | 45 of 45 |
-| Claude Sonnet 5.5 | Anthropic | 0.888 | 0.932 | 0.904 | **0.908** | 45 of 45 |
-| GPT-6.1 Sol | Azure OpenAI | 0.745 | 0.905 | 0.957 | **0.869** | 41 of 45 |
-| Claude Haiku 5.5 | Anthropic | 0.583 | 0.639 | 0.694 | **0.639** | 44 of 45 |
-| Qwen3.8-2.4T | Fireworks | 0.662 | 0.519 | 0.686 | **0.622** | 28 of 45 |
-| DeepSeek V4.1 Flash | Fireworks | 0.480 | 0.598 | 0.754 | **0.611** | 28 of 45 |
-| GLM-5.3 | Fireworks | 0.468 | 0.593 | 0.748 | **0.603** | 28 of 45 |
-| GLM-5.3-Flash | Fireworks | 0.328 | 0.461 | 0.470 | **0.420** | 18 of 45 |
-| Kimi K3 | Fireworks | 0.249 | 0.446 | 0.465 | **0.386** | 18 of 45 |
-| GPT-6 Luna | Azure OpenAI | 0.320 | 0.287 | 0.335 | **0.314** | 36 of 45 |
-| Qwen3.8-27B | Groq | 0.090 | 0.073 | 0.055 | **0.073** | 0 of 45 |
+| Model | Provider | v5, the lines port | v4, the wind port | v3, the marine port | v2, the live port | All 60 weeks | Feasible weeks |
+|---|---|---:|---:|---:|---:|---:|---:|
+| GPT-6 Astra | Azure OpenAI | 0.691 | 0.896 | 0.956 | 0.984 | **0.882** | 57 of 60 |
+| Claude Opus 5.5 | Anthropic | 0.315 | 0.906 | 0.951 | 0.976 | **0.787** | 50 of 60 |
+| GPT-6.1 Sol | Azure OpenAI | 0.394 | 0.745 | 0.905 | 0.957 | **0.750** | 49 of 60 |
+| Claude Sonnet 5.5 | Anthropic | 0.228 | 0.888 | 0.932 | 0.904 | **0.738** | 48 of 60 |
+| Claude Haiku 5.5 | Anthropic | 0.142 | 0.583 | 0.639 | 0.694 | **0.514** | 44 of 60 |
+| Qwen3.8-2.4T | Fireworks | 0.106 | 0.662 | 0.519 | 0.686 | **0.493** | 28 of 60 |
+| DeepSeek V4.1 Flash | Fireworks | 0.072 | 0.480 | 0.598 | 0.754 | **0.476** | 28 of 60 |
+| GLM-5.3 | Fireworks | 0.085 | 0.468 | 0.593 | 0.748 | **0.474** | 29 of 60 |
+| GLM-5.3-Flash | Fireworks | 0.096 | 0.328 | 0.461 | 0.470 | **0.339** | 18 of 60 |
+| Kimi K3 | Fireworks | 0.133 | 0.249 | 0.446 | 0.465 | **0.323** | 20 of 60 |
+| GPT-6 Luna | Azure OpenAI | 0.144 | 0.320 | 0.287 | 0.335 | **0.272** | 36 of 60 |
+| Qwen3.8-27B | Groq | 0.037 | 0.090 | 0.073 | 0.055 | **0.064** | 0 of 60 |
 
-1. **Two models share the top, a third close behind.** GPT-6 Astra and Claude Opus 5.5 are level over the 45 weeks,
-   their intervals overlapping in every version; Claude Sonnet 5.5 is level with them on the wind and marine weeks
-   and below them on the live ones. Opus and Sonnet broke no rule in any of their 45 weeks, Astra in one.
-2. **The best open models score like a small closed one, but break far more rules.** Over the 45 weeks Claude Haiku
+1. **GPT-6 Astra leads, on the lines port's strength.** Over v2 to v4 GPT-6 Astra and Claude Opus 5.5 are level, their
+   intervals overlapping in every version, and Claude Sonnet 5.5 is level with them on the wind and marine weeks; Opus
+   and Sonnet broke no rule in any of those 45 weeks, Astra in one. The lines port separates them: Astra scores 0.691
+   there, Opus 0.315 and Sonnet 0.228, so over the 60 weeks Astra leads and GPT-6.1 Sol passes Sonnet.
+2. **The best open models score like a small closed one, but break far more rules.** Over v2 to v4 Claude Haiku
    5.5 averages 0.639 and the three best open models, Qwen3.8-2.4T, DeepSeek V4.1 Flash and GLM-5.3, 0.603 to 0.622,
    within noise of it (DeepSeek and GLM-5.3 score above it on the live weeks, also within noise). But Haiku keeps 44
-   of its 45 weeks feasible, and each of them 28. The open models break a rule in 38% to 60% of their weeks, and
-   Qwen3.8-27B in every one.
-3. **The wind port is the hardest.** Eight of the twelve models score lower at each step from the live port to the
-   marine port to the wind port; GPT-6.1 Sol falls the most, from 0.957 to 0.745. The versions' weeks differ (the
-   wind weeks reuse 11 of the marine weeks' schedules), so this is a pattern across the sets, not a paired comparison.
+   of its 45 weeks feasible, and each of them 28. The open models break a rule in 38% to 60% of those weeks, and
+   Qwen3.8-27B in every one. On the lines port only GPT-6 Astra, GPT-6.1 Sol and Claude Opus and Sonnet 5.5 keep
+   more than 2 weeks feasible.
+3. **Each version is harder than the last.** Eight of the twelve models score lower at each step from the live port
+   to the marine port to the wind port, GPT-6.1 Sol falling the most, from 0.957 to 0.745. Those versions' weeks
+   differ (the wind weeks reuse 11 of the marine weeks' schedules), so that is a pattern across the sets, not a paired
+   comparison. The last step is paired: the lines weeks are the wind weeks with the ships' agents, and all twelve
+   models score lower on them.
 4. **What breaks is the schedule, not the weather.** The rule breaks are overlapping berths, more cranes than the quay
    has, ships berthed before they can arrive and ships left without a window; a wind window is broken in 6 of the
    180 wind runs.
 5. **Every model checks its drafts; not every model heeds the check.** All twelve call `check_plan` several times a
    week, but how often they confirm windows straight after a check that reported problems runs from at most 5% for
    Claude Opus 5.5 to 94% or more for Qwen3.8-27B.
-6. **GPT-6 Luna's plans are valid but costly:** feasible in 36 of its 45 weeks, yet 0.314 over them, because they
-   cost several times the optimum: on the wind weeks its mean regret against the anchor is 861, Claude Opus 5.5's 13.
-7. **The one model small enough to fine-tune cheaply never found a valid plan.** Qwen3.8-27B is 0 for 45: the
+6. **GPT-6 Luna's plans are valid but costly:** feasible in 36 of its 45 weeks on v2 to v4, yet 0.314 over them,
+   because they cost several times the optimum: on the wind weeks its mean regret against the anchor is 861, Claude
+   Opus 5.5's 13.
+7. **The one model small enough to fine-tune cheaply never found a valid plan.** Qwen3.8-27B is 0 for 60: the
    clearest headroom on the board for training on these weeks.
 
 ## Each version
@@ -78,6 +80,11 @@ ships' agents, scores 0.485 in its first solver configuration, the follower that
 | Claude Sonnet 5.5 | Anthropic | 15 of 15 | **0.228** (0.159 to 0.328) | 0.148 | 0.248 | 15 | 3 | 0 | 30 | $1.60 |
 | GPT-6 Luna | Azure OpenAI | 15 of 15 | **0.144** (0.132 to 0.156) | 0.166 | 0.138 | 14 | 0 | 0 | 34 | $0.06 |
 | Claude Haiku 5.5 | Anthropic | 15 of 15 | **0.142** (0.129 to 0.152) | 0.161 | 0.137 | 15 | 0 | 0 | 22 | $0.09 |
+| Kimi K3 | Fireworks | 15 of 15 | **0.133** (0.083 to 0.215) | 0.272 | 0.098 | 14 | 2 | 0 | 25 | $1.66 |
+| Qwen3.8-2.4T | Fireworks | 15 of 15 | **0.106** (0.072 to 0.135) | 0.095 | 0.108 | 10 | 0 | 0 | 36 | $2.73 |
+| GLM-5.3-Flash | Fireworks | 15 of 15 | **0.096** (0.070 to 0.119) | 0.122 | 0.090 | 13 | 0 | 0 | 25 | $0.14 |
+| GLM-5.3 | Fireworks | 15 of 15 | **0.085** (0.017 to 0.199) | 0.000 | 0.107 | 4 | 1 | 0 | 2 | $0.78 |
+| DeepSeek V4.1 Flash | Fireworks | 15 of 15 | **0.072** (0.037 to 0.108) | 0.046 | 0.078 | 6 | 0 | 0 | 15 | $0.30 |
 | Qwen3.8-27B | Groq | 15 of 15 | **0.037** (0.020 to 0.057) | 0.064 | 0.030 | 13 | 0 | 0 | 29 | $0.97 |
 
 How each model used the ships' agents, per week:
@@ -90,15 +97,21 @@ How each model used the ships' agents, per week:
 | Claude Sonnet 5.5 | 36.7 | 16.6 | 50% | 2.9 | 40 | 70 of 84 |
 | GPT-6 Luna | 3.4 | 2.0 | 11% | 0.2 | 323 | 121 of 126 |
 | Claude Haiku 5.5 | 8.1 | 3.2 | 14% | 8.7 | 71 | 123 of 141 |
+| Kimi K3 | 21.1 | 12.4 | 49% | 3.7 | 51 | 141 of 269 |
+| Qwen3.8-2.4T | 24.1 | 13.2 | 43% | 3.3 | 42 | 130 of 194 |
+| GLM-5.3-Flash | 22.2 | 10.3 | 43% | 1.5 | 21 | 145 of 209 |
+| GLM-5.3 | 9.5 | 4.4 | 13% | 0.1 | 4 | 238 of 241 |
+| DeepSeek V4.1 Flash | 3.5 | 1.5 | 6% | 4.8 | 18 | 217 of 221 |
 | Qwen3.8-27B | 0.1 | 0.0 | 0% | 0.1 | 151 | 633 of 633 |
 
 *Requests* counts every arrival hour asked for, refused ones included; *arrivals agreed* counts agreements, a ship
 agreed twice counting twice; *ships agreed* is the share of a week's ships with an agreed arrival.
 
 1. **Agreeing arrivals is what scores.** The two models that agree an arrival for nearly every ship lead; the two
-   that agree about half follow; the three that barely ask keep no week feasible. A ship left unagreed arrives late
-   more often than not, and when its window slides into another's the clash, crane shortage or queue break is
-   charged: most rule breaks land on such ships. GPT-6.1 Sol's are mostly its own clashes among ships it had agreed.
+   Claude models that agree about half follow; the models that barely ask keep no week feasible. A ship left unagreed
+   arrives late more often than not, and when its window slides into another's the clash, crane shortage or queue
+   break is charged: most rule breaks land on such ships. GPT-6.1 Sol's are mostly its own clashes among ships it had
+   agreed.
 2. **GPT-6 Astra leads clearly:** feasible in 13 of 15 weeks, at hindsight's cost in 3, and at or below the
    follower's cost in 10.
 3. **A late ship is a rule break, not a delay, so a few unagreed ships cap a week below 0.2.** On
@@ -106,8 +119,16 @@ agreed twice counting twice; *ships agreed* is the share of a week's ships with 
    hindsight's 413, but the four ships it hadn't agreed clash at the end of the week, and it scores 0.170. A
    re-planner that pads every unagreed ETA by 2.5 times its mean error is infeasible on all 15 weeks too.
 4. **The ranking moves from the wind port:** Claude Opus 5.5 and Claude Sonnet 5.5 (0.906 and 0.888 there) score
-   0.315 and 0.228, GPT-6.1 Sol 0.394 against its 0.745.
-5. **Hindsight can be beaten.** On `dock-24B-w37x1-standard-0-e01` GPT-6 Astra, GPT-6.1 Sol and Claude Opus 5.5 cost
+   0.315 and 0.228, GPT-6.1 Sol 0.394 against its 0.745. Kimi K3, the lowest of the five Fireworks models on the wind
+   port (0.249), is the best open model here (0.133).
+5. **Agreeing isn't enough for the open models.** Kimi K3 agrees about half a week's ships, as Claude Opus and Sonnet
+   5.5 do, but keeps only 2 weeks feasible: about half of its 269 rule breaks land on ships it had agreed.
+   Qwen3.8-2.4T and GLM-5.3-Flash agree 43% and keep none feasible.
+6. **Two open models mostly run out of reply.** In 11 of GLM-5.3's weeks and 9 of DeepSeek V4.1 Flash's, the model
+   reasoned past the 32,000-token reply limit twice in a row, which ends the episode, and the week ran on the windows
+   it had confirmed: none, in 10 of GLM-5.3's 11, which stopped at a median of 2 turns. The same ended 2 and 5 of
+   their wind weeks. These weeks are scored as played, as on the earlier ports.
+7. **Hindsight can be beaten.** On `dock-24B-w37x1-standard-0-e01` GPT-6 Astra, GPT-6.1 Sol and Claude Opus 5.5 cost
    316 to 341 against the hindsight plan's 376: that plan keeps the references' stricter queue and isn't proven
    optimal.
 

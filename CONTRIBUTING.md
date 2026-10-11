@@ -163,8 +163,8 @@ A release goes in this order:
 
    ```bash
    uv run python scripts/hub_dataset.py --out build/hub/dataset
-   uv run python scripts/hub_dataset.py --out build/hub/dataset --repo earakely-scale/PortSimEnv-AgentEnv --tag v0.5.1 \
-       --message "v0.5.1: ..."
+   uv run python scripts/hub_dataset.py --out build/hub/dataset --repo earakely-scale/PortSimEnv-AgentEnv --tag v0.5.2 \
+       --message "v0.5.2: ..."
    ```
 
    The first writes the folder and prints each table's row count. Every file goes through agentenv-hf's scan for this

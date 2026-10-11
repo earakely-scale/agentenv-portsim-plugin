@@ -9,7 +9,7 @@ from pathlib import Path
 
 import click
 from berth_core import MOVE_PENALTY, Plan, PlanError, Task, TaskPack, evaluate, grade, parse_plan, plan_to_list
-from pydantic import TypeAdapter
+from pydantic import TypeAdapter, ValidationError
 
 from . import lines, marine, tasks, wind
 from .lines import LinesWeek, step_lines
@@ -261,7 +261,7 @@ def replay(task: Task, messages: list[dict], week: type[Week] = Week) -> tuple[W
                 continue
             if call["name"] not in TOOLS or week.done or not isinstance(args := _parsed(call["arguments"]), dict):
                 continue
-            if call["name"] in ("check_plan", "confirm_berths") and "plan" not in args:
+            if call["name"] in ("check_plan", "confirm_berths") and not _plan_valid(args):
                 continue  # the tool's input schema refused it before the week saw it
             result, plan = play(week, call["name"], args)
             if _json(result) != m["content"]:
@@ -275,6 +275,14 @@ def replay(task: Task, messages: list[dict], week: type[Week] = Week) -> tuple[W
     if not week.done:
         week.end()
     return week, steps, opened
+
+
+def _plan_valid(args: dict) -> bool:
+    try:
+        ARGS.validate_python(args["plan"])
+    except (KeyError, ValidationError):
+        return False
+    return True
 
 
 def _parsed(value):
