@@ -1,0 +1,479 @@
+[
+  {
+    "id": "deploy",
+    "type": "deploy_env",
+    "env_id": "portsim-lines"
+  },
+  {
+    "id": "load-task",
+    "type": "apply_server_config",
+    "env_id": "portsim-lines",
+    "directives": [
+      {
+        "service": "portsim-lines",
+        "uri": "urn:portsim:live-load/v1",
+        "args": {
+          "task_id": "dock-24B-w06x1-busy-0-e15"
+        }
+      }
+    ]
+  },
+  {
+    "id": "hide-port-notice",
+    "type": "modify_env_tool_access",
+    "env_id": "portsim-lines",
+    "action": "disable",
+    "role": "default",
+    "tools": [
+      "port_notice",
+      "ship_status",
+      "agree_arrival"
+    ]
+  },
+  {
+    "id": "agents-only",
+    "type": "modify_env_tool_access",
+    "env_id": "portsim-lines",
+    "action": "disable",
+    "role": "line",
+    "tools": [
+      "*"
+    ]
+  },
+  {
+    "id": "agents-tools",
+    "type": "modify_env_tool_access",
+    "env_id": "portsim-lines",
+    "action": "enable",
+    "role": "line",
+    "tools": [
+      "ship_status",
+      "agree_arrival"
+    ]
+  },
+  {
+    "id": "watches",
+    "type": "register_env_triggers",
+    "env_id": "portsim-lines",
+    "watch_roles": [
+      "default"
+    ],
+    "triggers": [
+      {
+        "id": "watch-1",
+        "when": {
+          "type": "action",
+          "tool": "advance",
+          "where": {
+            "result.watch": {
+              "equals": 1
+            }
+          }
+        },
+        "barrier": {
+          "at": "provoking_call",
+          "timeout_seconds": 60
+        },
+        "actions": [
+          {
+            "type": "tool",
+            "tool": "port_notice",
+            "args": {
+              "event_id": "crane_outage-5",
+              "name": "Terminal ops",
+              "text": "2 of the terminal's 9 quay cranes are out of service from hour 49 to hour 83 (gantry repair): 7 cranes in that window."
+            }
+          },
+          {
+            "type": "tool",
+            "tool": "port_notice",
+            "args": {
+              "event_id": "forecast-10",
+              "name": "Barcelona Port Control",
+              "text": "Wind forecast issued Mon 21:00 (ECMWF, adjusted to the Dique Sur anemometer), to hour 84: no hour above 25 kn, peak 21 kn."
+            }
+          },
+          {
+            "type": "tool",
+            "tool": "port_notice",
+            "args": {
+              "event_id": "call-1-1",
+              "name": "A. Pérez y Cía",
+              "text": "NAVIOS INDIGO (ship 1) calls in: at buoy S, arriving hour 7 (Mon 07:00)."
+            }
+          },
+          {
+            "type": "tool",
+            "tool": "port_notice",
+            "args": {
+              "event_id": "eta-3-24",
+              "name": "Global Liner Agencias",
+              "text": "STEEN (ship 3): ETA Tue 08:00 (hour 32), as of Mon 12:00."
+            }
+          },
+          {
+            "type": "tool",
+            "tool": "port_notice",
+            "args": {
+              "event_id": "call-2-1",
+              "name": "CMA CGM Ibérica",
+              "text": "CMA CGM DALILA (ship 2) calls in: at buoy S, arriving hour 24 (Tue 00:00)."
+            }
+          },
+          {
+            "type": "tool",
+            "tool": "port_notice",
+            "args": {
+              "event_id": "eta-4-24",
+              "name": "COSCO Shipping Lines Spain",
+              "text": "SEASPAN OCEANIA (ship 4): ETA Wed 00:00 (hour 48), as of Tue 00:00."
+            }
+          }
+        ]
+      },
+      {
+        "id": "watch-2",
+        "when": {
+          "type": "action",
+          "tool": "advance",
+          "where": {
+            "result.watch": {
+              "equals": 2
+            }
+          }
+        },
+        "barrier": {
+          "at": "provoking_call",
+          "timeout_seconds": 60
+        },
+        "actions": [
+          {
+            "type": "tool",
+            "tool": "port_notice",
+            "args": {
+              "event_id": "late-3",
+              "name": "NANTO",
+              "text": "Ship 5 NANTO was delayed leaving Alicante: its agent now gives ETA hour 68 (planned slot hour 54). Its planned departure stays hour 67."
+            }
+          },
+          {
+            "type": "tool",
+            "tool": "port_notice",
+            "args": {
+              "event_id": "forecast-11",
+              "name": "Barcelona Port Control",
+              "text": "Wind forecast issued Tue 03:00 (ECMWF, adjusted to the Dique Sur anemometer), to hour 90: above 25 kn hours 44–48, peak 41 kn; above 30 kn 44–48."
+            }
+          }
+        ]
+      },
+      {
+        "id": "watch-3",
+        "when": {
+          "type": "action",
+          "tool": "advance",
+          "where": {
+            "result.watch": {
+              "equals": 3
+            }
+          }
+        },
+        "barrier": {
+          "at": "provoking_call",
+          "timeout_seconds": 60
+        },
+        "actions": [
+          {
+            "type": "tool",
+            "tool": "port_notice",
+            "args": {
+              "event_id": "extra-0",
+              "name": "FOS EXPRESS",
+              "text": "Unscheduled call: ship 16 FOS EXPRESS (294 m, 7 sections) has ETA hour 63 from its agent, has 1344 moves and asks to sail by hour 91. It has no planned slot, so placing it anywhere costs no move penalty."
+            }
+          },
+          {
+            "type": "tool",
+            "tool": "port_notice",
+            "args": {
+              "event_id": "late-4",
+              "name": "ONE FREEDOM",
+              "text": "Ship 6 ONE FREEDOM was delayed leaving Damietta: its agent now gives ETA hour 80 (planned slot hour 66). Its planned departure stays hour 106."
+            }
+          },
+          {
+            "type": "tool",
+            "tool": "port_notice",
+            "args": {
+              "event_id": "tug_outage-7",
+              "name": "Tug company",
+              "text": "2 of the port's 8 tugs are out of service from hour 66 to hour 90: 6 tugs in that window."
+            }
+          },
+          {
+            "type": "tool",
+            "tool": "port_notice",
+            "args": {
+              "event_id": "pilot_shortage-8",
+              "name": "Pilot station",
+              "text": "2 of the port's 7 pilots on duty are unavailable from hour 66 to hour 78: 5 pilots in that window."
+            }
+          },
+          {
+            "type": "tool",
+            "tool": "port_notice",
+            "args": {
+              "event_id": "forecast-12",
+              "name": "Barcelona Port Control",
+              "text": "Wind forecast issued Tue 15:00 (ECMWF, adjusted to the Dique Sur anemometer), to hour 102: above 25 kn hours 44–48, peak 37 kn; above 30 kn 45–47."
+            }
+          },
+          {
+            "type": "tool",
+            "tool": "port_notice",
+            "args": {
+              "event_id": "call-3-1",
+              "name": "Global Liner Agencias",
+              "text": "STEEN (ship 3) calls in: at buoy S, arriving hour 36 (Tue 12:00)."
+            }
+          },
+          {
+            "type": "tool",
+            "tool": "port_notice",
+            "args": {
+              "event_id": "eta-7-48",
+              "name": "Boluda Lines",
+              "text": "VERONICA B (ship 7): ETA Thu 08:00 (hour 80), as of Tue 12:00."
+            }
+          }
+        ]
+      },
+      {
+        "id": "watch-4",
+        "when": {
+          "type": "action",
+          "tool": "advance",
+          "where": {
+            "result.watch": {
+              "equals": 4
+            }
+          }
+        },
+        "barrier": {
+          "at": "provoking_call",
+          "timeout_seconds": 60
+        },
+        "actions": [
+          {
+            "type": "tool",
+            "tool": "port_notice",
+            "args": {
+              "event_id": "forecast-13",
+              "name": "Barcelona Port Control",
+              "text": "Wind forecast issued Wed 21:00 (ECMWF, adjusted to the Dique Sur anemometer), to hour 132: above 25 kn hours 92–96, peak 29 kn."
+            }
+          },
+          {
+            "type": "tool",
+            "tool": "port_notice",
+            "args": {
+              "event_id": "call-4-1",
+              "name": "COSCO Shipping Lines Spain",
+              "text": "SEASPAN OCEANIA (ship 4) calls in: at buoy S, arriving hour 48 (Wed 00:00)."
+            }
+          },
+          {
+            "type": "tool",
+            "tool": "port_notice",
+            "args": {
+              "event_id": "eta-6-24",
+              "name": "Ocean Network Express Spain",
+              "text": "ONE FREEDOM (ship 6): ETA Thu 06:00 (hour 78), as of Wed 00:00."
+            }
+          },
+          {
+            "type": "tool",
+            "tool": "port_notice",
+            "args": {
+              "event_id": "eta-8-48",
+              "name": "Hapag-Lloyd Spain",
+              "text": "CAPE CITIUS (ship 8): ETA Fri 05:00 (hour 101), as of Wed 01:00."
+            }
+          },
+          {
+            "type": "tool",
+            "tool": "port_notice",
+            "args": {
+              "event_id": "eta-5-24",
+              "name": "Noatum Maritime",
+              "text": "NANTO (ship 5): ETA Wed 23:00 (hour 71), as of Wed 02:00."
+            }
+          },
+          {
+            "type": "tool",
+            "tool": "port_notice",
+            "args": {
+              "event_id": "eta-7-24",
+              "name": "Boluda Lines",
+              "text": "VERONICA B (ship 7): ETA Thu 10:00 (hour 82), as of Wed 12:00."
+            }
+          },
+          {
+            "type": "tool",
+            "tool": "port_notice",
+            "args": {
+              "event_id": "eta-9-48",
+              "name": "Hapag-Lloyd Spain",
+              "text": "NAGOYA EXPRESS (ship 9): ETA Sat 06:00 (hour 126), as of Wed 15:00."
+            }
+          },
+          {
+            "type": "tool",
+            "tool": "port_notice",
+            "args": {
+              "event_id": "call-16-1",
+              "name": "Hapag-Lloyd Spain",
+              "text": "FOS EXPRESS (ship 16) calls in: at buoy S, arriving hour 69 (Wed 21:00)."
+            }
+          },
+          {
+            "type": "tool",
+            "tool": "port_notice",
+            "args": {
+              "event_id": "call-6-1",
+              "name": "Ocean Network Express Spain",
+              "text": "ONE FREEDOM (ship 6) calls in: at buoy S, arriving hour 72 (Thu 00:00)."
+            }
+          }
+        ]
+      },
+      {
+        "id": "watch-5",
+        "when": {
+          "type": "action",
+          "tool": "advance",
+          "where": {
+            "result.watch": {
+              "equals": 5
+            }
+          }
+        },
+        "barrier": {
+          "at": "provoking_call",
+          "timeout_seconds": 60
+        },
+        "actions": [
+          {
+            "type": "tool",
+            "tool": "port_notice",
+            "args": {
+              "event_id": "forecast-14",
+              "name": "Barcelona Port Control",
+              "text": "Wind forecast issued Thu 21:00 (ECMWF, adjusted to the Dique Sur anemometer), to hour 156: above 25 kn hours 96–98, 130–141, peak 32 kn; above 30 kn 134–139."
+            }
+          },
+          {
+            "type": "tool",
+            "tool": "port_notice",
+            "args": {
+              "event_id": "call-5-1",
+              "name": "Noatum Maritime",
+              "text": "NANTO (ship 5) calls in: at buoy S, arriving hour 74 (Thu 02:00)."
+            }
+          },
+          {
+            "type": "tool",
+            "tool": "port_notice",
+            "args": {
+              "event_id": "eta-10-48",
+              "name": "Noatum Maritime",
+              "text": "MIRROR (ship 10): ETA Fri 20:00 (hour 116), as of Thu 01:00."
+            }
+          },
+          {
+            "type": "tool",
+            "tool": "port_notice",
+            "args": {
+              "event_id": "eta-8-24",
+              "name": "Hapag-Lloyd Spain",
+              "text": "CAPE CITIUS (ship 8): ETA Fri 03:00 (hour 99), as of Thu 01:00."
+            }
+          },
+          {
+            "type": "tool",
+            "tool": "port_notice",
+            "args": {
+              "event_id": "eta-11-48",
+              "name": "CMA CGM Ibérica",
+              "text": "CMA CGM MONTREAL (ship 11): ETA Sat 09:00 (hour 129), as of Thu 10:00."
+            }
+          },
+          {
+            "type": "tool",
+            "tool": "port_notice",
+            "args": {
+              "event_id": "call-7-1",
+              "name": "Boluda Lines",
+              "text": "VERONICA B (ship 7) calls in: at buoy S, arriving hour 84 (Thu 12:00)."
+            }
+          },
+          {
+            "type": "tool",
+            "tool": "port_notice",
+            "args": {
+              "event_id": "eta-9-24",
+              "name": "Hapag-Lloyd Spain",
+              "text": "NAGOYA EXPRESS (ship 9): ETA Fri 22:00 (hour 118), as of Thu 15:00."
+            }
+          },
+          {
+            "type": "tool",
+            "tool": "port_notice",
+            "args": {
+              "event_id": "eta-12-48",
+              "name": "A. Pérez y Cía",
+              "text": "WEC MAJORELLE (ship 12): ETA Sat 15:00 (hour 135), as of Thu 19:00."
+            }
+          },
+          {
+            "type": "tool",
+            "tool": "port_notice",
+            "args": {
+              "event_id": "call-8-1",
+              "name": "Hapag-Lloyd Spain",
+              "text": "CAPE CITIUS (ship 8) calls in: at buoy S, arriving hour 97 (Fri 01:00)."
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "clock",
+    "type": "sync_env_clock",
+    "env_id": "portsim-lines",
+    "virtual_time": "2024-02-05T00:00:00Z",
+    "virtual_seconds_per_real_second": 0,
+    "tolerate_missing_sync_time": false
+  },
+  {
+    "id": "end-week",
+    "type": "apply_server_config",
+    "env_id": "portsim-lines",
+    "directives": [
+      {
+        "service": "portsim-lines",
+        "uri": "urn:portsim:end-week/v1",
+        "args": {}
+      }
+    ]
+  },
+  {
+    "id": "grade",
+    "type": "env_outcome_verifier",
+    "env_id": "portsim-lines",
+    "file_artifact_id": "portsim-live-verifier",
+    "verifier_id": "portsim",
+    "score_aggregator": "weighted_average"
+  }
+]

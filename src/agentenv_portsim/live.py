@@ -1,6 +1,7 @@
 """PortSim live: one week at one quay, played in watches on the gateway's virtual clock; PortSim marine: the same
 week with the port's pilots and tugs; PortSim wind: the marine week in a real weather week, with the forecast at every
-watch.
+watch; PortSim lines: the wind week with the ships' agents, who report ETAs, answer the planner and agree arrival times
+through two tools only their role sees.
 
 urn:portsim:live-load/v1 starts a week; each advance re-arms the clock at the next bulletin, and the gateway's
 triggers deliver the parties' notices through the hidden port_notice tool. data/get never reports reference plans."""
@@ -18,12 +19,14 @@ from fastmcp import FastMCP
 from fastmcp.server.middleware import Middleware
 from pydantic import BaseModel, Field
 
-from . import marine, wind
+from . import lines, marine, wind
 from .marine import MarineWeek
 from .schedule import (
     CLOCK_URI,
     END_WEEK_URI,
     LIVE_ENV,
+    LINE_TOOLS,
+    LINES_ENV,
     LIVE_LOAD_URI,
     MARINE_ENV,
     NOTICE_TOOL,
@@ -31,6 +34,7 @@ from .schedule import (
     WIND_ENV,
     virtual_time,
 )
+from .lines import LinesWeek
 from .wind import WindWeek
 from .world import Week
 
@@ -183,16 +187,41 @@ class PortSimWindEnv(PortSimMarineEnv):
     task_pack = staticmethod(wind.pack)
 
 
+@environment_card(name=LINES_ENV)
+class PortSimLinesEnv(PortSimWindEnv):
+    ENV = LINES_ENV
+    WEEK = LinesWeek
+    task_pack = staticmethod(lines.pack)
+
+    @tool(description="A ship's state as its agent knows it now: its ETA, or the arrival agreed and its turn in the "
+                      "queue, or when it arrived. Records what the agent tells the planner. For the ships' agents.")
+    def ship_status(self, agent: str, ship: int) -> str:
+        return _json(self._lines().status(agent, ship))
+
+    @tool(description="Agree an arrival time for a ship when it can make it, at cruising speed or by slowing; the ship "
+                      "then arrives at that hour and keeps its turn. For the ships' agents.")
+    def agree_arrival(self, agent: str, ship: int, arrival: int) -> str:
+        return _json(self._lines().request(agent, ship, arrival))
+
+    def _lines(self) -> LinesWeek:
+        week = self._week(open_only=True)
+        if not isinstance(week, LinesWeek):
+            raise ValueError("this env has no ships' agents")
+        return week
+
+
 class LiveEpisode(Middleware):
-    """Counts the agent's tools/calls, failed ones included; port_notice calls are the triggers', not the agent's."""
+    """Counts the planner's tools/calls, failed ones included; port_notice calls are the triggers', and ship_status and
+    agree_arrival the ships' agents'."""
 
     def __init__(self, env: PortSimLiveEnv):
         self.env = env
 
     async def on_call_tool(self, context, call_next):
-        if context.message.name != NOTICE_TOOL and self.env.week is not None:
+        if context.message.name not in (NOTICE_TOOL, *LINE_TOOLS) and self.env.week is not None:
             self.env.week.calls += 1
         return await call_next(context)
 
     async def on_list_tools(self, context, call_next):
-        return sorted(await call_next(context), key=lambda t: [*TOOLS, NOTICE_TOOL].index(t.name))
+        order = [*TOOLS, NOTICE_TOOL, *LINE_TOOLS]
+        return sorted(await call_next(context), key=lambda t: order.index(t.name))

@@ -15,11 +15,14 @@ MARINE_ENV = "portsim-marine"
 MARINE_PACK = "dock-v1-marine"
 WIND_ENV = "portsim-wind"
 WIND_PACK = "dock-v1-wind"
+LINES_ENV = "portsim-lines"
+LINES_PACK = "dock-v1-lines"
 LIVE_LOAD_URI = "urn:portsim:live-load/v1"
 END_WEEK_URI = "urn:portsim:end-week/v1"
 CLOCK_URI = "urn:agentenv:clock/v1"
 TOOLS = ("get_situation", "check_plan", "confirm_berths", "advance")
 NOTICE_TOOL = "port_notice"
+LINE_TOOLS = ("ship_status", "agree_arrival")
 FREEZE_HOURS = 6
 BULLETIN_HOURS = 6
 PLANNING_CALLS = 3
@@ -30,6 +33,11 @@ MAX_TURNS = TURNS_PER_WATCH * 9 + 2
 bulletins are coming."""
 WIND_MAX_TURNS = TURNS_PER_WATCH * 10 + 2
 """Every wind week gets the turns of the longest wind week (10 watches), for the same reason."""
+LINES_TURNS_PER_WATCH = 7
+LINES_MAX_TURNS = LINES_TURNS_PER_WATCH * 10 + 2
+"""The wind week's watches with two more turns each, for messaging the ships' agents."""
+LINE_AGENT = "portsim-line"
+LINE_ROLE = "line"
 LEADS = {"late": 24, "bunching": 24, "extra": 24, "priority": 24, "emergency": 12, "crane_outage": 24, "gale": 24,
          "tug_outage": 24, "pilot_shortage": 24, "forecast": FREEZE_HOURS}
 SPEAKERS = {"bunching": "Ship agents", "gale": "Harbour master", "emergency": "Harbour master",

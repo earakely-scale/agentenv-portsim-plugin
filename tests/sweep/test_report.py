@@ -3,13 +3,14 @@ published episodes, the whole Markdown for a fixed set of results, and the G2 we
 
 import hashlib
 import json
+import statistics
 from math import floor
 from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
 
-from agentenv_portsim import sweep, tasks
+from agentenv_portsim import lines, sweep, tasks, wind
 from agentenv_portsim.cli import portsim
 
 SONNET, GPT, GLM, HAIKU = ("anthropic/claude-sonnet-5-5", "openai/gpt-6.1-sol", "fireworks_ai/glm-5p3-flash",
@@ -228,3 +229,95 @@ def test_g2_is_the_rule_applied_to_the_pack():
         ordered = sorted((t for t in pack if t.difficulty == tier), key=lambda t: (len(t.ships), t.task_id))
         picked += [ordered[floor((2 * i + 1) * len(ordered) / (2 * n))].task_id for i in range(n)]
     assert picked == sweep.G2_TASKS
+
+
+LINES_MODELS = ("| Model | Tasks | Runs scored/planned | Mean reward (95% CI) | Follower reference | Silent reference "
+                "| Naive reference | Reached done per rep | Feasible | At the anchor | Mean regret vs anchor "
+                "| Mean regret vs hindsight | Mean excused cost | Mean hours at anchor | Messages per episode "
+                "| Median turns | Tokens in/out per episode | Cached tokens per episode | Cost per episode | Spend |")
+LINES_WEEKS = ("| Task | Weather | Tier | Ships | Watches | Hindsight | Anchor | Follower | Silent | Naive | r1 | r2 "
+               "| Mean | Regret vs hindsight | Regret vs anchor |")
+
+
+@pytest.fixture
+def lines_pilot(tmp_path, monkeypatch) -> tuple[sweep.Sweep, dict[str, dict]]:
+    """A lines sweep: a retry, a week with no scored run, an agent reward that differs, and the lines fields."""
+    monkeypatch.chdir(tmp_path)
+    a, b, c = sweep.task_ids("all", lines=True)[:3]
+    refs = {r["task_id"]: r for r in lines.references()}
+    s = sweep.Sweep("lines-pilot", [SONNET, GPT], [a, b, c], 2, 5.0, live=True, lines=True)
+
+    def played(model, task, rep, attempt=1, *, reward=None, over=0, hours=None, messages=None, agent_reward="reward"):
+        o = refs[task]["optimal_cost"]
+        scored = reward is not None
+        return row(s.name, model, task, rep, attempt, reward=reward, plan_cost=o + over, optimal_cost=o,
+                   code=None if scored else "provider_error", agent_reward=agent_reward) | {
+            "end_reason": "done" if scored else "provider_error", "watches": len(refs[task]["watch_hours"]),
+            "excused_cost": 4 if scored else None, "regret": over if scored else None, "anchor_hours": hours,
+            "messages": messages}
+
+    write(s, [played(SONNET, a, 1, reward=0.9, over=20, hours=30, messages=12), played(SONNET, a, 2),
+              played(SONNET, a, 2, 2, reward=1.0, hours=26, messages=8),
+              played(SONNET, b, 1, reward=0.8, over=40, hours=50, messages=4, agent_reward=0.75),
+              played(GPT, a, 1, reward=1.0, hours=20, messages=30)])
+    return s, refs
+
+
+def test_the_lines_report_against_the_hindsight_bound_the_anchor_and_the_lines_references(lines_pilot):
+    s, refs = lines_pilot
+    a, b, c = s.tasks
+    text = sweep.lines_report([s])
+    found = text.splitlines()
+    assert found[:5] == [
+        "# PortSim lines: portsim-llm on the wind weeks with the ships' agents", "",
+        "Sweeps: `lines-pilot` (anthropic/claude-sonnet-5-5, openai/gpt-6.1-sol; 3 tasks, k=2, episode cap $5).",
+        "Harness: portsim-llm, with each ship's agent a portsim-line agent it can message. References, on the same "
+        "weeks (data/lines/references.jsonl): hindsight, the clairvoyant CP-SAT optimum that knows every arrival and "
+        "slows ships from the first watch it could ask, a lower bound; the anchor that rewards and regret are scored "
+        "against, the best cost of the follower's four solver configurations; the follower, in its first "
+        "configuration, which re-plans at every watch on the arrivals as known and requests arrival times through the "
+        "ships' agents; silent, the same never asking them; and the naive online policy.", ""]
+    assert found[5].endswith("Attempts: 5, retries: 1. Unscored runs: 8 of 12.")
+    header = found.index(LINES_MODELS)
+    assert found[header + 1].count("|") == LINES_MODELS.count("|")
+
+    def mean(xs):
+        return f"{statistics.mean(xs):.3f}"
+
+    sonnet = found[header + 2].split(" | ")
+    assert sonnet[0] == f"| {SONNET}" and sonnet[1:3] == ["2", "3/6"] and sonnet[3].startswith("0.875 (")
+    silent = [refs[t]["silent"] for t in (a, b)]
+    assert sonnet[4:] == [
+        mean([refs[t]["rolling"]["reward"] for t in (a, b)]), mean([x["reward"] for x in silent if "reward" in x]),
+        mean([refs[t]["naive"]["reward"] for t in (a, b)]), "2", "2", "0.5", "20.000",
+        mean([refs[t]["optimal_cost"] + over - refs[t]["hindsight_cost"] for t, over in ((a, 20), (a, 0), (b, 40))]),
+        "4.000", "35.333", "8.000", "2", "20.0k/5.0k", "0.0k", "$0.1000", "$0.40 |"]
+    gpt = found[header + 3].split(" | ")
+    assert gpt[1:3] == ["1", "1/6"] and gpt[13:15] == ["20.000", "30.000"]
+    assert found.count(LINES_WEEKS) == 2
+    weather = {p["task_id"]: f"{p['iso_week']} {p['kind']}" for p in wind.pack().manifest["pairs"]}
+    week = lines.pack().get(a)
+    ref = refs[a]
+    assert (f"| {a} | {weather[a]} | {week.difficulty} | {len(week.ships)} | {len(ref['watch_hours'])} "
+            f"| {ref['hindsight_cost']} | {ref['optimal_cost']} (1.000) | {sweep._reference(ref['rolling'])} "
+            f"| {sweep._played(ref['silent'])} | {sweep._reference(ref['naive'])} | 0.900 | 1.000 | 0.950 ") in text
+    assert "Hindsight as its cost, a lower bound; the anchor and the references as cost (reward)." in found
+    unscored = found[found.index("## Unscored runs") + 4:found.index("## Runs whose agent reward differs from the "
+                                                                     "verifier's") - 1]
+    assert unscored == [f"| lines-pilot | {model} | {t} | {rep} | 0 | not run | $0.00 |" for model, t, rep in (
+        (SONNET, c, 1), (SONNET, b, 2), (SONNET, c, 2), (GPT, b, 1), (GPT, c, 1), (GPT, a, 2), (GPT, b, 2),
+        (GPT, c, 2))]
+    assert text.endswith(f"| lines-pilot | {SONNET} | {b} | 1 | 0.750 | 0.800 |\n")
+
+
+def test_report_writes_the_lines_report_with_lines_and_refuses_to_mix_it(lines_pilot):
+    s, _ = lines_pilot
+    result = CliRunner().invoke(portsim, ["sweep", "report", s.name, "--lines"])
+    assert result.exit_code == 0, result.output
+    assert result.output == "Wrote results/lines.md\n"
+    assert Path("results/lines.md").read_text() == sweep.lines_report([s])
+    for flags in ([], ["--live"], ["--wind"]):
+        refused = CliRunner().invoke(portsim, ["sweep", "report", s.name, *flags])
+        assert refused.exit_code == 2 and "lines sweeps: lines-pilot; report them with --lines" in refused.output
+    both = CliRunner().invoke(portsim, ["sweep", "report", s.name, "--lines", "--wind"])
+    assert both.exit_code == 2 and "--wind and --lines report different envs: pick one" in both.output

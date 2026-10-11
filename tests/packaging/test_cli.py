@@ -59,19 +59,24 @@ def test_setup_builds_the_image_and_registers_portsim_on_the_server_provider(loc
 
 
 @pytest.mark.parametrize(("args", "platform"), [([], "linux/arm64"), (["--platform", "linux/amd64"], "linux/amd64")])
-def test_setup_with_agent_also_builds_portsim_llm_for_the_same_platform_and_registers_it(local_stores, tmp_path,
-                                                                                         monkeypatch, stored, args,
-                                                                                         platform):
+def test_setup_with_agent_also_builds_both_agents_for_the_same_platform_and_registers_them(local_stores, tmp_path,
+                                                                                           monkeypatch, stored, args,
+                                                                                           platform):
     log = fake_docker(tmp_path, monkeypatch)
     result = CliRunner().invoke(portsim, ["setup", "--source", str(ROOT), "--agent", *args])
     assert result.exit_code == 0, result.output
     assert builds(log) == [f"build --platform {platform} -t agentenv-portsim-env {ROOT}",
-                           f"build --platform {platform} -t agentenv-portsim-agent {ROOT / 'agents/portsim-llm'}"]
-    assert stored[1] == {"id": "agentenv-portsim-agent", "image_name": "agentenv-portsim-agent"}
+                           f"build --platform {platform} -t agentenv-portsim-agent {ROOT / 'agents/portsim-llm'}",
+                           f"build --platform {platform} -t agentenv-portsim-line {ROOT / 'agents/portsim-line'}"]
+    assert stored[1:] == [{"id": "agentenv-portsim-agent", "image_name": "agentenv-portsim-agent"},
+                          {"id": "agentenv-portsim-line", "image_name": "agentenv-portsim-line"}]
     agent = A2AAgent.get("portsim-llm")
     assert agent.metadata["default_model"] == "anthropic/claude-sonnet-5-5"
     assert agent.docker_image_artifact.image_name == "localhost:5000/agentenv-portsim-agent:v1"
     assert "Registered A2A agent 'portsim-llm' version 1" in result.output
+    line = A2AAgent.get("portsim-line")
+    assert line.docker_image_artifact.image_name == "localhost:5000/agentenv-portsim-line:v1"
+    assert "Registered A2A agent 'portsim-line' version 1" in result.output
 
 
 def test_setup_stops_when_the_build_fails(local_stores, tmp_path, monkeypatch, stored):
@@ -91,7 +96,8 @@ def test_setup_from_a_git_install_builds_the_commit_it_came_from(local_stores, t
     assert result.exit_code == 0, result.output
     repo = "https://github.com/earakely-scale/agentenv-portsim-plugin.git#4f79d0a4662eed1dba66d58cab18cc16895448dd"
     assert builds(log) == [f"build --platform linux/arm64 -t agentenv-portsim-env {repo}",
-                           f"build --platform linux/arm64 -t agentenv-portsim-agent {repo}:agents/portsim-llm"]
+                           f"build --platform linux/arm64 -t agentenv-portsim-agent {repo}:agents/portsim-llm",
+                           f"build --platform linux/arm64 -t agentenv-portsim-line {repo}:agents/portsim-line"]
 
 
 def test_setup_without_a_checkout_or_a_git_install_says_to_clone(tmp_path, monkeypatch):

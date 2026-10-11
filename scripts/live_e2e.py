@@ -1,20 +1,23 @@
 """Play a live week through `agent-env run` with no model spend: the task deploys the env (portsim-live,
-portsim-marine or portsim-wind) on the gateway and portsim-llm on local Docker, and tests/fake_litellm.py, on this
+portsim-marine, portsim-wind or portsim-lines) on the gateway and portsim-llm on local Docker (on portsim-lines, each
+ship's agent too, as a portsim-line agent peered with it), and tests/fake_litellm.py, on this
 machine, answers the agent with a reference policy's turns (the naive online policy, or the stored plans of the rolling
 re-planner), at one turn per watch. It fails unless each watch's trigger fired once, the agent never saw port_notice,
 every bulletin came with the first tool result after its advance and no other, get_time read the watch's hour and held
 still between turns, data/get held the week as played in process, and the week scored the policy's stored reward. On
 portsim-marine the opening and every get_situation must also carry the pilots and tugs as the port knows them at that
 watch; on portsim-wind the situation in each must end with the pilots and tugs and then the wind as the port knows
-them then.
+them then. On portsim-lines the stand-in model also messages the ships' agents as the reference follower did, every
+reply must be the one the follower got in process, and the agent must never see the agents' tools.
 
 Run it from the checkout after `agent-env portsim setup --agent`, with the dev extra installed:
 
-    PYTHONPATH=tests python scripts/live_e2e.py [--env portsim-marine|portsim-wind] [--task ID] [--policy rolling]
+    PYTHONPATH=tests python scripts/live_e2e.py [--env portsim-marine|portsim-wind|portsim-lines] [--task ID]
+        [--policy rolling]
         [--double-advance WATCH] [--out week.json]
 
-The bundle's `week` task plays the default week (on portsim-wind, the first qualifying wind week); another week is
-written as a one-task bundle in a temporary folder.
+The bundle's `week` task plays the default week (on portsim-wind or portsim-lines, the first qualifying week); another
+week is written as a one-task bundle in a temporary folder.
 """
 
 import argparse
@@ -31,8 +34,17 @@ from pathlib import Path
 from berth_core import plan_from_list, plan_to_list
 from fake_litellm import FakeLiteLLM
 
-from agentenv_portsim import marine, tasks, wind, world
-from agentenv_portsim.schedule import LIVE_ENV, MARINE_ENV, NOTICE_TOOL, WIND_ENV, schedule, virtual_time
+from agentenv_portsim import lines, marine, tasks, wind, world
+from agentenv_portsim.schedule import (
+    LINE_TOOLS,
+    LINES_ENV,
+    LIVE_ENV,
+    MARINE_ENV,
+    NOTICE_TOOL,
+    WIND_ENV,
+    schedule,
+    virtual_time,
+)
 from agentenv_portsim.sweep import context, trajectory
 
 TASK = "dock-24B-w07x1-busy-0"
@@ -65,12 +77,15 @@ def policy_rows(task, policy: world.Policy, week: type[world.Week]) -> tuple[lis
     return rows, played
 
 
-def script(rows: list[list[dict]], double: int | None) -> list[dict]:
-    """One turn per watch: read the clock, confirm the policy's changes, advance, then read the bulletin and the clock.
-    With ``double``, the turn before that watch advances twice, skipping a watch where the policy changes nothing."""
+def script(rows: list[list[dict]], double: int | None, messages: list[list[dict]] | None = None) -> list[dict]:
+    """One turn per watch: read the clock, message the ships' agents as the policy did, confirm the policy's changes,
+    advance, then read the bulletin and the clock. With ``double``, the turn before that watch advances twice, skipping
+    a watch where the policy changes nothing."""
     turns, k = [], 0
     while k < len(rows):
-        calls = [("get_time", {})] + ([("confirm_berths", {"plan": rows[k]})] if rows[k] else []) + [("advance", {})]
+        sent = [("message_agent", m) for m in (messages[k] if messages else [])]
+        calls = ([("get_time", {})] + sent + ([("confirm_berths", {"plan": rows[k]})] if rows[k] else [])
+                 + [("advance", {})])
         if k + 1 == double:
             assert not rows[double], f"the policy changes windows at watch {double}"
             calls.append(("advance", {}))
@@ -105,8 +120,9 @@ def held(data: dict) -> dict:
             "excused": data["excused"], "refusals": data["refusals"], "grade": data["grade"]}
 
 
-def check(task, fake: FakeLiteLLM, ctx: dict, env: str, expected: dict, played: world.Week) -> dict:
-    watches = schedule(task)
+def check(task, fake: FakeLiteLLM, ctx: dict, env: str, expected: dict, played: world.Week,
+          replies: list[dict] | None = None) -> dict:
+    watches = lines.timetable(task) if env == LINES_ENV else schedule(task)
     m = ctx["metadata"]
     v = m["verifications"]["portsim"]
     week = v["results"][0]["episode"]
@@ -131,8 +147,8 @@ def check(task, fake: FakeLiteLLM, ctx: dict, env: str, expected: dict, played: 
             problems.append(f"{tid} delivered {actions.get(tid)}")
 
     seen = sorted({tuple(t["name"] for t in body["tools"]) for _, _, body in fake.requests})
-    if any(NOTICE_TOOL in names for names in seen):
-        problems.append(f"the agent was offered {NOTICE_TOOL}: {seen}")
+    if any(NOTICE_TOOL in names or set(LINE_TOOLS) & set(names) for names in seen):
+        problems.append(f"the agent was offered {NOTICE_TOOL} or the ships' agents' tools: {seen}")
     breakpoints = [json.dumps(body).count('"cache_control"') for _, _, body in fake.requests]
 
     if held(week) != held(json.loads(json.dumps(played.data()))):
@@ -145,9 +161,14 @@ def check(task, fake: FakeLiteLLM, ctx: dict, env: str, expected: dict, played: 
     if env == WIND_ENV and not opening.endswith(tasks.LIVE_OPENING.format(situation=wind_tail(task, watches, 0))):
         problems.append("the opening doesn't end with the pilots and tugs and the wind")
     watch, times, delivered, due = 0, {}, [], []
+    got = [result for name, result in calls if name == "message_agent"]
+    if env == LINES_ENV and [r.get("replies") for r in got] != [[r] for r in replies or []]:
+        problems.append(f"the agents replied {[r.get('replies') for r in got]}, not the follower's {replies}")
     for name, result in calls:
         if name == "get_time":
             times.setdefault(watch, []).append(result["current_time"])
+            continue
+        if name == "message_agent":
             continue
         if (name == "get_situation" and env == MARINE_ENV
                 and not result["situation"].endswith("\n\n" + pilots_and_tugs(task, watches, watch))):
@@ -194,7 +215,8 @@ def check(task, fake: FakeLiteLLM, ctx: dict, env: str, expected: dict, played: 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.partition("\n\n")[0])
-    parser.add_argument("--env", choices=[LIVE_ENV, MARINE_ENV, WIND_ENV], default=LIVE_ENV, help="the env to play on")
+    parser.add_argument("--env", choices=[LIVE_ENV, MARINE_ENV, WIND_ENV, LINES_ENV], default=LIVE_ENV,
+                        help="the env to play on")
     parser.add_argument("--task", help="the one-week task to play; default: the bundle's week")
     parser.add_argument("--policy", choices=["naive", "rolling"], default="naive",
                         help="the reference policy the stand-in model plays")
@@ -202,23 +224,35 @@ def main() -> None:
                         help="skip this watch with a double advance; the policy must change nothing there")
     parser.add_argument("--out", type=Path, help="write the week's data/get here")
     args = parser.parse_args()
-    on_marine, on_wind = args.env == MARINE_ENV, args.env == WIND_ENV
-    pack, references, week = ((wind.pack().tasks, wind.references(), wind.WindWeek) if on_wind
+    on_marine, on_wind, on_lines = args.env == MARINE_ENV, args.env == WIND_ENV, args.env == LINES_ENV
+    pack, references, week = ((lines.pack().tasks, lines.references(), lines.LinesWeek) if on_lines
+                              else (wind.pack().tasks, wind.references(), wind.WindWeek) if on_wind
                               else (marine.pack().tasks, marine.references(), marine.MarineWeek) if on_marine
                               else (tasks.pack_tasks("dock-v1-eval"), tasks.live_references(), world.Week))
-    default = wind.task_ids()[0] if on_wind else TASK
+    default = lines.task_ids()[0] if on_lines else wind.task_ids()[0] if on_wind else TASK
     [task] = [t for t in pack if t.task_id == (args.task or default)]
     reference = next(r for r in references if r["task_id"] == task.task_id)
     plans = reference["rolling"]["plans"]
-    policy = world.naive if args.policy == "naive" else lambda w: plan_from_list(plans[w.watch])
+    sent: list[list[dict]] = []
+    replies: list[dict] = []
+
+    def rolling(w):
+        sent.append([])
+        for e in reference["rolling"].get("exchanges", []):
+            if e["watch"] == w.watch:
+                firm = lines.firm(task, e["ship"])
+                sent[-1].append({"agent": firm, "requests": [{"ship": e["ship"], "request_arrival": e["arrival"]}]})
+                replies.append(w.request(firm, e["ship"], e["arrival"]) | {"asked": e["arrival"]})
+        return plan_from_list(plans[w.watch])
+    policy = world.naive if args.policy == "naive" else rolling
     rows, played = policy_rows(task, policy, week)
-    turns = script(rows, args.double_advance)
+    turns = script(rows, args.double_advance, sent if on_lines else None)
     expected = {k: v for k, v in reference[args.policy].items() if k != "plans"}
     with tempfile.TemporaryDirectory() as tmp:
         bundle, name = args.env, "week"
         if task.task_id != default:
             tasks.generate("dock-v1-eval", Path(tmp), task_ids=[task.task_id], live=True, marine=on_marine,
-                           wind=on_wind)
+                           wind=on_wind, lines=on_lines)
             bundle, name = tmp, task.task_id
         with PausingFake(turns, host="0.0.0.0") as fake:
             port = fake.url.rpartition(":")[2]
@@ -231,7 +265,7 @@ def main() -> None:
     if not instance:
         sys.exit("the run stored no instance")
     ctx = context(instance[-1])
-    report = check(task, fake, ctx, args.env, expected, played)
+    report = check(task, fake, ctx, args.env, expected, played, replies)
     if args.out:
         args.out.write_text(json.dumps(ctx["metadata"]["verifications"]["portsim"]["results"][0]["episode"],
                                        indent=2, sort_keys=True) + "\n")

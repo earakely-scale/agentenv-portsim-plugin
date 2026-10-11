@@ -16,7 +16,8 @@ RULES = [("missing", r"^missing from the plan$"), ("no_move", r"inside the no-mo
          ("cranes", r"^gets -?\d+ cranes"), ("arrival", r"cannot arrive before hour"),
          ("quay", r"but the quay has sections"), ("closed", r"^overlaps closed sections"),
          ("alongside", r"\(alongside\)"), ("ship", r"^overlaps ship (\d+) "), ("crane_pool", r"^cranes over the pool"),
-         ("moves", r"ships move \(limit"), ("pilots", r"^pilots short at hour"), ("tugs", r"^tugs short at hour")]
+         ("moves", r"ships move \(limit"), ("pilots", r"^pilots short at hour"), ("tugs", r"^tugs short at hour"),
+         ("queue", r"earlier in the queue")]
 NOTE = "This watch's bulletin arrives with your next tool result."
 
 
@@ -106,11 +107,14 @@ def grade_week(task: Task, plan: Plan, excused_problems: Iterable[tuple[int, str
 
 class Week:
     evaluate = staticmethod(evaluate)
+    timetable = staticmethod(schedule)
     notice_excuse = True
+    untimed: tuple[str, ...] = ()
+    """Notice kinds that report rather than announce, so the audit holds them to no lead."""
 
     def __init__(self, task: Task):
         self.task = task
-        self.watches = schedule(task)
+        self.watches = self.timetable(task)
         self.scheduled = {n.event_id: n for w in self.watches for n in w.notices}
         self.watch = 0
         self.revealed: list[str] = []
@@ -311,7 +315,7 @@ class Week:
         problems += [f"{e['event_id']}: the message differs from the schedule" for e in self.log if not e["matches"]]
         for e in self.log:
             lead = self.scheduled[e["event_id"]].event_hour - e["hour"]
-            if e["hour"] > 0 and lead < FREEZE_HOURS:
+            if e["hour"] > 0 and lead < FREEZE_HOURS and e["kind"] not in self.untimed:
                 problems.append(f"{e['event_id']}: revealed {lead} h ahead at hour {e['hour']}")
         if self.done:
             for event_id in self.scheduled:
