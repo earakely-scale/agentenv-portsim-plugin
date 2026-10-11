@@ -187,6 +187,7 @@ def test_setup_also_registers_portsim_marine_on_the_gateway_with_the_same_image(
         "mcp_server", "portsim-marine", "gateway")
     assert marine_env.docker_image_artifact.image_name == live.docker_image_artifact.image_name == (
         "localhost:5000/agentenv-portsim-env:v1")
-    assert result.output.splitlines()[-3:-1] == [
+    assert result.output.splitlines()[-4:-1] == [
         "Registered env 'portsim-live' version 1 (image localhost:5000/agentenv-portsim-env:v1)",
-        "Registered env 'portsim-marine' version 1 (image localhost:5000/agentenv-portsim-env:v1)"]
+        "Registered env 'portsim-marine' version 1 (image localhost:5000/agentenv-portsim-env:v1)",
+        "Registered env 'portsim-lines' version 1 (image localhost:5000/agentenv-portsim-env:v1)"]

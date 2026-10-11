@@ -12,7 +12,7 @@ from agent_env.artifact import DockerImageArtifact
 from agent_env.env import MCPServerEnv
 
 from .record import record_command
-from .schedule import LIVE_ENV, MARINE_ENV, WIND_ENV
+from .schedule import LINE_AGENT, LINES_ENV, LIVE_ENV, MARINE_ENV, WIND_ENV
 from .sweep import sweep_group
 from .tasks import tasks_group
 from .view import view_command
@@ -21,6 +21,7 @@ ENV_ID = "portsim"
 IMAGE = "agentenv-portsim-env"
 AGENT_ID = "portsim-llm"
 AGENT_IMAGE = "agentenv-portsim-agent"
+LINE_IMAGE = "agentenv-portsim-line"
 AGENT_MODEL = "anthropic/claude-sonnet-5-5"
 REPO = "https://github.com/earakely-scale/agentenv-portsim-plugin"
 
@@ -78,6 +79,14 @@ def _register_agent(root: str, build_platform: str) -> None:
                                        description="portsim-llm: PortSimEnv's harness loop as an A2A agent")
     agent = A2AAgent.put(id=AGENT_ID, docker_image_artifact=artifact, metadata={"default_model": AGENT_MODEL})
     click.echo(f"Registered A2A agent {agent.id!r} version {agent.version} (image {artifact.image_name})")
+    click.echo(f"Building {LINE_IMAGE} for {build_platform}")
+    build = ["docker", "build", "--platform", build_platform, "-t", LINE_IMAGE, _context(root, f"agents/{LINE_AGENT}")]
+    if subprocess.run(build).returncode:
+        raise click.ClickException("docker build of the portsim-line agent failed")
+    artifact = DockerImageArtifact.put(id=LINE_IMAGE, image_name=LINE_IMAGE,
+                                       description="portsim-line: a ship's agent in PortSim lines")
+    line = A2AAgent.put(id=LINE_AGENT, docker_image_artifact=artifact)
+    click.echo(f"Registered A2A agent {line.id!r} version {line.version} (image {artifact.image_name})")
 
 
 @portsim.command()
@@ -87,11 +96,12 @@ def _register_agent(root: str, build_platform: str) -> None:
 @click.option("--source", type=click.Path(exists=True, file_okay=False, path_type=Path),
               help="Checkout of this repo to build. Default: the one an editable install runs from, the cwd, or the "
                    "GitHub commit a git install came from.")
-@click.option("--agent", is_flag=True, help="Also build the portsim-llm agent for the same platform and register it.")
+@click.option("--agent", is_flag=True,
+              help="Also build the portsim-llm and portsim-line agents for the same platform and register them.")
 def setup(build_platform: str | None, source: Path | None, agent: bool):
     """Build the env image and register it as the MCP server env `portsim` on the `server` provider and as
-    `portsim-live`, `portsim-marine` and `portsim-wind` on the `gateway` provider; with --agent, the portsim-llm agent
-    too."""
+    `portsim-live`, `portsim-marine`, `portsim-wind` and `portsim-lines` on the `gateway` provider; with --agent, the
+    portsim-llm and portsim-line agents too."""
     root = _checkout(source)
     build_platform = build_platform or _docker_platform()
     click.echo(f"Building {IMAGE} for {build_platform} from {root}")
@@ -112,6 +122,9 @@ def setup(build_platform: str | None, source: Path | None, agent: bool):
     marine = MCPServerEnv.put(id=MARINE_ENV, docker_image_artifact=artifact, environment_name=MARINE_ENV,
                               env_provider_type="gateway")
     click.echo(f"Registered env {marine.id!r} version {marine.version} (image {artifact.image_name})")
+    lines = MCPServerEnv.put(id=LINES_ENV, docker_image_artifact=artifact, environment_name=LINES_ENV,
+                             env_provider_type="gateway")
+    click.echo(f"Registered env {lines.id!r} version {lines.version} (image {artifact.image_name})")
     if agent:
         _register_agent(root, build_platform)
     click.echo("Next: agent-env run portsim --task smoke")

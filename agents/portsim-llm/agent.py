@@ -19,14 +19,17 @@ import httpx2
 import openai
 from agentenv_protocol.a2a_agent import (
     MCP_CONFIG_V1,
+    PEER_AGENTS_V1,
     TRAJECTORY_V1,
     AgentConfig,
     AgentEnvAgent,
     AgentIdentity,
+    PeerAgentsSetRequest,
     TaskRequest,
     TaskResult,
     Usage,
     a2a_agent,
+    extension,
 )
 from mcp import ClientSession, McpError
 from mcp.client.streamable_http import streamable_http_client
@@ -102,19 +105,71 @@ class Tool:
     input_schema: dict | None
 
 
-class EnvSession:
-    """One MCP session on the env server: one episode."""
+MESSAGE_TOOL = "message_agent"
+MESSAGE_DESCRIPTION = ("Message a ship's agent, the firm that deals with the port for its line: ask for its ships' "
+                       "ETAs or request arrival hours, several of its ships in one message. Each request gets the "
+                       "agent's reply.")
 
-    def __init__(self, session: ClientSession):
-        self.session = session
+
+def message_schema(agents: list[str]) -> dict:
+    """Every field required and the optional ones nullable, so a provider that enforces strict schemas (OpenAI's
+    Responses API) still lets a request leave out the ETA query, and an ETA query the hour."""
+    request = {"type": "object", "additionalProperties": False, "required": ["ship", "ask", "request_arrival"],
+               "properties": {
+                   "ship": {"type": "integer", "description": "ship id from the table"},
+                   "ask": {"type": ["string", "null"], "enum": ["eta", None],
+                           "description": '"eta" to ask for the ship\'s ETA; null when requesting an arrival'},
+                   "request_arrival": {"type": ["integer", "null"],
+                                       "description": "the hour you request the ship arrive at; null when asking "
+                                                      "for its ETA"}}}
+    return {"type": "object", "additionalProperties": False, "required": ["agent", "requests"], "properties": {
+        "agent": {"type": "string", "enum": agents, "description": "the ship's agent, by its id"},
+        "requests": {"type": "array", "minItems": 1, "items": request,
+                     "description": '[{"ship": 7, "ask": "eta", "request_arrival": null}, '
+                                    '{"ship": 9, "ask": null, "request_arrival": 130}, ...]'}}}
+
+
+class EnvSession:
+    """One MCP session on the env server: one episode; with peers, the ships' agents the planner can message."""
+
+    def __init__(self, session: ClientSession, peers: dict[str, dict] | None = None,
+                 http: httpx.AsyncClient | None = None):
+        self.session, self.peers, self.http = session, peers or {}, http
 
     async def tools(self) -> list[Tool]:
-        return [Tool(t.name, t.description, t.inputSchema) for t in (await self.session.list_tools()).tools]
+        tools = [Tool(t.name, t.description, t.inputSchema) for t in (await self.session.list_tools()).tools]
+        return tools + ([Tool(MESSAGE_TOOL, MESSAGE_DESCRIPTION, message_schema(sorted(self.peers)))]
+                        if self.peers else [])
 
     async def call(self, name: str, arguments: dict) -> str:
+        if name == MESSAGE_TOOL and self.peers:
+            return await self.message(arguments)
         result = await self.session.call_tool(name, arguments)
         text = "\n".join(c.text for c in result.content if c.type == "text")
         return json.dumps({"error": text}) if result.isError else text
+
+    async def message(self, arguments: dict) -> str:
+        """One A2A message/send to the agent, blocking until it answers; its replies, or the error."""
+        agent, requests = arguments.get("agent"), arguments.get("requests")
+        if agent not in self.peers:
+            return json.dumps({"error": f"no agent {agent!r}: message one of {', '.join(sorted(self.peers))}"})
+        if not isinstance(requests, list) or not requests:
+            return json.dumps({"error": "requests must be a non-empty list"})
+        body = {"jsonrpc": "2.0", "id": str(uuid.uuid4()), "method": "message/send", "params": {"message": {
+            "messageId": str(uuid.uuid4()), "role": "user", "metadata": {"from": "portsim-llm"},
+            "parts": [{"kind": "data", "data": {"requests": requests}}]}}}
+        try:
+            response = await self.http.post(self.peers[agent]["url"].rstrip("/") + "/a2a", json=body, timeout=120)
+            response.raise_for_status()
+            reply = response.json()
+        except (httpx.HTTPError, json.JSONDecodeError) as e:
+            return json.dumps({"error": f"the agent {agent} didn't answer: {type(e).__name__}"})
+        if "error" in reply:
+            return json.dumps({"error": f"the agent {agent} failed: {reply['error'].get('message', reply['error'])}"})
+        parts = reply["result"]["status"]["message"]["parts"]
+        data = next((p["data"] for p in parts if p.get("kind") == "data" and "replies" in p.get("data", {})), {})
+        text = " ".join(p["text"] for p in parts if p.get("kind") == "text")
+        return json.dumps({"agent": agent, "replies": data.get("replies", []), "text": text}, ensure_ascii=False)
 
 
 # ================================================================ model adapters
@@ -446,7 +501,7 @@ class Episode:
         self.failure = (code, message or self.error)
         self.record["end_reason"] = code
 
-    async def run(self, server: dict, opening: str) -> None:
+    async def run(self, server: dict, opening: str, peers: dict[str, dict] | None = None) -> None:
         if not self.base or not self.key:
             return self.fail("model_endpoint", "no model endpoint: agent-env passes LITELLM_BASE_URL and "
                                                "LITELLM_API_KEY ([model] in .agentenv/config.toml)")
@@ -454,10 +509,11 @@ class Episode:
             return self.fail("unpriced_model", f"no price for {self.model}; priced: {', '.join(PRICES)}")
         try:
             async with httpx.AsyncClient(headers=server.get("headers"), timeout=300) as http, \
+                    httpx.AsyncClient(timeout=120) as peer_http, \
                     streamable_http_client(server["url"], http_client=http) as (read, write, _), \
                     ClientSession(read, write) as session:
                 await session.initialize()
-                await self.play(EnvSession(session), opening)
+                await self.play(EnvSession(session, peers, peer_http), opening)
         except* (McpError, httpx.HTTPError) as group:
             error = group
             while isinstance(error, BaseExceptionGroup):
@@ -598,18 +654,31 @@ class Episode:
         name="portsim-llm",
         description="PortSimEnv's harness loop: a model re-plans a disrupted week of berthing at a Port of Barcelona "
                     "quay through the env's tools, with upstream's prompts and limits, on agent-env's model endpoint.",
-        version="0.4.5",
+        version="0.5.0",
     ),
     config=PortSimConfig,
-    extensions=(MCP_CONFIG_V1, TRAJECTORY_V1),
+    extensions=(MCP_CONFIG_V1, TRAJECTORY_V1, PEER_AGENTS_V1),
 )
 class PortSimLLM(AgentEnvAgent):
+    def __init__(self):
+        super().__init__()
+        self.peers: dict[str, dict] = {}
+
     async def run(self, request: TaskRequest[PortSimConfig]) -> TaskResult:
         [part] = request.parts
         [server] = request.mcp_servers.values()
         episode = Episode(request.config, dict(os.environ))
-        await episode.run(server, part.text)
+        await episode.run(server, part.text, self.peers)
         return episode.result()
+
+    @extension(PEER_AGENTS_V1.set)
+    async def set_peers(self, request: PeerAgentsSetRequest) -> dict:
+        self.peers = {p.name: p.model_dump() for p in request.peers}
+        return {"status": "updated", "peers": sorted(self.peers)}
+
+    @extension(PEER_AGENTS_V1.list)
+    async def list_peers(self) -> dict:
+        return {"peers": list(self.peers.values())}
 
 
 if __name__ == "__main__":

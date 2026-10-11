@@ -1,9 +1,10 @@
 """Build the Hugging Face dataset earakely-scale/PortSimEnv-AgentEnv from this checkout and the recorded sweeps, and
 push it. Two kinds of tables share the repo:
 
-- PortSim's, one family per version (v4 wind, v3 marine, v2 live, v1): the weeks with what the agent is told and the
-  reference costs, the recorded runs with their grades and chat transcripts, and the references. Beside them, each
-  model's results per version, as a table, as the card's tables and as a board.json in the shape of PortSimEnv's.
+- PortSim's, one family per version (v5 lines, v4 wind, v3 marine, v2 live, v1): the weeks with what the agent is told
+  and the reference costs, the recorded runs with their grades and chat transcripts, and the references. Beside them,
+  each model's results per version, as a table, as the card's tables and as a board.json in the shape of PortSimEnv's.
+  A version no sweep has played yet has its weeks and references, no runs and no board.
 - agentenv-hf's, one per bundle, as `agent-env hf publish` writes them: the bundle's tasks and runs, each run's record
   and native trajectory, and the bundle itself, which `agent-env hf run` runs. A version's runs come from several
   sweeps, each played from a bundle of its own, so they are built sweep by sweep and joined under the version's
@@ -15,7 +16,7 @@ agentenv-hf's check for keys and token shapes before anything is written, and --
 on top of the commit it read, removing what the build no longer writes.
 
     uv run python scripts/hub_dataset.py --out build/hub/dataset
-    uv run python scripts/hub_dataset.py --out build/hub/dataset --repo earakely-scale/PortSimEnv-AgentEnv --tag v0.4.5
+    uv run python scripts/hub_dataset.py --out build/hub/dataset --repo earakely-scale/PortSimEnv-AgentEnv --tag v0.5.0
 """
 
 import argparse
@@ -36,8 +37,9 @@ from agentenv_hf.messages import to_messages
 from agentenv_hf.scan import known_values, scan
 from huggingface_hub import CommitOperationAdd, CommitOperationDelete, HfApi
 
+from agentenv_portsim import lines as lines_weeks
 from agentenv_portsim import marine, tasks, wind
-from agentenv_portsim.schedule import MARINE_ENV, WIND_ENV, WIND_MAX_TURNS, schedule
+from agentenv_portsim.schedule import LINES_ENV, MARINE_ENV, WIND_ENV, WIND_MAX_TURNS, schedule
 from agentenv_portsim.sweep import EVAL_PACK, RUNS, TIERS, ci, results
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -46,14 +48,15 @@ VERSION = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["versi
 WEATHER = ROOT / "data/wind/weather.jsonl"
 SPLIT = "eval"
 BOARD = ["gpt", "sonnet", "opus", "haiku", "astra", "luna", "kimi", "glm", "glmflash", "qwen2t", "qwen27b", "dsflash"]
-SWEEPS = [f"{env}-{stage}{model}{replay}" for env in ("wind", "marine", "live") for model in BOARD
+SWEEPS = [f"{env}-{stage}{model}{replay}" for env in ("lines", "wind", "marine", "live") for model in BOARD
           for stage in ("pilot-", "") for replay in ("", "-2", "-3")]  # replays of runs left unscored
 SWEEPS.append("g2")
-BUNDLES = {"v4": f"{EVAL_PACK}-wind", "v3": f"{EVAL_PACK}-marine", "v2": f"{EVAL_PACK}-live", "v1": EVAL_PACK}
-REFERENCE_FILES = {"v4": ("wind", wind.REFERENCES), "v3": ("marine", marine.REFERENCES),
-                   "v2": ("live", tasks.REFERENCES)}
+BUNDLES = {"v5": f"{EVAL_PACK}-lines", "v4": f"{EVAL_PACK}-wind", "v3": f"{EVAL_PACK}-marine",
+           "v2": f"{EVAL_PACK}-live", "v1": EVAL_PACK}
+REFERENCE_FILES = {"v5": ("lines", lines_weeks.REFERENCES), "v4": ("wind", wind.REFERENCES),
+                   "v3": ("marine", marine.REFERENCES), "v2": ("live", tasks.REFERENCES)}
 SETUP = "agent-env portsim setup --agent"
-ENVS = {"v4": WIND_ENV, "v3": MARINE_ENV, "v2": "portsim-live", "v1": "portsim"}
+ENVS = {"v5": LINES_ENV, "v4": WIND_ENV, "v3": MARINE_ENV, "v2": "portsim-live", "v1": "portsim"}
 NAMES = {
     "anthropic/claude-opus-5-5": "Claude Opus 5.5", "anthropic/claude-sonnet-5-5": "Claude Sonnet 5.5",
     "anthropic/claude-haiku-5-5": "Claude Haiku 5.5", "openai/gpt-6-astra": "GPT-6 Astra",
@@ -64,26 +67,40 @@ NAMES = {
 }
 PROVIDERS = {"anthropic": "Anthropic", "openai": "Azure OpenAI", "fireworks_ai": "Fireworks", "groq": "Groq"}
 BOARD_TABLE = re.compile(r"(<!-- board:(v\d|all) -->\n).*?(\n<!-- /board:\2 -->)", re.S)
-LIVE_VERSIONS = ("v4", "v3", "v2")
-VERSION_NAMES = {"v4": "the wind port", "v3": "the marine port", "v2": "the live port"}
+LIVE_VERSIONS = ("v5", "v4", "v3", "v2")
+VERSION_NAMES = {"v5": "the lines port", "v4": "the wind port", "v3": "the marine port", "v2": "the live port"}
 MESSAGES = pa.field("messages", pa.list_(tables.MESSAGE))
 
 
 def version_of(sweep: dict) -> str:
-    return "v4" if sweep.get("wind") else "v3" if sweep.get("marine") else "v2" if sweep.get("live") else "v1"
+    return ("v5" if sweep.get("lines") else "v4" if sweep.get("wind") else "v3" if sweep.get("marine")
+            else "v2" if sweep.get("live") else "v1")
 
 
 def play_step(task, version: str) -> dict:
     task_steps = {"v1": lambda: tasks.steps(task, 5.0), "v2": lambda: tasks.live_steps(task, 5.0),
                   "v3": lambda: tasks.live_steps(task, 5.0, env=MARINE_ENV, week=marine.MarineWeek),
                   "v4": lambda: tasks.live_steps(task, 5.0, env=WIND_ENV, week=wind.WindWeek, rules=tasks.WIND_RULES,
-                                                 max_turns=WIND_MAX_TURNS)}[version]()
+                                                 max_turns=WIND_MAX_TURNS),
+                  "v5": lambda: tasks.lines_steps(task, 5.0)}[version]()
     return next(s for s in task_steps if s["id"] == "play")
 
 
 def wind_windows(weather: dict) -> str:
     return json.dumps([{"start": w["start"], "end": w["end"], "above_kn": 25 if w["min_length"] else 30,
                         "unvalidated": w["unvalidated"]} for w in weather["windows"]])
+
+
+def weather_columns(weather: dict) -> dict:
+    return {"weather_id": weather["id"], "weather_week": weather["iso_week"], "weather_monday_utc": weather["monday"],
+            "weather_kind": weather["kind"], "wind_windows": wind_windows(weather)}
+
+
+def ship_agents(task) -> str:
+    """Each ship's agent in the week: the id it is deployed under, the firm's name and the ships it handles."""
+    names = task.rules["lines"]["firms"]
+    return json.dumps([{"agent": firm, "name": names[firm], "ships": ships}
+                       for firm, ships in sorted(lines_weeks.firms_in(task).items())], ensure_ascii=False)
 
 
 def task_row(task, version: str, reference: dict | None, raw: str, weathers: dict) -> dict:
@@ -96,22 +113,25 @@ def task_row(task, version: str, reference: dict | None, raw: str, weathers: dic
         return row | {"naive_cost": task.reference["naive_cost"], "proven_optimal": task.reference["proven_optimal"],
                       "optimal_plan": json.dumps(task.reference["optimal_plan"]),
                       "naive_plan": json.dumps(task.reference["naive_plan"]), "task": raw}
-    watches = schedule(task)
+    watches = lines_weeks.timetable(task) if version == "v5" else schedule(task)
     row |= {"num_watches": len(watches), "unavoidable_cost": reference["unavoidable_cost"],
             "rolling_cost": reference["rolling"]["cost"], "naive_cost": reference["naive"]["cost"],
             "naive_feasible": reference["naive"]["feasible"]}
-    if version in ("v3", "v4"):
+    if version in ("v3", "v4", "v5"):
         pools = task.rules["marine"]
         row |= {"pilots": pools["pilots"], "tugs": pools["tugs"], "other_movements": len(pools["movements"])}
     if version == "v3":
         row["v2_optimal_cost"] = reference["v2_optimal_cost"]
     if version == "v4":
-        weather = weathers[reference["weather"]]
         row |= {"schedule": reference["schedule"], "v3_optimal_cost": reference["v3_optimal_cost"],
                 "hindsight_cost": reference["hindsight_cost"], "blind_cost": reference["blind"]["cost"],
-                "blind_feasible": reference["blind"]["feasible"], "weather_id": weather["id"],
-                "weather_week": weather["iso_week"], "weather_monday_utc": weather["monday"],
-                "weather_kind": weather["kind"], "wind_windows": wind_windows(weather)}
+                "blind_feasible": reference["blind"]["feasible"], **weather_columns(weathers[reference["weather"]])}
+    if version == "v5":
+        marine_week, weather = task.task_id.rsplit("-", 1)
+        row |= {"schedule": marine_week, "v4_optimal_cost": reference["wind_optimal_cost"],
+                "hindsight_cost": reference["hindsight_cost"], "silent_cost": reference["silent"]["cost"],
+                "silent_feasible": reference["silent"]["feasible"], **weather_columns(weathers[weather]),
+                "num_agents": len(task.rules["lines"]["firms"]), "agents": ship_agents(task)}
     return row | {"watches": json.dumps([{"watch": w.index, "hour": w.hour,
                                           "notices": [{"from": n.name, "about_hour": n.event_hour, "text": n.text}
                                                       for n in w.notices]} for w in watches], ensure_ascii=False),
@@ -119,9 +139,9 @@ def task_row(task, version: str, reference: dict | None, raw: str, weathers: dic
 
 
 def episode_rows(sweep_dir: Path, version: str, by_id: dict, episode_ids: dict[str, str],
-                 graded: dict[str, list]) -> list[dict]:
+                 graded: dict[str, dict]) -> list[dict]:
     """One row per scored run. A v1 run's final plan is the one it submitted; a live run's is the windows it confirmed,
-    as the verifier graded them."""
+    as the verifier graded them. A lines run adds its hours at anchor and its exchanges with the ships' agents."""
     rows = []
     for r in results(sweep_dir):
         if r["outcome"] != "scored":
@@ -140,10 +160,13 @@ def episode_rows(sweep_dir: Path, version: str, by_id: dict, episode_ids: dict[s
         else:
             row |= {"reached_end": r["submitted"], "num_watches": r["watches"], "regret": r["regret"],
                     "excused_cost": r["excused_cost"]}
-        plan = record["final"].get("plan") if version == "v1" else graded.get(row["episode_id"])
-        rows.append(row | {"final_plan": json.dumps(plan),
-                           "steps": json.dumps(record["steps"], ensure_ascii=False),
-                           "messages": to_messages(record)})
+        if version == "v5":
+            row |= {"anchor_hours": r.get("anchor_hours"), "agent_messages": r.get("messages")}
+        episode = graded.get(row["episode_id"]) or {}
+        row["final_plan"] = json.dumps(record["final"].get("plan") if version == "v1" else episode.get("plan"))
+        if version == "v5":
+            row["exchanges"] = json.dumps((episode.get("lines") or {}).get("exchanges"), ensure_ascii=False)
+        rows.append(row | {"steps": json.dumps(record["steps"], ensure_ascii=False), "messages": to_messages(record)})
     return rows
 
 
@@ -151,16 +174,20 @@ def reference_row(r: dict) -> dict:
     flat = {"task_id": r["task_id"], "qualifies": r["qualifies"], "optimal_cost": r["optimal_cost"],
             "unavoidable_cost": r["unavoidable_cost"], "watch_hours": r["watch_hours"]}
     for key in ("v2_optimal_cost", "schedule", "weather", "kind", "hindsight_cost", "v3_optimal_cost",
-                "added_watches"):
+                "wind_optimal_cost", "added_watches", "ships", "firms"):
         if key in r:
             flat[key] = r[key]
-    for policy in ("rolling", "blind", "hold", "naive"):
+    for policy in ("rolling", "blind", "hold", "silent", "naive"):
         if policy in r:
             flat |= {f"{policy}_{k}": r[policy][k] for k in ("cost", "reward", "feasible", "excused_cost")}
+            if "anchor_hours" in r[policy]:
+                flat[f"{policy}_anchor_hours"] = r[policy]["anchor_hours"]
     if "clauses" in r:
         flat["clauses"] = json.dumps(r["clauses"])
-    return flat | {"rolling_plans": json.dumps(r["rolling"]["plans"]), "configs": json.dumps(r["configs"]),
-                   "solver": json.dumps(r["solver"])}
+    flat["rolling_plans"] = json.dumps(r["rolling"]["plans"])
+    if "exchanges" in r["rolling"]:
+        flat["rolling_exchanges"] = json.dumps(r["rolling"]["exchanges"])
+    return flat | {"configs": json.dumps(r["configs"]), "solver": json.dumps(r["solver"])}
 
 
 def table_bytes(rows: list[dict]) -> bytes:
@@ -217,7 +244,7 @@ def board_json(version: str, rows: list[dict], weeks: int) -> dict:
 
 def board_markdown(version: str, rows: list[dict], weeks: int) -> str:
     finished = "Submitted" if version == "v1" else "Reached the end"
-    optimal = "At the anchor" if version == "v4" else "Optimal"
+    optimal = "At the anchor" if version in ("v4", "v5") else "Optimal"
     tiers = [t for t in TIERS if any(f"reward_{t}" in r for r in rows)]
     lines = [f"| Model | Provider | Weeks | Mean reward (95% CI) | {' | '.join(t.capitalize() for t in tiers)} "
              f"| {finished} | Feasible | {optimal} | Median turns | Cost per episode |",
@@ -233,23 +260,28 @@ def board_markdown(version: str, rows: list[dict], weeks: int) -> str:
 
 
 def summary_markdown(rows: list[dict]) -> str:
-    """Each model on every live version: its mean on each and over all their weeks, each week weighing the same, best
-    first; only models that played all of them."""
+    """Each model on every live version with runs: its mean on each and over all their weeks, each week weighing the
+    same, best first; only models that played all of them. A version some model has played fewer weeks of than another,
+    one still running, is left out."""
+    weeks: dict[str, set[int]] = {}
+    for r in rows:
+        weeks.setdefault(r["version"], set()).add(r["weeks"])
+    versions = [v for v in LIVE_VERSIONS if len(weeks.get(v, ())) == 1]
     by: dict[str, dict[str, dict]] = {}
     for r in rows:
-        if r["version"] in LIVE_VERSIONS:
+        if r["version"] in versions:
             by.setdefault(r["model"], {})[r["version"]] = r
-    full = {m: v for m, v in by.items() if set(v) == set(LIVE_VERSIONS)}
+    full = {m: v for m, v in by.items() if set(v) == set(versions)}
 
     def mean(v: dict) -> float:
         return sum(r["mean_reward"] * r["weeks"] for r in v.values()) / sum(r["weeks"] for r in v.values())
 
-    lines = ["| Model | Provider | " + " | ".join(f"{v}, {VERSION_NAMES[v]}" for v in LIVE_VERSIONS)
-             + " | All weeks | Feasible weeks |", "|---|---|" + "---:|" * (len(LIVE_VERSIONS) + 2)]
+    lines = ["| Model | Provider | " + " | ".join(f"{v}, {VERSION_NAMES[v]}" for v in versions)
+             + " | All weeks | Feasible weeks |", "|---|---|" + "---:|" * (len(versions) + 2)]
     for v in sorted(full.values(), key=lambda v: -mean(v)):
-        first = v[LIVE_VERSIONS[0]]
+        first = v[versions[0]]
         lines.append(" | ".join([
-            f"| {first['model_name']}", first["provider"], *(f"{v[x]['mean_reward']:.3f}" for x in LIVE_VERSIONS),
+            f"| {first['model_name']}", first["provider"], *(f"{v[x]['mean_reward']:.3f}" for x in versions),
             f"**{mean(v):.3f}**",
             f"{sum(r['feasible'] for r in v.values())} of {sum(r['weeks'] for r in v.values())}"]) + " |")
     return "\n".join(lines)
@@ -263,7 +295,7 @@ def agentenv_files(name: str, bundle: Path,
                    sweeps: list[tuple[Path, list[str]]]) -> tuple[dict[str, bytes], dict, dict]:
     """agentenv-hf's files for the bundle ``name``: its tasks from ``bundle``, and the runs ``sweeps`` list by instance
     id, each sweep built from its own bundle under ``name``. Returns the files, each instance's episode id, and each
-    episode's plan as its verifier graded it."""
+    episode as its verifier graded it."""
     files = dataset.build(runs.locate(str(bundle)), name=name, split=SPLIT, which="latest").files
     parts, raw, episode_ids, graded = [], {}, {}, {}
     for sweep_dir, ids in sweeps:
@@ -274,10 +306,11 @@ def agentenv_files(name: str, bundle: Path,
             run = json.loads(line)
             raw[run["episode_id"]] = line
             outcome = run["record"]["metadata"]["verifications"]["portsim"]["results"]
-            graded[run["episode_id"]] = outcome[0]["episode"].get("plan")
+            graded[run["episode_id"]] = outcome[0]["episode"]
         rewrite = records.Rewrite(played.id_root, name)
         episode_ids |= {i: rewrite.text(i) for i in ids}
-    episodes = pa.concat_tables(parts).sort_by([("model", "ascending"), ("task", "ascending")])
+    empty = pq.read_table(io.BytesIO(tables.parquet([], tables.EPISODES)))
+    episodes = pa.concat_tables(parts or [empty]).sort_by([("model", "ascending"), ("task", "ascending")])
     sink = io.BytesIO()
     pq.write_table(episodes, sink)
     files[f"episodes/{name}.parquet"] = sink.getvalue()
@@ -296,15 +329,19 @@ def card_text(plugin: str, boards: dict[str, str] | None = None) -> str:
     return text
 
 
-def build(sweeps: list[str], runs_dir: Path, out: Path, plugin: str) -> dict[str, bytes]:
+def build(sweeps: list[str], runs_dir: Path, out: Path, plugin: str,
+          summary: tuple[str, ...] = LIVE_VERSIONS) -> dict[str, bytes]:
     pack = tasks.pack_tasks(EVAL_PACK)
     by_version = {"v1": {t.task_id: t for t in pack}, "v2": {t.task_id: t for t in pack},
-                  "v3": {t.task_id: t for t in marine.pack().tasks}, "v4": {t.task_id: t for t in wind.pack().tasks}}
+                  "v3": {t.task_id: t for t in marine.pack().tasks}, "v4": {t.task_id: t for t in wind.pack().tasks},
+                  "v5": {t.task_id: t for t in lines_weeks.pack().tasks}}
     raw = {"v1": raw_lines(tasks.PACKS / EVAL_PACK), "v2": raw_lines(tasks.PACKS / EVAL_PACK),
-           "v3": raw_lines(marine.pack_dir()), "v4": raw_lines(wind.pack_dir())}
-    refs = {"v2": tasks.live_references(), "v3": marine.references(), "v4": wind.references()}
+           "v3": raw_lines(marine.pack_dir()), "v4": raw_lines(wind.pack_dir()),
+           "v5": raw_lines(lines_weeks.pack_dir())}
+    refs = {"v2": tasks.live_references(), "v3": marine.references(), "v4": wind.references(),
+            "v5": lines_weeks.references()}
     ids = {"v1": [t.task_id for t in pack], "v2": tasks.live_task_ids(), "v3": marine.task_ids(),
-           "v4": wind.task_ids()}
+           "v4": wind.task_ids(), "v5": lines_weeks.task_ids()}
     weathers = {json.loads(line)["id"]: json.loads(line) for line in WEATHER.read_text().splitlines()}
     played = {v: [] for v in BUNDLES}
     boards: dict[str, str] = {}
@@ -315,7 +352,7 @@ def build(sweeps: list[str], runs_dir: Path, out: Path, plugin: str) -> dict[str
     for v, bundle_name in BUNDLES.items():
         bundle = out / "bundles" / bundle_name
         shutil.rmtree(bundle, ignore_errors=True)
-        tasks.generate(EVAL_PACK, bundle, live=v != "v1", marine=v == "v3", wind=v == "v4")
+        tasks.generate(EVAL_PACK, bundle, live=v != "v1", marine=v == "v3", wind=v == "v4", lines=v == "v5")
         scored = [(d, [r["instance"] for r in results(d) if r["outcome"] == "scored"]) for d in played[v]]
         scored = [(d, instances) for d, instances in scored if instances]
         hub_files, episode_ids, graded = agentenv_files(bundle_name, bundle, scored)
@@ -341,7 +378,8 @@ def build(sweeps: list[str], runs_dir: Path, out: Path, plugin: str) -> dict[str
                 if path.is_file() and rel.parts[0] not in ("logs", "bundle"):
                     files[f"runs/{d.name}/{rel.as_posix()}"] = path.read_bytes()
     files["results/board.parquet"] = table_bytes(board_rows)
-    boards["all"] = summary_markdown(board_rows)
+    if board_rows:
+        boards["all"] = summary_markdown([r for r in board_rows if r["version"] in summary])
     return files | {"README.md": card_text(plugin, boards).encode()}
 
 
@@ -376,14 +414,16 @@ def main():
     ap.add_argument("--plugin-ref", default=f"v{VERSION}",
                     help="The plugin tag the card's bundles pin, for agent-env hf run.")
     ap.add_argument("--repo", help="Push the folder to this dataset repo after writing it.")
-    ap.add_argument("--tag", help="Tag the pushed commit, e.g. v0.4.5.")
+    ap.add_argument("--tag", help="Tag the pushed commit, e.g. v0.5.0.")
     ap.add_argument("--message", default="Publish PortSimEnv on AgentEnv")
+    ap.add_argument("--summary-versions", default=",".join(LIVE_VERSIONS),
+                    help="The versions the all-weeks summary covers, e.g. v4,v3,v2 while v5 is still being played.")
     args = ap.parse_args()
     plugin = f"agentenv-portsim @ git+https://github.com/earakely-scale/agentenv-portsim-plugin@{args.plugin_ref}"
     sweeps = args.sweeps or [s for s in SWEEPS if (args.runs / s / "sweep.json").is_file()]
     print("sweeps:", " ".join(sweeps))
     with namespace_routing():
-        files = build(sweeps, args.runs, args.out, plugin)
+        files = build(sweeps, args.runs, args.out, plugin, tuple(args.summary_versions.split(",")))
     scan(files, known_values())
     write(files, args.out)
     counts = {p: pq.read_metadata(io.BytesIO(c)).num_rows for p, c in files.items() if p.endswith(".parquet")}

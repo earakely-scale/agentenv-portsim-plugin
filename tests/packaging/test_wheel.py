@@ -48,7 +48,7 @@ def test_the_wheel_declares_each_bundle_it_carries(wheel):
         names = whl.namelist()
         entry_points = configparser.ConfigParser()
         entry_points.read_string(whl.read(next(n for n in names if n.endswith(".dist-info/entry_points.txt"))).decode())
-    bundles = ["portsim", "portsim-live", "portsim-marine", "portsim-wind"]
+    bundles = ["portsim", "portsim-lines", "portsim-live", "portsim-marine", "portsim-wind"]
     assert dict(entry_points["agent_env.bundles"]) == dict.fromkeys(bundles, "agentenv_portsim.bundles")
     assert sorted({n.split("/")[2] for n in names if n.startswith("agentenv_portsim/bundles/") and n.count("/") > 2}
                   ) == bundles

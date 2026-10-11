@@ -246,4 +246,4 @@ def test_setup_also_registers_portsim_wind_on_the_gateway_with_the_same_image(lo
         "localhost:5000/agentenv-portsim-env:v1")
     assert [line for line in result.output.splitlines() if line.startswith("Registered env")] == [
         f"Registered env '{name}' version 1 (image localhost:5000/agentenv-portsim-env:v1)"
-        for name in ("portsim", "portsim-wind", "portsim-live", "portsim-marine")]
+        for name in ("portsim", "portsim-wind", "portsim-live", "portsim-marine", "portsim-lines")]

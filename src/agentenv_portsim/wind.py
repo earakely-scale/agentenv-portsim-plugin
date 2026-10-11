@@ -215,6 +215,13 @@ class WindWeek(MarineWeek):
         out = super().situation()
         return out | {"situation": out["situation"] + "\n\n" + section(self.view)}
 
+    def target(self) -> Task:
+        """What the grade holds the plan to: the week as known, the truth once done."""
+        return self.task if self.done else self.view
+
+    def past(self, revealed: list[str], target: Task) -> Task:
+        return known(self.task, revealed)
+
     def excuses(self) -> tuple[set[tuple[int, str]], dict[int, int]]:
         """Each ship is excused the (ship, rule) problems and the cost that the target (the week as known, the truth
         once done) adds over the week as known at its last watch before it froze, the whole plan evaluated on both;
@@ -222,7 +229,8 @@ class WindWeek(MarineWeek):
         then, so a warning that never blew doesn't stand for wind no forecast showed. A problem ships share, an
         overlap or a pool short at an hour, is judged for each as the ship decided last saw it: that decision put
         them together, on the latest news."""
-        now = {r.ship: r for r in self.evaluate(self.task if self.done else self.view, self.plan).ships}
+        target = self.target()
+        now = {r.ship: r for r in self.evaluate(target, self.plan).ships}
         first: dict[int, int] = {}
         for k, f in enumerate(self.frozen):
             for s in f["ships"]:
@@ -231,7 +239,7 @@ class WindWeek(MarineWeek):
         seen: dict[int, set[tuple[str, int | None]]] = {}
         cost = {}
         for j in sorted(set(decided.values())):
-            view = known(self.task, [e["event_id"] for e in self.log if e["watch"] <= j])
+            view = self.past([e["event_id"] for e in self.log if e["watch"] <= j], target)
             before = {r.ship: r for r in self.evaluate(view, self.plan).ships}
             for s in (s for s in self.plan if decided[s] == j):
                 seen[s] = {_key(p) for p in before[s].problems}

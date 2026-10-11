@@ -39,11 +39,12 @@ def solve(view: Task, fixed: Plan, before: int, hint: Plan, workers: int, tiebre
           extra: Callable[[cp_model.CpModel, dict], None] | None = None, optimal: bool = False,
           forecast_relief: bool = False) -> Plan:
     """berth_core.solve.optimal_plan's crane-rule model, with ``fixed`` pinned and the others at or after ``before``;
-    ``extra`` adds constraints over each ship's (berthing, leaving) hour variables, and ``optimal`` accepts only a
-    proven optimum. ``forecast_relief`` takes what no one can move as given, since a new forecast may put a pinned
-    window inside its no-movement windows: pinned ships may berth inside them, the movements of pinned ships (at their
-    stays as held in the view) and of the ships alongside count as fixed demand up to the hourly limit, and those stays
-    and the blocks may overlap one another but no other ship."""
+    ``extra`` adds constraints over each ship's (berthing, leaving) hour variables, and any cost terms it returns to
+    the objective; ``optimal`` accepts only a proven optimum. ``forecast_relief`` takes what no one can move as
+    given, since a new forecast may put a pinned window inside its no-movement windows: pinned ships may berth
+    inside them, the movements of pinned ships (at their stays as held in the view) and of the ships alongside count
+    as fixed demand up to the hourly limit, and those stays and the blocks may overlap one another but no other
+    ship."""
     horizon = (max([s.arrival for s in view.ships] + [before]) + sum(s.handling_for(s.min_cranes) for s in view.ships)
                + max([b.end for b in view.blocks] + [0]))
     md = cp_model.CpModel()
@@ -149,8 +150,8 @@ def solve(view: Task, fixed: Plan, before: int, hint: Plan, workers: int, tiebre
         move_iv.append(md.NewFixedSizeIntervalVar(h, 1, f"fm{h}"))
         move_dem.append(min(n, cap))
     md.AddCumulative(move_iv, move_dem, cap)
-    if extra:
-        extra(md, {s.id: (T[s.id], end) for s, end in zip(view.ships, ends, strict=True)})
+    if extra and (more := extra(md, {s.id: (T[s.id], end) for s, end in zip(view.ships, ends, strict=True)})):
+        terms += more
     md.Minimize(sum(terms) * TIEBREAK_SCALE + sum(ends) if tiebreak else sum(terms))
     for sid, (h, sec, cranes) in hint.items():
         md.AddHint(T[sid], h)

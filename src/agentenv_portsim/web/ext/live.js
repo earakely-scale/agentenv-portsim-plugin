@@ -1,6 +1,7 @@
 // A live week's rollout: the transcript by watch with the bulletins as they arrived, a watch panel on the virtual
 // clock, and the dock chart marked with the freeze line and each window's status. Up to the last step, the chart, the
-// 3D quay, the panel and the transcript show only what the planner knew; the last step plays out the real week.
+// 3D quay, the panel and the transcript show only what the planner knew; the last step plays out the real week. A lines
+// week adds the planner's messages to the ships' agents, each a step, and the arrivals agreed through them.
 // The transcript loop is adapted from PortSimEnv's transcript.js (FineEnvs b0f4c2f, Apache-2.0).
 import { BerthChart } from "../chart.js";
 import { clockAt, escapeHtml, evaluatePlan, fmtNum } from "../model.js";
@@ -136,6 +137,34 @@ function windHtml(wind, t, blew, horizon) {
 
 const replanHtml = (r) => `${r.feasible ? r.cost : INFEASIBLE} <span class="muted">(reward ${fmtNum(r.reward, 3)})</span>`;
 
+/** A ship's agent's answer: to an ETA query (``asked`` null) or to a requested arrival hour. */
+function answerText(reply, asked) {
+  if (reply.error) return `error: ${reply.error}`;
+  if (reply.arrived != null) return `arrived h${reply.arrived}`;
+  if (asked == null) return `ETA h${reply.eta}${reply.agreed ? ", as agreed" : ""}`;
+  if (reply.agreed) return `agreed h${reply.arrival}${reply.slowing ? ", slowing" : ""}`;
+  return `refused: ${reply.reason}${reply.eta != null ? ` (ETA h${reply.eta})` : ""}`;
+}
+
+const answerDot = (reply) => `<i class="dot ${reply.error || reply.agreed === false ? "bad" : "ok"}"></i>`;
+
+/** The replies the planner got to one message, as the transcript shows them. */
+function messageHtml(task, r) {
+  if (!r.replies.length) return `<div class="res-line"><i class="dot bad"></i>No replies · ${escapeHtml(firstLine(r.text, 120))}</div>`;
+  return `<ul class="ps-replies">${r.replies.map((x) => `<li>${answerDot(x)}${escapeHtml(x.ship != null ? shipName(task, x.ship) : "?")}: ${x.asked != null ? `asked h${escapeHtml(x.asked)}` : "ETA?"} → ${escapeHtml(answerText(x, x.asked))}</li>`).join("")}</ul>`;
+}
+
+/** This watch's exchanges with the ships' agents, newest first (those of the step shown marked new), the arrivals
+ * agreed so far and, of those, the ships still due at hour t. */
+function linesHtml(lines, before, task, firms, t) {
+  const due = lines.agreed.filter((a) => a.arrival > t).map((a) => `${escapeHtml(shipName(task, a.ship))} h${a.arrival}`).join(", ");
+  const news = lines.exchanges.length - before;
+  const all = lines.exchanges.map((e, i) => ({ ...e, new: i >= before })).reverse();
+  const shown = all.slice(0, Math.max(news, 4));
+  const item = (e) => `<li${e.new ? ' class="new"' : ""}>${answerDot(e.reply)}<b>${escapeHtml(firms[e.firm] || e.firm)}</b> ${escapeHtml(shipName(task, e.ship))}: ${e.ask === "eta" ? "ETA?" : `asked h${e.arrival}`} → ${escapeHtml(answerText(e.reply, e.ask === "eta" ? null : e.arrival))}</li>`;
+  return `<div class="ps-line ps-lines"><span>Ships' agents</span> · <span>${plural(lines.exchanges.length, "request")} this watch</span> · <span>${plural(lines.agreed.length, "arrival")} agreed</span>${due ? ` · <span class="ps-due">due: ${due}</span>` : ""}</div>${shown.length ? `<ul class="ps-exch">${shown.map(item).join("")}${all.length > shown.length ? `<li class="muted">${all.length - shown.length} earlier this watch</li>` : ""}</ul>` : ""}`;
+}
+
 function bulletinsHtml(list, cls = "ps-msgs") {
   return list.length ? `<ul class="${cls}">${list.map((b) => `<li${b.new ? ' class="new"' : ""}>${b.time ? `<span class="muted">${escapeHtml(b.time)}</span> ` : ""}<b>${escapeHtml(b.from)}</b> ${escapeHtml(b.text)}</li>`).join("")}</ul>` : "";
 }
@@ -147,6 +176,7 @@ function watchHeader(w, bulletins) {
 
 function resultHtml(task, step) {
   const r = step.result;
+  if (step.tool === "message_agent") return messageHtml(task, r);
   if (r.error) return `<div class="res-line"><i class="dot bad"></i>${escapeHtml(r.error)}</div>`;
   const refused = (r.refused || []).length ? `<ul class="viol">${r.refused.map((x) => `<li>${escapeHtml(x.reason)}</li>`).join("")}</ul>` : "";
   const problems = (r.entry_problems || []).length ? `<ul class="viol">${r.entry_problems.map((p) => `<li>${escapeHtml(p)}</li>`).join("")}</ul>` : "";
@@ -168,6 +198,7 @@ function otherHtml(tc, out) {
 function gradeRows(gradeEl, ro, task) {
   const g = ro.final.grade;
   const ref = ro.live.reference;
+  const lines = ro.live.lines;
   const count = (tool) => ro.steps.filter((s) => s.tool === tool).length;
   const kv = gradeEl.querySelector(".kv");
   for (const dt of kv.querySelectorAll("dt")) {
@@ -180,21 +211,31 @@ function gradeRows(gradeEl, ro, task) {
     ["Excused cost", fmtNum(g.excused_cost), wind ? "Cost that news, or wind the forecast didn't show, brought to a window after its last chance to change: not charged" : "Cost that news brought to windows already frozen: not charged"],
     ["Excused", excusedHtml(task, g), wind ? "The rule breaks the grade excused: wind no forecast had shown, or news, after the window's last chance to change" : "The rule breaks the grade excused: news that came after the window froze"],
     ["Regret", fmtNum(g.regret), wind ? "Cost above the anchor" : "Cost above the optimum in hindsight"],
-    ["Rolling re-plan", replanHtml(ref.rolling), "A CP-SAT re-planner on the week as known, watch by watch"],
+    lines
+      ? ["Follower re-plan", replanHtml(ref.rolling), "A CP-SAT re-planner on the arrivals as known, watch by watch, requesting arrival times through the ships' agents"]
+      : ["Rolling re-plan", replanHtml(ref.rolling), "A CP-SAT re-planner on the week as known, watch by watch"],
     ...extraRows(ref),
+    ...(lines ? [
+      ["Hours at anchor", fmtNum(g.anchor_hours), "Hours ships waited at anchor between arriving and berthing, each charged as an hour late"],
+      ["Ships' agents", `${plural(count("message_agent"), "message")} · ${plural(lines.exchanges.length, "request")} · ${plural(ro.steps[ro.steps.length - 1].lines.agreed.length, "arrival")} agreed`, "The planner's messages to the ships' agents, the requests in them, and the arrival times agreed"],
+    ] : []),
     ["Audit", audit.ok ? '<i class="dot ok"></i>passed' : `<i class="dot bad"></i>${escapeHtml(audit.problems.join("; "))}`, "Every bulletin arrived once, on time, at its watch"],
   ];
   if (wind) for (const dt of kv.querySelectorAll("dt")) if (dt.textContent === "Optimum") {
     dt.textContent = "Anchor";
-    dt.title = "The lower of the best plan in hindsight and the forecast-following re-planner's cost";
+    dt.title = lines ? "The lower of the best plan in hindsight and the follower's best cost" : "The lower of the best plan in hindsight and the forecast-following re-planner's cost";
   }
   kv.insertAdjacentHTML("beforeend", rows.map(([k, v, tip]) => `<dt title="${escapeHtml(tip)}">${escapeHtml(k)}</dt><dd>${v}</dd>`).join(""));
 }
 
 /** A wind week's other references: the optimum in hindsight, and the re-planner blind to the forecast or holding every
- * warning. */
+ * warning; a lines week's: hindsight, and the follower that never asks the ships' agents. */
 function extraRows(ref) {
   if (ref.hindsight_cost == null) return [];
+  if (ref.silent) return [
+    ["Hindsight", fmtNum(ref.hindsight_cost), "The best plan in hindsight, knowing every arrival and slowing ships from the first watch it could ask"],
+    ["Silent re-plan", replanHtml(ref.silent), "The follower never asking the ships' agents"],
+  ];
   return [
     ["Hindsight", fmtNum(ref.hindsight_cost), "The best plan in hindsight, on the wind that blew"],
     ["Blind re-plan", replanHtml(ref.blind), "The rolling re-planner with the forecast taken out of its week"],
@@ -212,9 +253,10 @@ export function renderLive(root, ro, task, { onStep, horizon }) {
   const state = { step: null, k: -1, t: 0, panel: "", key: null };
   const at = (via, k) => live.bulletins.filter((b) => b.via === via && (k == null || b.step === k));
   const weeks = new Map();
-  /** The week as known at a step, one object for each set of bulletins, so the 3D quay rebuilds only on news. */
+  /** The week as known at a step, one object for each set of bulletins, so the 3D quay rebuilds only on news; in a
+   * lines week also on each arrival an agent's ETA or agreement changes. */
   const known = (step) => {
-    const key = step.revealed.join(",");
+    const key = step.revealed.join(",") + (step.lines ? `|${step.task.ships.map((s) => s.arrival).join(",")}` : "");
     if (!weeks.has(key)) weeks.set(key, step.task);
     return weeks.get(key);
   };
@@ -222,6 +264,11 @@ export function renderLive(root, ro, task, { onStep, horizon }) {
   const truths = new Map();
   /** A wind week shown in the wind that blew, one object per week shown: the 3D quay draws it at the cursor hour. */
   const inTruth = (week) => truths.get(week) || truths.set(week, { ...week, rules: { ...week.rules, no_moves: task.rules.no_moves } }).get(week);
+  const agreed = new Map(((steps[steps.length - 1] || {}).lines || { agreed: [] }).agreed.map((a) => [a.ship, a.arrival]));
+  /** The week as it turned out: in a lines week each ship agreed with its agent arrives at the agreed hour, a slowed one
+   * later than at cruising speed, so it waits at sea or at anchor until then. */
+  const real = agreed.size ? { ...task, ships: task.ships.map((s) => (agreed.has(s.id) ? { ...s, arrival: agreed.get(s.id) } : s)) } : task;
+  const firms = (live.lines || {}).firms || {};
 
   root.innerHTML = "";
   let turn = 0;
@@ -252,7 +299,9 @@ export function renderLive(root, ro, task, { onStep, horizon }) {
       call.className = `call${step ? " pick" : ""}`;
       let head = `<span class="fn">${escapeHtml(tc.name)}</span>`;
       let body = "";
-      if (step && step.tool !== "advance") {
+      if (step && step.tool === "message_agent") {
+        head += ` <span class="muted">to ${escapeHtml(firms[step.result.agent] || step.result.agent)} · ${plural(step.entries.length, "request")}</span>`;
+      } else if (step && step.tool !== "advance") {
         const prev = step.tool === "check_plan" ? step.windows : k ? steps[k - 1].windows : [];
         const tbl = planTable(task, step.plan, prev);
         const n = Array.isArray(step.entries) ? step.entries.length : "?";
@@ -296,8 +345,14 @@ export function renderLive(root, ro, task, { onStep, horizon }) {
   const left = root.closest(".ro-left");
   gradeRows(left.querySelector("#grade"), ro, task);
   const panel = document.createElement("section");
-  panel.className = "ps-watch";
+  panel.className = live.lines ? "ps-watch ps-lines-week" : "ps-watch";
   left.insertBefore(panel, root.closest("section"));
+
+  /** How many of a lines step's exchanges the step before it in the same watch had: the rest are the step's own. */
+  const exchangedBefore = (step) => {
+    const prev = steps[steps.indexOf(step) - 1];
+    return prev && prev.watch === step.watch ? prev.lines.exchanges.length : 0;
+  };
 
   /** While the clock runs to the watch an advance opens, the week shown is still the one before it. */
   const shownAt = (t) => (state.k > 0 && state.step.tool === "advance" && !state.step.result.done && t < state.step.hour - 1e-6 ? steps[state.k - 1] : state.step);
@@ -312,11 +367,11 @@ export function renderLive(root, ro, task, { onStep, horizon }) {
     const g = ro.final.grade;
     const ref = live.reference;
     const final = state.k === steps.length - 1
-      ? `<dl class="kv ps-final"><dt>Reward</dt><dd><b>${fmtNum(g.reward, 3)}</b></dd><dt>Cost</dt><dd>${g.feasible ? g.cost : INFEASIBLE}</dd><dt>Excused cost</dt><dd>${fmtNum(g.excused_cost)}</dd><dt>Regret</dt><dd>${fmtNum(g.regret)}</dd><dt>Rolling re-plan</dt><dd>${replanHtml(ref.rolling)}</dd>${extraRows(ref).map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}<dt>Naive re-plan</dt><dd>${replanHtml(ref.naive)}</dd><dt>Audit</dt><dd>${live.audit.ok ? '<i class="dot ok"></i>passed' : `<i class="dot bad"></i>${escapeHtml(live.audit.problems.join("; "))}`}</dd></dl>`
+      ? `<dl class="kv ps-final"><dt>Reward</dt><dd><b>${fmtNum(g.reward, 3)}</b></dd><dt>Cost</dt><dd>${g.feasible ? g.cost : INFEASIBLE}</dd><dt>Excused cost</dt><dd>${fmtNum(g.excused_cost)}</dd><dt>Regret</dt><dd>${fmtNum(g.regret)}</dd>${live.lines ? `<dt>Hours at anchor</dt><dd>${fmtNum(g.anchor_hours)}</dd>` : ""}<dt>${live.lines ? "Follower" : "Rolling"} re-plan</dt><dd>${replanHtml(ref.rolling)}</dd>${extraRows(ref).map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}<dt>Naive re-plan</dt><dd>${replanHtml(ref.naive)}</dd><dt>Audit</dt><dd>${live.audit.ok ? '<i class="dot ok"></i>passed' : `<i class="dot bad"></i>${escapeHtml(live.audit.problems.join("; "))}`}</dd></dl>`
       : "";
     const next = shown === step ? "" : `<div class="ps-line ps-next">Advancing to watch ${step.watch}…</div>`;
     const html = `<div class="sec-head"><h2>${watchLabel(shown)}</h2><span class="muted small">step ${state.k + 1} of ${steps.length} · ${escapeHtml(step.tool)}</span></div>
-      <div class="ps-clock"><b>${c.day} ${c.date} · ${c.hm}</b> <span class="muted">${virtualTime(task, t)}</span></div>${shown.marine ? marineHtml(shown.marine, t) : ""}${shown.wind ? windHtml(shown.wind, t, task.rules.no_moves, horizon) : ""}
+      <div class="ps-clock"><b>${c.day} ${c.date} · ${c.hm}</b> <span class="muted">${virtualTime(task, t)}</span></div>${shown.marine ? marineHtml(shown.marine, t) : ""}${shown.wind ? windHtml(shown.wind, t, task.rules.no_moves, horizon) : ""}${shown.lines ? linesHtml(shown.lines, exchangedBefore(shown), task, firms, t) : ""}
       <div class="ps-line">${escapeHtml(shown.time)} (h ${shown.hour}) · ${shown.watch ? `freeze line h ${shown.frozen_before}` : "every window open"}</div>${next}
       <div class="ps-counts">${["departed", "berthed", "frozen", "open"].map((s) => `<span class="ps-c ps-${s}"><b>${counts[s]}</b> ${s}</span>`).join("")}<span class="ps-c"><b>${shown.unconfirmed.length}</b> unconfirmed</span></div>
       <div class="ps-known">${knownHtml(shown.known)}</div>
@@ -340,7 +395,7 @@ export function renderLive(root, ro, task, { onStep, horizon }) {
   stage.setEvaluation = () => {};
 
   function draw(shown) {
-    week = shown.last ? task : known(shown);
+    week = shown.last ? real : known(shown);
     const quay = shown.wind ? inTruth(week) : week;
     if (scene.task !== quay) {
       const keep = { anim: scene.anim, userMoved: scene.userMoved };

@@ -29,6 +29,12 @@ header.top .name { font-weight: 600; text-decoration: none; }
 .ps-ws-cursor { stroke: var(--fg); stroke-width: 1.2; }
 .ps-ws-credit { font-size: 8px; fill: var(--muted); }
 .ps-short { color: var(--red); }
+.ps-lines { font-variant-numeric: tabular-nums; }
+.ps-lines span:not(.ps-due) { white-space: nowrap; }
+.ps-exch, .ps-replies { list-style: none; margin: 4px 0 0; padding: 0; font-size: 12px; font-variant-numeric: tabular-nums; }
+.ps-exch li { padding: 2px 6px; border-left: 3px solid var(--line); margin-bottom: 2px; }
+.ps-exch li.new { border-left-color: var(--warn); background: #fbf1dc; }
+.ps-replies li { margin: 2px 0; }
 .ps-counts { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; margin-top: 4px; }
 .ps-c b { font-variant-numeric: tabular-nums; }
 .ps-c.ps-departed { color: var(--muted); }
@@ -70,7 +76,7 @@ html.scene .ro-grid { display: block; height: 100%; }
 html.scene .ro-right { position: absolute; inset: 0; }
 html.scene .ro-right .chart-sec, html.scene .ro-left > section:not(.ps-watch), html.scene .scene-traffic, html.scene .stage .stepnav { display: none; }
 html.scene .stage { height: 100%; border-radius: 0; }
-html.scene .page-head { position: absolute; z-index: 5; top: 16px; left: 18px; margin: 0; padding: 8px 14px; border-radius: 6px;
+html.scene .page-head { position: absolute; z-index: 6; top: 16px; left: 18px; margin: 0; padding: 8px 14px; border-radius: 6px;
   background: rgba(13, 30, 40, 0.88); color: #fff; }
 html.scene .page-head h1 { font-size: 22px; margin: 0; color: #fff; }
 html.scene .page-head .meta, html.scene .page-head .meta a { color: #c9d6e0; }
@@ -84,6 +90,14 @@ html.scene .ps-c.ps-berthed b, html.scene .ps-c.ps-frozen b { color: #9fc4ea; }
 html.scene .ps-known { display: none; }
 html.scene .ps-marine { font-size: 14px; }
 html.scene .ps-wind { font-size: 14px; }
+html.scene .ps-lines { font-size: 14px; }
+html.scene .ps-exch { font-size: 13px; }
+html.scene .ps-exch li { border-left-color: rgba(184, 199, 211, 0.4); }
+html.scene .ps-exch li:not(.new) { display: none; }
+html.scene .ps-exch li.new { background: rgba(251, 241, 220, 0.97); color: #1c1c1c; border-left-color: #f0b44c; }
+html.scene .ps-due { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1; overflow: hidden; }
+html.scene .ps-exch li.new:nth-child(n+4) { display: none; }
+html.scene .ps-lines-week .ps-feed li.new:nth-child(n+3) { display: none; }
 html.scene .ps-ws-day { stroke: rgba(184, 199, 211, 0.25); }
 html.scene .ps-ws-w25 { fill: #9fc4ea; fill-opacity: 0.22; }
 html.scene .ps-ws-w30 { fill: #9fc4ea; fill-opacity: 0.42; }

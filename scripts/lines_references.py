@@ -1,0 +1,518 @@
+"""Compute the lines pack, data/dock-v1-lines/, and data/lines/references.jsonl: the wind weeks of data/dock-v1-wind/
+with each ship's agent (the firm the port's 2024 record names for the call), its previous port's distance and its ETA
+bias, played live through agentenv_portsim.lines.LinesWeek.
+
+Four players per week. The hindsight optimum knows every arrival and slows ships from the first watch it could ask,
+proven optimal by CP-SAT. The follower re-plans at every watch on the arrivals as known and requests arrival times
+through the agents as the env's planner would: for each ship whose window would freeze before the next watch, each
+ship it plans to slow, and each ship due within 12 hours of the next watch, which could otherwise arrive early unseen
+and hold up the queue; a refusal is a fact it keeps, and it probes until the ship agrees an hour, then re-plans, four
+rounds at most. The silent follower re-plans the same way but never asks. The naive policy is v2's. A week's reference
+cost, its anchor, is the lower of the hindsight optimum's cost and the follower's best over its four solver
+configurations, as in the wind port; planners that learn arrivals as they come play close to hindsight. A week
+qualifies when (a) at least 3 of the follower's
+configurations finish feasible, (b) the silent follower scores at most 0.9 in at least 3 of 4, so asking the agents
+matters, and (c) it has at most 10 watches.
+
+    uv run --with ortools==9.15.6755 python scripts/lines_references.py pack [--raw PATH] [--out DIR]
+    uv run --with ortools==9.15.6755 python scripts/lines_references.py screen [--tasks id,...] [--out PATH]
+    uv run --with ortools==9.15.6755 python scripts/lines_references.py references [--screen PATH] [--out DIR]
+"""
+
+import argparse
+import csv
+import hashlib
+import io
+import json
+import math
+import os
+import random
+import re
+import time
+from collections import Counter, defaultdict
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from dataclasses import replace
+from datetime import datetime, timedelta
+from pathlib import Path
+
+import ortools
+from berth_core import Plan, Task, plan_from_list, plan_to_list
+from berth_core.check import unavoidable_cost
+from live_references import CONFIGS, DETERMINISTIC_SECONDS, outcome, solve
+from marine_references import raw
+from wind_references import pools
+
+from agentenv_portsim import lines, schedule, wind, world
+from agentenv_portsim.lines import LinesWeek
+
+ROOT = Path(__file__).resolve().parents[1]
+SCREEN = ROOT / "build/lines/screen.jsonl"
+REACHED = 3
+SILENT_BAR = 0.9
+MAX_WATCHES = 10
+ROUNDS = 4
+PROBES = 8
+MARGIN = 12
+QUEUE_PENALTY = 100_000
+LATE_SHARE = 0.8
+BIAS_SCALE = math.sqrt(math.pi / 2)
+BIAS_CAP = 4.0
+RAW_TIME = "%Y-%m-%d %H:%M:%S"
+NGA = "https://maritimesafetyinnovationlab.org/wp-content/uploads/2015/01/pub151-distances-btw-ports.pdf"
+DISTANCES = {
+    "Valencia": (165, "Valencia"), "Castellon de la Plana": (165, "Valencia, a proxy"),
+    "Sagunto": (165, "Valencia, a proxy"), "Alicante": (228, "Alicante"),
+    "Fos-sur-Mer": (178, "Port St. Louis du Rhone, a proxy"), "Marseille": (189, "Marseille"),
+    "Genoa": (356, "Genova"), "Vado Ligure": (341, "Savona, as Pub. 151 directs for Rada di Vado"),
+    "La Spezia": (383, "La Spezia"), "Livorno": (386, "Livorno"), "Alger (Algiers)": (282, "Algiers"),
+    "Oran": (365, "Oran"), "Bejaia (ex Bougie)": (282, "Algiers, a proxy"),
+    "Skikda (ex Philippeville)": (354, "Skikda"), "Annaba (ex Bone)": (386, "Annaba"),
+    "Algeciras": (516, "Gibraltar, a proxy"), "Tanger Med": (515, "Ceuta, a proxy"),
+    "Casablanca": (700, "Strait of Gibraltar 534 + 166"), "Lisboa": (820, "Strait of Gibraltar 534 + 286"),
+    "Gioia Tauro": (681, "Messina, a proxy"), "Marsaxlokk": (671, "Valletta, a proxy"),
+    "Piraeus": (1172, "Piraievs, south of Greece"), "Aliaga": (1332, "Izmir, a proxy"), "Koper": (1296, "Koper"),
+    "Damietta": (1600, "Port Said, a proxy")}
+"""Sea distances from Barcelona in nautical miles, NGA Pub. 151, Distances Between Ports, 11th edition (2001), no
+copyright claimed; a port it doesn't list takes its nearest listed neighbour. Any other previous port is farther than
+the week's reach, so its leg never limits a ship's slowing."""
+FIRMS = {
+    "MEDITERRANEAN SHIPPING COM ESPAÑA SLU": ("msc", "MSC España"),
+    "NOATUM MARITIME SPAIN SAU": ("noatum", "Noatum Maritime"),
+    "A PEREZ Y CIA SL": ("aperez", "A. Pérez y Cía"),
+    "CMA CGM IBERICA SAU": ("cmacgm", "CMA CGM Ibérica"),
+    "MARTICO SL": ("martico", "Martico"),
+    "HAPAG LLOYD SPAIN SL": ("hapag", "Hapag-Lloyd Spain"),
+    "GLOBAL LINER AGENCIAS IBERIA SL": ("globalliner", "Global Liner Agencias"),
+    "SOLUCIONES INTEGRALES MARITIMAS SLU": ("sim", "Soluciones Integrales Marítimas"),
+    "COSCO SHIPPING LINES SPAIN SA": ("cosco", "COSCO Shipping Lines Spain"),
+    "OCEAN NETWORK EXPRESS SPAIN SA": ("one", "Ocean Network Express Spain"),
+    "ARKAS SPAIN SA": ("arkas", "Arkas Spain"),
+    "WEC LINES ESPAÑA SLU": ("wec", "WEC Lines España"),
+    "BOLUDA LINES SA": ("boluda", "Boluda Lines"),
+    "MARITIME AGENCY HMM SPAIN SL": ("hmm", "HMM Spain"),
+    "ANTILLAS SEA AGENCY SL": ("antillas", "Antillas Sea Agency"),
+    "UNIVERSAL MARITIMA SL": ("universal", "Universal Marítima"),
+    "ORIENT OVERSEAS CONTAINER LINE SPAIN SL": ("oocl", "OOCL Spain"),
+    "BERGE MARITIMA SL": ("berge", "Bergé Marítima")}
+
+
+def read(path: Path) -> list[dict]:
+    return [json.loads(line) for line in path.read_text().splitlines()]
+
+
+def calls(body: bytes) -> dict[str, list[dict]]:
+    out: dict[str, list[dict]] = defaultdict(list)
+    for row in csv.DictReader(io.StringIO(body.decode("utf-8"))):
+        if row["IMO"] and row["MOLLCODI"] in ("36A", "24B"):
+            out[row["IMO"]].append(row)
+    return out
+
+
+def agent_of(by_imo: dict[str, list[dict]], task: Task, sid: int) -> str:
+    """The call's shipping agent: the 2024 call of this ship at the task's quays nearest its planned arrival, or for an
+    unscheduled call, its nearest call at either quay."""
+    s = task.ships[sid]
+    when = datetime.strptime(task.week_start_utc, schedule.TIME_FORMAT) + timedelta(
+        hours=s.planned_hour if s.planned_hour is not None else s.arrival)
+    row = min(by_imo[s.imo], key=lambda r: abs(datetime.strptime(r["ETAUTC"], RAW_TIME) - when))
+    return row["CONSIGNATARI"]
+
+
+def bias(task_id: str, sid: int) -> float:
+    """How far off the ship's agent is, as a multiple of the mean error: 80% of ships later than their ETA (a positive
+    bias), the size half-normal with mean 1, capped at 4."""
+    rng = random.Random(f"lines:{task_id}:{sid}")
+    late = rng.random() < LATE_SHARE
+    size = min(BIAS_CAP, abs(rng.gauss(0.0, BIAS_SCALE)))
+    return round(size if late else -size, 3)
+
+
+def with_lines(task: Task, by_imo: dict[str, list[dict]]) -> Task:
+    firms, ships = {}, []
+    for s in task.ships:
+        firm_id, name = FIRMS[agent_of(by_imo, task, s.id)]
+        firms[firm_id] = name
+        leg = DISTANCES.get(s.from_port)
+        ships.append({"firm": firm_id, "leg_nm": leg[0] if leg else None, "bias": bias(task.task_id, s.id)})
+    return replace(task, rules=task.rules | {"lines": {"firms": dict(sorted(firms.items())), "ships": ships}})
+
+
+def news_etas(task: Task) -> Task:
+    """v4's late, bunching and unscheduled-call notices as the agents' ETAs at the watch they reach the planner; a
+    delay notice never gives an ETA at or before the slot the ship is late for."""
+    at = {n.event_id: w.hour for w in schedule.schedule(task) for n in w.notices}
+    events, notices = [], []
+    for i, (e, text) in enumerate(zip(task.disruptions, task.notices, strict=True)):
+        hour = at.get(f"{e['type']}-{i}")
+        if e["type"] == "late":
+            eta = max(lines.estimate(task, e["ship"], hour), task.ships[e["ship"]].arrival - e["hours"] + 1)
+            text = re.sub(r"it now arrives at hour \d+", f"its agent now gives ETA hour {eta}", text)
+            e = e | {"eta": eta}
+        elif e["type"] == "extra":
+            eta = lines.estimate(task, e["ship"], hour)
+            e, text = e | {"eta": eta}, re.sub(r"arrives at hour \d+", f"has ETA hour {eta} from its agent", text)
+        elif e["type"] == "bunching":
+            etas = [max(lines.estimate(task, s, hour), task.ships[s].planned_hour + 1) for s in e["ships"]]
+            e, text = e | {"etas": etas}, re.sub(
+                r"now arrive together between hours \d+ and \d+ \(each ship's arrival hour is in the table\)",
+                "now arrive together; their agents' ETAs: "
+                + ", ".join(f"ship {s} hour {x}" for s, x in zip(e["ships"], etas, strict=True)), text)
+        events.append(e)
+        notices.append(text)
+    return replace(task, disruptions=events, notices=notices)
+
+
+def pack(args: argparse.Namespace) -> None:
+    by_imo = calls(raw(args.raw))
+    tasks = [news_etas(with_lines(t, by_imo)) for t in wind.pack().tasks]
+    body = "".join(json.dumps(t.to_dict(), ensure_ascii=False, separators=(",", ":")) + "\n" for t in tasks).encode()
+    out = args.out / schedule.LINES_PACK
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "tasks.jsonl").write_bytes(body)
+    (out / "manifest.json").write_text(json.dumps(manifest(tasks, body), indent=2, ensure_ascii=False) + "\n")
+    print(f"Wrote {len(tasks)} tasks to {out}")
+
+
+def manifest(tasks: list[Task], body: bytes) -> dict:
+    return {"name": schedule.LINES_PACK, "split": "eval", "tasks": len(tasks),
+            "tiers": dict(sorted(Counter(t.difficulty for t in tasks).items())),
+            "sha256": hashlib.sha256(body).hexdigest(), "weeks": sorted({t.week for t in tasks}),
+            "quays": dict(sorted(Counter(t.quay for t in tasks).items())),
+            "source": f"{schedule.WIND_PACK}'s tasks with rules.lines added and the arrival news as the agents' ETAs",
+            "wind": {"pack": schedule.WIND_PACK, "sha256": wind.pack().manifest["sha256"]},
+            "lines": {"grounding": GROUNDING}}
+
+
+GROUNDING = {
+    "agents": {"value": "the shipping agent the port's 2024 record names for the call (CONSIGNATARI)",
+               "basis": "Port de Barcelona open data, CC BY-SA 4.0, the 2024 calls of every ship type, pinned by "
+                        "sha256 as for dock-v1-marine; an unscheduled call takes its ship's nearest 2024 call."},
+    "reports": {"value": "ETAs 48 and 24 hours out and an arrival call 1 hour out, delivered at the next watch",
+                "basis": "Directive 2002/59/EC art. 4 and Orden FOM/1194/2011 art. 9 require a notice at least 24 h "
+                         "before arrival; the IMO Just In Time Arrival Guide (2020) puts berth planning at about 48 h; "
+                         "the 2025 berthing ordinance (BOE-A-2025-5157) defines arrival by the call 1 h before buoy "
+                         "S. The 48 h report and the delivery at the next watch are assumptions."},
+    "eta_error": {"value": "mean absolute error 20% of the hours left, 80% of ships later than their ETA",
+                  "basis": "Assumption, inside the published range: Busan New Port 2022-23 (agent ETAs 24-48 h out, "
+                           "MAE 5 h 15 min), Antwerp 2019 (10-15 h), MSC's Barcelona-Valencia loop 2017-18 (80% "
+                           "later than the leg's ETA, 60% of those within 10 h)."},
+    "speeds": {"value": f"cruise {lines.CRUISE_KN} kn, slowest {lines.SLOWEST_KN} kn, slowing only after leaving "
+                        "the previous port", "basis": (
+        "Assumption: two-stroke engines run continuously down to 10% load (Wärtsilä); cruising speeds of 12-20 kn on "
+        "MSC's Barcelona-Valencia loop; the IMO JIT container study's economical speed is 10 kn. Distances from NGA "
+        f"Pub. 151 ({NGA}).")},
+    "queue": {"value": "first come, first served, a ship slowed on request keeping its turn; the wind's hold is the "
+                       "only exception", "basis": (
+        "Barcelona's container terminals berthed first come, first served in 2024 (El Mercantil, 2024-11-05; "
+        "Transporte XXI, 2024-09-09), and the 2025 ordinance made it the general rule (BOE-A-2025-5157, art. 3). "
+        "Keeping the turn of a slowed ship is the virtual-arrival arrangement; the ordinance's other exceptions "
+        "(technical incompatibility, occupancy thresholds, BEST's local-cargo priority) are left out.")},
+    "anchor": {"value": "an hour at anchor costs the ship's sections, as an hour late does", "basis": (
+        "The main-engine fuel a ship saves by slowing instead of waiting is worth 1.3-1.8 hours of its charter "
+        "(Third IMO GHG Study 2014 table 14, VLSFO $626/t in 2024, Alphaliner charter rates June 2024), and an hour "
+        "late costs more than charter alone, so 1 is the round value inside the evidence.")},
+}
+
+
+def latest(week: LinesWeek, sid: int, arrival: int) -> int:
+    """The follower's estimate of the latest the ship can arrive, from what it can know: its known arrival and its
+    previous port's distance."""
+    leg = lines.leg_hours(week.task, sid)
+    start = week.hour if leg is None else max(week.hour, arrival - leg)
+    return max(arrival, math.floor(start + (arrival - start) * lines.STRETCH))
+
+
+def hindsight_bounds(week: LinesWeek) -> dict[int, tuple[int, int]]:
+    """Each ship's arrival range for the hindsight player: from cruising speed to the slowest it could arrive if
+    asked at the first watch it's known."""
+    first = {s: h for s, h in lines.first_known(week.task).items()}
+    hours = [w.hour for w in week.watches]
+    out = {}
+    for s in week.task.ships:
+        asked = next((h for h in hours if h >= first.get(s.id, 0)), None)
+        if asked is None or asked >= s.arrival:
+            out[s.id] = (s.arrival, s.arrival)
+        else:
+            out[s.id] = (s.arrival, week.reach(s.id, asked)[1])
+    return out
+
+
+def extra_for(view: Task, fixed: Plan, bounds: dict[int, tuple[int, int]], turns: dict[int, int], base):
+    """Each open ship's arrival within its bounds and berthing at or after it, the hours between them charged; a ship
+    that starts while a ship earlier in the queue has arrived and waits is penalised, so the plans keep the queue."""
+    def add(md, ships):
+        base(md, ships)
+        terms, arrive = [], {}
+        for s in view.ships:
+            lo, hi = bounds[s.id]
+            if s.id in fixed:
+                arrive[s.id] = lo
+                continue
+            t = ships[s.id][0]
+            p = md.NewIntVar(lo, hi, f"a{s.id}") if hi > lo else lo
+            md.Add(t >= p)
+            wait = md.NewIntVar(0, 10_000, f"wait{s.id}")
+            md.Add(wait == t - p)
+            terms.append(s.sections * wait)
+            arrive[s.id] = p
+        ids = [s.id for s in view.ships]
+        for x in ids:
+            for y in ids:
+                if turns[x] < turns[y] and not (x in fixed and y in fixed):
+                    tx, ty = ships[x][0], ships[y][0]
+                    jump, there, broken = md.NewBoolVar(""), md.NewBoolVar(""), md.NewBoolVar("")
+                    md.Add(ty < tx).OnlyEnforceIf(jump)
+                    md.Add(ty >= tx).OnlyEnforceIf(jump.Not())
+                    md.Add(ty >= arrive[x]).OnlyEnforceIf(there)
+                    md.Add(ty < arrive[x]).OnlyEnforceIf(there.Not())
+                    md.AddBoolOr([jump.Not(), there.Not(), broken])
+                    terms.append(QUEUE_PENALTY * broken)
+        return terms
+    return add
+
+
+def lines_solve(view: Task, fixed: Plan, before: int, hint: Plan, workers: int, tiebreak: bool,
+                bounds: dict[int, tuple[int, int]], turns: dict[int, int], optimal: bool = False) -> Plan:
+    return solve(view, fixed, before, hint, workers, tiebreak,
+                 extra=extra_for(view, fixed, bounds, turns, pools(view, fixed)), optimal=optimal,
+                 forecast_relief=not optimal)
+
+
+def hindsight(task: Task) -> tuple[int, Plan, dict[int, int]]:
+    week = LinesWeek(task)
+    bounds = hindsight_bounds(week)
+    truth = replace(lines.with_arrivals(task, {s.id: s.arrival for s in task.ships},
+                                        {s.id: s.arrival for s in task.ships}))
+    plan = solve(truth, {}, 0, plan_from_list(task.reference["optimal_plan"]), 1, False,
+                 extra=extra_for(truth, {}, bounds, {s.id: s.arrival for s in task.ships}, pools(truth, {})),
+                 optimal=True)
+    arrivals = {s.id: min(max(plan[s.id][0], bounds[s.id][0]), bounds[s.id][1]) for s in task.ships}
+    graded = lines.evaluate(lines.with_arrivals(task, arrivals, {s.id: s.arrival for s in task.ships}), plan)
+    assert graded.feasible, task.task_id
+    return graded.cost, plan, arrivals
+
+
+def planning(week: LinesWeek, low: dict[int, int], high: dict[int, int], ask: bool) -> tuple[Task, dict, dict]:
+    """The follower's view: each ship's arrival at least what it has learned, a frozen ship's no later than its
+    window; its bounds and its turns as known."""
+    view, fixed = week.view, week.fixed
+    arrivals, bounds = {}, {}
+    for s in view.ships:
+        a = max(s.arrival, low.get(s.id, s.arrival))
+        if s.id in fixed:
+            a = min(a, fixed[s.id][0])
+        settled = s.id in week.locks or s.id in week.arrived or s.id in fixed or not ask
+        hi = a if settled else min(high.get(s.id, 10**6), latest(week, s.id, a))
+        arrivals[s.id], bounds[s.id] = a, (a, max(a, hi))
+    turns = {s.id: week.known_turn(view, s.id) for s in view.ships}
+    return lines.with_arrivals(view, arrivals, turns), bounds, turns
+
+
+def lock(week: LinesWeek, sid: int, want: int, low: dict[int, int], high: dict[int, int]) -> int | None:
+    """Request ``want``, then probe from the refusals until the ship agrees an hour: later by a doubling step while it
+    can't arrive that early, bisecting once it can't slow that much. Each refusal is a fact the follower keeps; returns
+    the agreed hour, or None."""
+    firm, step, r = lines.firm(week.task, sid), 1, want
+    for _ in range(PROBES):
+        reply = week.request(firm, sid, r)
+        if reply["agreed"]:
+            return r
+        if reply.get("reason") == "can't arrive that early":
+            low[sid] = max(low.get(sid, r + 1), r + 1)
+        elif reply.get("reason") == "can't slow down that much":
+            high[sid] = min(high.get(sid, r - 1), r - 1)
+        else:
+            week.arrived.add(sid)
+            return None
+        lo, hi = low.get(sid, -10**6), high.get(sid, 10**6)
+        if lo > hi:
+            return None
+        if reply.get("reason") == "can't arrive that early" and hi == 10**6:
+            r, step = r + step, step * 2
+        else:
+            r = (max(lo, r - 4 * step) + hi + 1) // 2 if lo == -10**6 else (lo + hi + 1) // 2
+    return None
+
+
+def follower(workers: int, tiebreak: bool, plans: list[list[dict]], ask: bool = True) -> world.Policy:
+    low: dict[int, int] = {}
+    high: dict[int, int] = {}
+
+    def policy(week: LinesWeek) -> Plan:
+        upcoming = week.watches[week.watch + 1].hour if not week.last else 10**6
+        hint: Plan = week.plan if week.watch else {}
+        for attempt in range(ROUNDS + 1):
+            view, bounds, turns = planning(week, low, high, ask)
+            plan = lines_solve(view, week.fixed, week.before, hint, workers, tiebreak, bounds, turns)
+            hint = plan
+            if not ask or attempt == ROUNDS:
+                break
+            moved = False
+            for sid, (start, _, _) in sorted(plan.items()):
+                if sid in week.fixed or sid in week.locks or sid in week.arrived:
+                    continue
+                lo, hi = bounds[sid]
+                if start < upcoming + schedule.FREEZE_HOURS or start > lo or lo < upcoming + MARGIN:
+                    want = min(start, hi)
+                    moved |= lock(week, sid, want, low, high) != start
+            if not moved:
+                break
+        plans.append(plan_to_list(plan))
+        return plan
+    return policy
+
+
+def played(task: Task, policy: world.Policy) -> LinesWeek:
+    week = world.play(task, policy, week=LinesWeek)
+    assert week.refusals == [], week.refusals
+    return week
+
+
+def configs(task: Task, ask: bool) -> list[tuple[dict, LinesWeek | None, list[list[dict]]]]:
+    out = []
+    for workers, tiebreak in CONFIGS:
+        row, plans = {"workers": workers, "tiebreak": tiebreak}, []
+        try:
+            out.append((row, played(task, follower(workers, tiebreak, plans, ask)), plans))
+        except RuntimeError as e:
+            out.append((row | {"cost": None, "reward": None, "error": str(e)}, None, plans))
+    return out
+
+
+def regraded(week: LinesWeek, task: Task) -> dict:
+    final = LinesWeek(task)
+    final.__dict__.update({k: v for k, v in week.__dict__.items() if k not in ("task", "grade")})
+    final.finish(week.end_reason)
+    return outcome(final.grade) | {"anchor_hours": final.grade["anchor_hours"]}
+
+
+def summary(runs, task: Task) -> tuple[dict | None, list[dict]]:
+    first, rows = None, []
+    for k, (row, week, plans) in enumerate(runs):
+        if week is not None:
+            graded = regraded(week, task)
+            row = row | {"cost": graded["cost"], "reward": graded["reward"], "anchor_hours": graded["anchor_hours"],
+                         "messages": len(week.exchanges),
+                         "most_messages_in_a_watch": max(Counter(e["watch"] for e in week.exchanges).values(),
+                                                         default=0)}
+            if first is None:
+                first = {"config": k, **graded, "plans": plans,
+                         "exchanges": [{"watch": e["watch"], "ship": e["ship"], "arrival": e.get("arrival"),
+                                        "agreed": e["reply"].get("agreed")} for e in week.exchanges]}
+        rows.append(row)
+    return first, rows
+
+
+def screened(task: Task) -> dict:
+    hours = [w.hour for w in schedule.schedule(task)]
+    row = {"task_id": task.task_id, "watch_hours": hours, "ships": len(task.ships),
+           "firms": len(task.rules["lines"]["firms"])}
+    started = time.monotonic()
+    try:
+        best, plan, arrivals = hindsight(task)
+    except RuntimeError as e:
+        return row | {"error": str(e), "qualifies": False}
+    follow = configs(task, ask=True)
+    costs = [w.grade["cost"] for _, w, _ in follow if w is not None and w.grade["cost"] is not None]
+    if not costs:
+        return row | {"hindsight_cost": best, "error": "no follower configuration finished feasible",
+                      "configs": [r for r, _, _ in follow], "qualifies": False}
+    anchor = min([best, *costs])
+    final = replace(task, reference=task.reference | {"optimal_cost": anchor, "optimal_plan": plan_to_list(plan),
+                                                      "lower_bound": best, "proven_optimal": False,
+                                                      "hindsight_arrivals": [arrivals[s.id] for s in task.ships]})
+    rolled, rows = summary(follow, final)
+    silent_first, silent_rows = summary(configs(task, ask=False), final)
+    naive = played(final, world.naive)
+    clauses = {"a": sum(c["cost"] is not None for c in rows) >= REACHED,
+               "b": sum(c["reward"] is not None and c["reward"] <= SILENT_BAR for c in silent_rows) >= REACHED,
+               "c": len(hours) <= MAX_WATCHES}
+    return row | {"optimal_cost": anchor, "hindsight_cost": best, "wind_optimal_cost": task.reference["optimal_cost"],
+                  "unavoidable_cost": unavoidable_cost(task), "rolling": rolled, "configs": rows,
+                  "silent": (silent_first or {}) | {"configs": silent_rows},
+                  "naive": outcome(naive.grade) | {"anchor_hours": naive.grade["anchor_hours"]},
+                  "clauses": clauses, "qualifies": all(clauses.values()),
+                  "solver": {"ortools": ortools.__version__, "max_deterministic_time": DETERMINISTIC_SECONDS},
+                  "hindsight_plan": plan_to_list(plan), "seconds": round(time.monotonic() - started)}
+
+
+def one(task_id: str) -> dict:
+    return screened(lines.pack().get(task_id))
+
+
+def screen(args: argparse.Namespace) -> None:
+    ids = args.tasks.split(",") if args.tasks else [t.task_id for t in lines.pack().tasks]
+    done = {r["task_id"] for r in read(args.out)} if args.out.is_file() else set()
+    todo = [i for i in ids if i not in done]
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    with ProcessPoolExecutor(min(len(todo), os.cpu_count() or 1) or 1) as pool, args.out.open("a") as out:
+        for future in as_completed([pool.submit(one, i) for i in todo]):
+            row = future.result()
+            out.write(json.dumps(row) + "\n")
+            out.flush()
+            print(f"{row['task_id']}: " + (f"error {row['error']}" if "error" in row else (
+                f"hindsight {row['hindsight_cost']}, anchor {row['optimal_cost']}, follow "
+                f"{[c['cost'] for c in row['configs']]} msgs {[c.get('messages') for c in row['configs']]}, silent "
+                f"{[c['reward'] for c in row['silent']['configs']]}, naive {row['naive']['reward']}, "
+                f"clauses {row['clauses']}, {row['seconds']}s")), flush=True)
+
+
+def references(args: argparse.Namespace) -> None:
+    rows = {r["task_id"]: r for r in read(args.screen)}
+    tasks = lines.pack().tasks
+    out_tasks, lines_out = [], []
+    for task in tasks:
+        row = rows[task.task_id]
+        final = replace(task, reference=task.reference | {
+            "optimal_cost": row["optimal_cost"], "optimal_plan": row["hindsight_plan"],
+            "lower_bound": row["hindsight_cost"], "proven_optimal": False})
+        out_tasks.append(final)
+        stored = row["rolling"]
+        assert replayed(final, stored) == outcome(stored) | {"anchor_hours": stored["anchor_hours"]}, task.task_id
+        lines_out.append(json.dumps({k: v for k, v in row.items() if k != "hindsight_plan"}) + "\n")
+        print(f"{task.task_id}: replayed, qualifies {row['qualifies']}")
+    body = "".join(json.dumps(t.to_dict(), ensure_ascii=False, separators=(",", ":")) + "\n"
+                   for t in out_tasks).encode()
+    pack_out = args.out / schedule.LINES_PACK
+    (pack_out / "tasks.jsonl").write_bytes(body)
+    (pack_out / "manifest.json").write_text(json.dumps(manifest(out_tasks, body), indent=2, ensure_ascii=False) + "\n")
+    path = args.out / "lines/references.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("".join(lines_out))
+    print(f"Wrote {len(lines_out)} references to {path}")
+
+
+def replayed(task: Task, stored: dict) -> dict:
+    """The follower's stored plans and requests played again, without a solver."""
+    exchanges = stored["exchanges"]
+
+    def policy(week: LinesWeek) -> Plan:
+        for e in exchanges:
+            if e["watch"] == week.watch:
+                week.request(lines.firm(task, e["ship"]), e["ship"], e["arrival"])
+        return plan_from_list(stored["plans"][week.watch])
+    week = played(task, policy)
+    return outcome(week.grade) | {"anchor_hours": week.grade["anchor_hours"]}
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    commands = parser.add_subparsers(dest="command", required=True)
+    one_cmd = commands.add_parser("pack", help="write the pack from the wind pack and the port's 2024 calls")
+    one_cmd.add_argument("--raw", type=Path)
+    one_cmd.add_argument("--out", type=Path, default=ROOT / "data")
+    one_cmd.set_defaults(run=pack)
+    one_cmd = commands.add_parser("screen", help="play every week four ways")
+    one_cmd.add_argument("--tasks", help="comma-separated task ids; default: every one")
+    one_cmd.add_argument("--out", type=Path, default=SCREEN)
+    one_cmd.set_defaults(run=screen)
+    one_cmd = commands.add_parser("references", help="set each week's anchor, replay and write the references")
+    one_cmd.add_argument("--screen", type=Path, default=SCREEN)
+    one_cmd.add_argument("--out", type=Path, default=ROOT / "data")
+    one_cmd.set_defaults(run=references)
+    args = parser.parse_args()
+    args.run(args)
+
+
+if __name__ == "__main__":
+    main()

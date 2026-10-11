@@ -16,10 +16,11 @@ from agent_env.store.routing import namespace_routing
 from agent_env.task.store import get_task_instance_store, seed_task_instance_context
 from agent_env.task_step.context import TaskStepContext
 from click.testing import CliRunner
-from portsim_contexts import agent_failed, crashed, scored, step_failed, summary, timed_out
+from portsim_contexts import agent_failed, crashed, lines_scored, scored, step_failed, summary, timed_out
 
-from agentenv_portsim import sweep
+from agentenv_portsim import lines, sweep, tasks
 from agentenv_portsim.cli import portsim
+from agentenv_portsim.schedule import LINE_AGENT, LINES_ENV
 
 SONNET, GPT = "anthropic/claude-sonnet-5-5", "openai/gpt-6.1-sol"
 T1, T2, T3 = "dock-24B-w06x1-busy-0", "dock-24B-w06x1-standard-0", "dock-36A-w35x1-standard-0"
@@ -299,3 +300,60 @@ def test_task_ids_are_dock_v1_eval_ids(fake):
     result = sweep_run("--models", SONNET, "--tasks", f"{T1},dock-24B-w03x2-busy-3", "--cap-usd", "1")
     assert result.exit_code == 2 and "not dock-v1-eval task ids: dock-24B-w03x2-busy-3" in result.output
     assert not Path("results").exists() and not (fake.root / "calls.jsonl").exists()
+
+
+def test_lines_task_ids_are_the_qualifying_lines_weeks_g2_first_then_the_fewest_watches(fake):
+    watches = {r["task_id"]: len(r["watch_hours"]) for r in lines.references() if r["qualifies"]}
+    ids = sweep.task_ids("all", lines=True)
+    assert ids == sorted(watches, key=lambda t: (t not in sweep.G2_TASKS, watches[t], t))
+    assert sorted(ids) == sorted(lines.task_ids()) and sweep.task_ids("g2", lines=True) == []
+    assert sweep.task_ids(f"{ids[1]},{ids[0]}", lines=True) == [ids[1], ids[0]]
+    unknown = sweep_run("--lines", "--models", SONNET, "--tasks", f"{ids[0]},{T1}", "--cap-usd", "1")
+    assert unknown.exit_code == 2 and f"not dock-v1-lines task ids: {T1}" in unknown.output
+    for other in ("--wind", "--marine"):
+        both = sweep_run("--lines", other, "--models", SONNET, "--tasks", ids[0], "--cap-usd", "1")
+        assert both.exit_code == 2 and f"{other} and --lines play different envs: pick one" in both.output
+    assert not Path("results").exists() and not (fake.root / "calls.jsonl").exists()
+
+
+def test_a_lines_sweep_plays_the_lines_bundle_and_records_hours_at_anchor_and_messages(fake):
+    week, other = sweep.task_ids("all", lines=True)[:2]
+    fake.script({f"{SONNET}|{week}": [{"context": lines_scored(week, SONNET, anchor_hours=31, messages=3)}],
+                 "*": [{"context": agent_failed(other, SONNET, "cost_cap", cost=0.49), "exit": 1}]})
+    result = sweep_run("--lines", "--models", SONNET, "--tasks", f"{week},{other}", "--cap-usd", "10",
+                       "--parallel", "1")
+    assert result.exit_code == 0, result.output
+    done, failed = rows()
+    assert list(done) == [*ROW_KEYS, "watches", "excused_cost", "regret", "anchor_hours", "messages"]
+    assert {key: done[key] for key in ("outcome", "submitted", "feasible", "checks", "watches", "plan_cost",
+                                       "optimal_cost", "excused_cost", "regret", "anchor_hours", "messages")} == {
+        "outcome": "scored", "submitted": True, "feasible": True, "checks": 4, "watches": 6, "plan_cost": 340,
+        "optimal_cost": 326, "excused_cost": 8, "regret": 14, "anchor_hours": 31, "messages": 3}
+    assert (failed["outcome"], failed["anchor_hours"], failed["messages"]) == ("failed", None, None)
+    out = Path("results/runs/s")
+    assert json.loads((out / "sweep.json").read_text()) == {
+        "name": "s", "models": [SONNET], "tasks": [week, other], "k": 1, "episode_cap_usd": 5.0, "live": True,
+        "lines": True}
+    assert sweep.load("s") == sweep.Sweep("s", [SONNET], [week, other], 1, 5.0, live=True, lines=True)
+    assert (out / "bundle/README.md").read_text().startswith("PortSim lines dock-v1-eval: 2 weeks")
+    assert sorted(p.name for p in (out / "bundle/tasks").iterdir()) == sorted([f"{week}.json", f"{other}.json"])
+    played = json.loads((out / f"bundle/tasks/{week}.json").read_text())
+    assert played == json.loads(json.dumps(tasks.lines_steps(lines.pack().get(week), 5.0)))
+    assert played[0] == {"id": "deploy", "type": "deploy_env", "env_id": LINES_ENV}
+    assert LINE_AGENT in {s.get("a2a_agent_id") for s in played}
+
+
+def test_a_sweep_json_from_before_lines_still_loads_and_resumes(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    week = sweep.task_ids("all", wind=True)[0]
+    out = Path("results/runs/old")
+    out.mkdir(parents=True)
+    (out / "sweep.json").write_text(json.dumps({"name": "old", "models": [SONNET], "tasks": [week], "k": 1,
+                                                "episode_cap_usd": 5.0, "live": True, "wind": True}, indent=2) + "\n")
+    old = sweep.load("old")
+    assert old == sweep.Sweep("old", [SONNET], [week], 1, 5.0, live=True, wind=True) and not old.lines
+    sweep.prepare(old)
+    assert not (out / "bundle").exists()
+    refused = sweep_run("--lines", "--models", SONNET, "--tasks", sweep.task_ids("all", lines=True)[0],
+                        "--cap-usd", "1", name="old")
+    assert refused.exit_code == 2 and "is another sweep" in refused.output

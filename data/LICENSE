@@ -429,7 +429,8 @@ Creative Commons may be contacted at creativecommons.org.
 
 =======================================================================
 
-The wind data: data/wind/ and data/dock-v1-wind/
+The wind data: data/wind/, data/dock-v1-wind/, and the lines data built
+on them: data/dock-v1-lines/ and data/lines/
 
 These files add real weather to weeks of the dock-v1 task packs. What
 they take from the task packs is licensed under the licence above. The
@@ -523,3 +524,18 @@ The files:
   - data/wind/references.jsonl: reference plans, costs and rewards
     computed on data/dock-v1-wind/, and each week's watch hours, which
     its forecasts set (a).
+
+  - data/dock-v1-lines/tasks.jsonl: the weeks of data/dock-v1-wind/,
+    with their weather as above (a, b), and with each ship's agent
+    (the shipping agent the Port of Barcelona's 2024 calls name for
+    the call, licence above), its previous port's distance from NGA
+    Pub. 151, Distances Between Ports (a work of the United States
+    government, no copyright claimed), and a drawn ETA bias; the
+    arrival notices give the agents' ETAs.
+
+  - data/dock-v1-lines/manifest.json: the pack's sha256, its source
+    pack's sha256 and the public sources of its rules.
+
+  - data/lines/references.jsonl: reference plans, costs and rewards
+    computed on data/dock-v1-lines/, the follower's requests to the
+    agents, and each week's watch hours, which its forecasts set (a).

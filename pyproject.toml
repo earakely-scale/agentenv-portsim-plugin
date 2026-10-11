@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agentenv-portsim"
-version = "0.4.5"
+version = "0.5.0"
 description = "PortSimEnv as an AgentEnv environment: an agent re-plans a disrupted week of container-ship berthing at a Port of Barcelona quay through MCP tools."
 readme = "README.md"
 license = "Apache-2.0 AND CC-BY-SA-4.0 AND CC-BY-4.0 AND LicenseRef-Meteocat"
@@ -18,7 +18,7 @@ classifiers = [
 # The env image pins its own server dependencies (Dockerfile); CI runs the golden and replay tests against it.
 dependencies = [
     "agentenv-framework>=0.9.1298",
-    "agentenv-framework-protocol>=0.1.290,<0.2",
+    "agentenv-framework-protocol>=0.1.290,<0.1.324",  # 0.1.324 binds tool contexts only on mcp's FastMCP, not fastmcp 3's
     "agentenv-hf @ https://github.com/earakely-scale/agentenv-hf-plugin/archive/refs/tags/v0.3.0.tar.gz",
     "berth-core @ https://github.com/adithya-s-k/FineEnvs/archive/b0f4c2f9526e3c45d608b4f92f6ec6c71fecc152.tar.gz#subdirectory=07-simulation-environments/portsim-v1/envs/berth_planning/core",
     "fastmcp==3.4.8",
@@ -38,6 +38,7 @@ portsim = "agentenv_portsim.bundles"
 portsim-live = "agentenv_portsim.bundles"
 portsim-marine = "agentenv_portsim.bundles"
 portsim-wind = "agentenv_portsim.bundles"
+portsim-lines = "agentenv_portsim.bundles"
 
 [project.entry-points."agent_env.cli_plugins"]
 portsim = "agentenv_portsim.cli:portsim"

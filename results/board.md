@@ -1,4 +1,4 @@
-# The model board: twelve models on the live, marine and wind ports
+# The model board: twelve models on the live, marine and wind ports, and the lines port
 
 Between 7 and 9 October 2026 twelve models played every week of the live port (v2), the marine port (v3) and the
 wind port (v4) once each: 15 weeks a version, 540 runs. Every run is in the dataset
@@ -6,6 +6,12 @@ wind port (v4) once each: 15 weeks a version, 540 runs. Every run is in the data
 (`v2_episodes` to `v4_episodes`; the board as the `results` table and `results/v2.json` to `results/v4.json`) and
 replays in the [Space](https://huggingface.co/spaces/earakely-scale/PortSimEnv-AgentEnv). The sweep reports, which
 count every attempt, are [wind.md](wind.md), [marine.md](marine.md) and [live.md](live.md).
+
+On 11 October 2026 seven of the twelve played every week of the lines port (v5) once each, 105 runs: Claude Opus,
+Sonnet and Haiku 5.5, GPT-6 Astra, GPT-6.1 Sol, GPT-6 Luna and Qwen3.8-27B (`v5_episodes`, `results/v5.json`; the
+sweep report is [lines.md](lines.md)). The five models on Fireworks are still playing it: they reason up to the
+32,000-token reply limit on most turns, so a lines week takes them an hour or more. The summary below covers v2 to v4
+until all twelve have played v5.
 
 **Not comparable with PortSimEnv's v1 eval** ([FineEnvs/PortSimEnv-Eval](https://huggingface.co/spaces/FineEnvs/PortSimEnv-Eval)).
 These are new environments, played another way: the agent re-plans the week as it unfolds, with four tools
@@ -57,6 +63,53 @@ Mean reward on each version and over all 45 weeks (each week weighs the same), b
    clearest headroom on the board for training on these weeks.
 
 ## Each version
+
+### v5, the lines port
+
+The anchor is the plan in hindsight on every week. On the same weeks the follower, the re-planner that also asks the
+ships' agents, scores 0.485 in its first solver configuration, the follower that never asks 0.116 and the naive policy
+0.137; neither of those two keeps a week feasible.
+
+| Model | Provider | Weeks | Mean reward (95% CI) | Standard | Busy | Reached the end | Feasible | At the anchor | Median turns | Cost per episode |
+|---|---|---:|---|---:|---:|---:|---:|---:|---:|---:|
+| GPT-6 Astra | Azure OpenAI | 15 of 15 | **0.691** (0.553 to 0.810) | 0.895 | 0.640 | 15 | 13 | 3 | 43 | $1.77 |
+| GPT-6.1 Sol | Azure OpenAI | 15 of 15 | **0.394** (0.279 to 0.533) | 0.454 | 0.379 | 15 | 8 | 1 | 40 | $0.29 |
+| Claude Opus 5.5 | Anthropic | 15 of 15 | **0.315** (0.180 to 0.471) | 0.458 | 0.279 | 15 | 5 | 1 | 40 | $2.03 |
+| Claude Sonnet 5.5 | Anthropic | 15 of 15 | **0.228** (0.159 to 0.328) | 0.148 | 0.248 | 15 | 3 | 0 | 30 | $1.60 |
+| GPT-6 Luna | Azure OpenAI | 15 of 15 | **0.144** (0.132 to 0.156) | 0.166 | 0.138 | 14 | 0 | 0 | 34 | $0.06 |
+| Claude Haiku 5.5 | Anthropic | 15 of 15 | **0.142** (0.129 to 0.152) | 0.161 | 0.137 | 15 | 0 | 0 | 22 | $0.09 |
+| Qwen3.8-27B | Groq | 15 of 15 | **0.037** (0.020 to 0.057) | 0.064 | 0.030 | 13 | 0 | 0 | 29 | $0.97 |
+
+How each model used the ships' agents, per week:
+
+| Model | Requests | Arrivals agreed | Ships agreed | ETA queries | Hours at anchor | Rule breaks on unagreed ships |
+|---|---:|---:|---:|---:|---:|---:|
+| GPT-6 Astra | 44.1 | 27.7 | 95% | 1.7 | 31 | 2 of 4 |
+| GPT-6.1 Sol | 50.1 | 28.5 | 92% | 3.2 | 40 | 9 of 24 |
+| Claude Opus 5.5 | 32.4 | 14.6 | 53% | 2.7 | 35 | 66 of 96 |
+| Claude Sonnet 5.5 | 36.7 | 16.6 | 50% | 2.9 | 40 | 70 of 84 |
+| GPT-6 Luna | 3.4 | 2.0 | 11% | 0.2 | 323 | 121 of 126 |
+| Claude Haiku 5.5 | 8.1 | 3.2 | 14% | 8.7 | 71 | 123 of 141 |
+| Qwen3.8-27B | 0.1 | 0.0 | 0% | 0.1 | 151 | 633 of 633 |
+
+*Requests* counts every arrival hour asked for, refused ones included; *arrivals agreed* counts agreements, a ship
+agreed twice counting twice; *ships agreed* is the share of a week's ships with an agreed arrival.
+
+1. **Agreeing arrivals is what scores.** The two models that agree an arrival for nearly every ship lead; the two
+   that agree about half follow; the three that barely ask keep no week feasible. A ship left unagreed arrives late
+   more often than not, and when its window slides into another's the clash, crane shortage or queue break is
+   charged: most rule breaks land on such ships. GPT-6.1 Sol's are mostly its own clashes among ships it had agreed.
+2. **GPT-6 Astra leads clearly:** feasible in 13 of 15 weeks, at hindsight's cost in 3, and at or below the
+   follower's cost in 10.
+3. **A late ship is a rule break, not a delay, so a few unagreed ships cap a week below 0.2.** On
+   `dock-36A-w05x1-busy-0-e09` Claude Sonnet 5.5 agreed 21 of 27 arrivals and its windows cost 451 against
+   hindsight's 413, but the four ships it hadn't agreed clash at the end of the week, and it scores 0.170. A
+   re-planner that pads every unagreed ETA by 2.5 times its mean error is infeasible on all 15 weeks too.
+4. **The ranking moves from the wind port:** Claude Opus 5.5 and Claude Sonnet 5.5 (0.906 and 0.888 there) score
+   0.315 and 0.228, GPT-6.1 Sol 0.394 against its 0.745.
+5. **Hindsight can be beaten.** On `dock-24B-w37x1-standard-0-e01` GPT-6 Astra, GPT-6.1 Sol and Claude Opus 5.5 cost
+   316 to 341 against the hindsight plan's 376: that plan keeps the references' stricter queue and isn't proven
+   optimal.
 
 ### v4, the wind port
 

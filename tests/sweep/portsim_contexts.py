@@ -49,6 +49,29 @@ def scored(task: str, model: str, reward: float = 0.944468, cost: float = 0.2240
                        "score": reward, "episode": data}], "score": reward}})
 
 
+def lines_episode(task: str, reward: float, anchor_hours: int, messages: int) -> dict:
+    """data/get after a lines week ended, as the verifier reads it: one exchange per request to a ship's agent."""
+    return {"task_id": task, "watches": 6, "watch": 6, "hour": 168, "done": True, "end_reason": "done",
+            "calls_used": 9, "planning_calls": [2, 1, 1, 0, 0, 0], "plan": [], "notices": [], "frozen": [],
+            "refusals": [], "excused": {"problems": [], "cost": 8}, "audit": {"ok": True, "problems": []},
+            "grade": {"reward": reward, "feasible": True, "clean_fraction": 1.0, "quality": 0.9, "cost": 340,
+                      "raw_cost": 348, "excused_cost": 8, "optimal_cost": 326, "unavoidable_cost": 48, "regret": 14,
+                      "violations": [], "excused": [], "anchor_hours": anchor_hours},
+            "reward": reward,
+            "lines": {"exchanges": [{"watch": 0, "hour": 0, "firm": "F1", "ship": s, "ask": "eta", "call": 1,
+                                     "reply": {"ship": s, "eta": 40, "as_of": 0}} for s in range(messages)],
+                      "agreed": [], "arrivals": []}}
+
+
+def lines_scored(task: str, model: str, reward: float = 0.87, anchor_hours: int = 31, messages: int = 3,
+                 cost: float = 0.4) -> dict:
+    return stored(play(task, model, summary(model, end_reason="done", reward=reward, cost=cost)),
+                  verifications={"portsim": {"results": [
+                      {"criterion": "the executed week's reward, 1.0 at the hindsight optimum", "result": reward >= 1.0,
+                       "score": reward, "episode": lines_episode(task, reward, anchor_hours, messages)}],
+                      "score": reward}})
+
+
 def agent_failed(task: str, model: str, code: str, cost: float = 0.05) -> dict:
     return stored(play(task, model, summary(model, end_reason=code, reward=None, cost=cost,
                                             error=f"APIStatusError: {code}"),

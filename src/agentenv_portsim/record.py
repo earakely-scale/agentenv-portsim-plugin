@@ -47,9 +47,11 @@ def _hold(step: int, hour: float, seconds: float, fps: int) -> list[Frame]:
 
 
 def timeline(rollout: dict, horizon: float, *, fps: int = 30, step_seconds: float = 2.5,
-             hours_per_second: float = 6, intro_seconds: float = 2, outro_seconds: float = 3) -> list[Frame]:
-    """v1: each plan held at hour 0, then the week played on the last one. A live week: each step held at its watch;
-    an advance runs the clock to the watch it opens first; then the rest of the week."""
+             hours_per_second: float = 6, intro_seconds: float = 2, outro_seconds: float = 3,
+             message_seconds: float = 1) -> list[Frame]:
+    """v1: each plan held at hour 0, then the week played on the last one. A live week: each step held at its watch,
+    a lines week's message to a ship's agent for less; an advance runs the clock to the watch it opens first; then the
+    rest of the week."""
     steps = rollout["steps"]
     frames = _hold(0, 0, intro_seconds, fps)
     hour = 0
@@ -57,7 +59,7 @@ def timeline(rollout: dict, horizon: float, *, fps: int = 30, step_seconds: floa
         if "live" in rollout and step["hour"] > hour:
             frames += _sweep(k, hour, step["hour"], (step["hour"] - hour) / hours_per_second, fps)
             hour = step["hour"]
-        frames += _hold(k, hour, step_seconds, fps)
+        frames += _hold(k, hour, message_seconds if step.get("tool") == "message_agent" else step_seconds, fps)
     last = max(len(steps) - 1, 0)
     frames += _sweep(last, hour, horizon, (horizon - hour) / hours_per_second, fps)
     return frames + _hold(last, horizon, outro_seconds, fps)
@@ -194,6 +196,8 @@ def episode_url(port: int, run: str, model: str, task_id: str, layout: str = "fu
 @click.option("--size", default="1920x1080", show_default=True, help="Frame size, WIDTHxHEIGHT.")
 @click.option("--fps", default=30, show_default=True)
 @click.option("--step-seconds", default=2.5, show_default=True, help="How long each step is held.")
+@click.option("--message-seconds", default=1.0, show_default=True,
+              help="How long each message to a ship's agent is held (lines weeks).")
 @click.option("--hours-per-second", default=6.0, show_default=True, help="How fast time runs on the quay.")
 @click.option("--intro-seconds", default=2.0, show_default=True)
 @click.option("--outro-seconds", default=3.0, show_default=True)
@@ -202,11 +206,11 @@ def episode_url(port: int, run: str, model: str, task_id: str, layout: str = "fu
               help="full: the viewer's page; scene: the 3D quay alone, with the watch panel over it.")
 @click.option("--gif", type=click.Path(dir_okay=False, path_type=Path), help="Also write an 800 px GIF here.")
 @click.option("--chrome", help="Chrome or Chromium binary. Default: Google Chrome, else chromium on PATH.")
-def record_command(sweep_name, model, task_id, out, rep, size, fps, step_seconds, hours_per_second, intro_seconds,
-                   outro_seconds, view, layout, gif, chrome):
+def record_command(sweep_name, model, task_id, out, rep, size, fps, step_seconds, message_seconds, hours_per_second,
+                   intro_seconds, outro_seconds, view, layout, gif, chrome):
     """Film one recorded episode on the viewer: each plan on the 3D quay and the dock chart, then the week played out;
-    a live week watch by watch, with the clock running between watches. Every frame carries the OpenStreetMap
-    attribution."""
+    a live week watch by watch, with the clock running between watches, and a lines week's messages to the ships'
+    agents as they were sent. Every frame carries the OpenStreetMap attribution."""
     runs = Runs(RUNS, [sweep_name])
     k = next(iter(runs.runs.values())).sweep.k
     run = sweep_name if k == 1 else f"{sweep_name}.r{rep}"
@@ -219,7 +223,7 @@ def record_command(sweep_name, model, task_id, out, rep, size, fps, step_seconds
     url = episode_url(server.server_port, run, model, task_id, layout)
     click.echo(twin.ATTRIBUTION)
     pace = {"step_seconds": step_seconds, "hours_per_second": hours_per_second, "intro_seconds": intro_seconds,
-            "outro_seconds": outro_seconds}
+            "outro_seconds": outro_seconds, "message_seconds": message_seconds}
     try:
         n = record(url, runs.rollout(run, model, task_id), out, chrome=chrome, ffmpeg=ffmpeg, width=width,
                    height=height, fps=fps, view=view, pace=pace)
