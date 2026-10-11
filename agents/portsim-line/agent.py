@@ -51,14 +51,14 @@ def sentence(reply: dict) -> str:
         return f"{who}: {reply['error']}"
     if "arrived" in reply:
         return f"{who} arrived at hour {reply['arrived']}; its turn is hour {reply['turn']}."
+    if reply.get("agreed_before"):
+        return f"{who}: ETA hour {reply['eta']}, as agreed; its turn is hour {reply['turn']}."
     if reply.get("agreed") is True:
         return (f"{who} will arrive at hour {reply['arrival']}" + (", reducing speed" if reply.get("slowing") else "")
                 + f"; it keeps its turn, hour {reply['turn']}.")
     if reply.get("agreed") is False:
         return f"{who} can't make hour {reply.get('asked')}: {reply['reason']}" + (
             f"; ETA hour {reply['eta']}." if "eta" in reply else ".")
-    if reply.get("agreed_before"):
-        return f"{who}: ETA hour {reply['eta']}, as agreed; its turn is hour {reply['turn']}."
     return f"{who}: ETA hour {reply['eta']}."
 
 
