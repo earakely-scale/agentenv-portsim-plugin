@@ -333,12 +333,13 @@ def answers(week: LinesWeek, args: dict) -> list[dict] | None:
 def _answer(week: LinesWeek, firm: str, entry) -> dict:
     if not isinstance(entry, dict) or "ship" not in entry:
         return {"error": "each request names a ship"}
-    if entry.get("ask") == "eta":
+    ask, arrival = entry.get("ask"), entry.get("request_arrival")
+    if ask == "eta" and arrival is None:
         out = _asked(week.status, firm, entry["ship"])
         return out | ({"agreed_before": True} if out.get("agreed") else {})
-    if "request_arrival" in entry:
-        return _asked(week.request, firm, entry["ship"], entry["request_arrival"]) | {"asked": entry["request_arrival"]}
-    return {"ship": entry["ship"], "error": "ask for the ETA or request an arrival"}
+    if ask is None and arrival is not None:
+        return _asked(week.request, firm, entry["ship"], arrival) | {"asked": arrival}
+    return {"ship": entry["ship"], "error": "ask for the ETA or request an arrival, one per request"}
 
 
 def _asked(tool, firm: str, *args) -> dict:

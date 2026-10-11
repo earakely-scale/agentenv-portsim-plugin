@@ -80,14 +80,14 @@ class Desk:
     async def answer(self, entry) -> dict:
         if not isinstance(entry, dict) or "ship" not in entry:
             return {"error": f"each request names a ship: {USAGE}"}
-        ship = entry["ship"]
-        if entry.get("ask") == "eta":
+        ship, ask, arrival = entry["ship"], entry.get("ask"), entry.get("request_arrival")
+        if ask == "eta" and arrival is None:
             out = await self.call("ship_status", {"ship": ship})
             return out | ({"agreed_before": True} if out.get("agreed") else {})
-        if "request_arrival" in entry:
-            out = await self.call("agree_arrival", {"ship": ship, "arrival": entry["request_arrival"]})
-            return out | {"asked": entry["request_arrival"]}
-        return {"ship": ship, "error": f"ask for the ETA or request an arrival: {USAGE}"}
+        if ask is None and arrival is not None:
+            out = await self.call("agree_arrival", {"ship": ship, "arrival": arrival})
+            return out | {"asked": arrival}
+        return {"ship": ship, "error": f"ask for the ETA or request an arrival, one per request: {USAGE}"}
 
 
 def step_url(mcp_url: str) -> str:

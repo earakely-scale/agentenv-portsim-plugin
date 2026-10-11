@@ -112,13 +112,21 @@ MESSAGE_DESCRIPTION = ("Message a ship's agent, the firm that deals with the por
 
 
 def message_schema(agents: list[str]) -> dict:
-    return {"type": "object", "required": ["agent", "requests"], "properties": {
+    """Every field required and the optional ones nullable, so a provider that enforces strict schemas (OpenAI's
+    Responses API) still lets a request leave out the ETA query, and an ETA query the hour."""
+    request = {"type": "object", "additionalProperties": False, "required": ["ship", "ask", "request_arrival"],
+               "properties": {
+                   "ship": {"type": "integer", "description": "ship id from the table"},
+                   "ask": {"type": ["string", "null"], "enum": ["eta", None],
+                           "description": '"eta" to ask for the ship\'s ETA; null when requesting an arrival'},
+                   "request_arrival": {"type": ["integer", "null"],
+                                       "description": "the hour you request the ship arrive at; null when asking "
+                                                      "for its ETA"}}}
+    return {"type": "object", "additionalProperties": False, "required": ["agent", "requests"], "properties": {
         "agent": {"type": "string", "enum": agents, "description": "the ship's agent, by its id"},
-        "requests": {"type": "array", "minItems": 1, "items": {"type": "object", "required": ["ship"], "properties": {
-            "ship": {"type": "integer", "description": "ship id from the table"},
-            "ask": {"type": "string", "enum": ["eta"], "description": "ask for the ship's ETA"},
-            "request_arrival": {"type": "integer", "description": "request that the ship arrive at this hour"}}},
-            "description": '[{"ship": 7, "ask": "eta"}, {"ship": 9, "request_arrival": 130}, ...]'}}}
+        "requests": {"type": "array", "minItems": 1, "items": request,
+                     "description": '[{"ship": 7, "ask": "eta", "request_arrival": null}, '
+                                    '{"ship": 9, "ask": null, "request_arrival": 130}, ...]'}}}
 
 
 class EnvSession:
