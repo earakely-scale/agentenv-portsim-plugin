@@ -1,10 +1,11 @@
-"""PortSim lines: the wind week with the shipping lines answering back. Each ship's agent, the firm that deals with
-the port for its line, reports the ship's ETA 48 and 24 hours out and calls in an hour before it arrives; the ETAs are
-optimistic and firm up as the ship nears. The planner can ask a firm for a ship's ETA and request an arrival time, which
-the firm agrees when the ship can make it by slowing down. A window that starts before its ship gets in begins when it
-does: the berth waits, and the ship's lateness and any clash it then causes are the planner's. Ships berth first come, first served: none may start while a
-ship earlier in the queue waits at anchor, unless the wind holds that ship; a ship's turn is its arrival at cruising
-speed, so a ship slowed on request keeps it. An hour at anchor costs what an hour late does.
+"""PortSim lines: the wind week with the shipping lines answering back. Each ship's agent, the firm that deals with the
+port for its line, reports the ship's ETA 48 and 24 hours out and calls in an hour before it arrives; the ETAs are
+optimistic and firm up as the ship nears. The planner can ask a firm for a ship's ETA and request an arrival time,
+which the firm agrees when the ship can make it by slowing down. A window that starts before its ship gets in begins
+when it does: the berth waits, and the ship's lateness and any clash it then causes are the planner's. Ships berth
+first come, first served: none may start while a ship earlier in the queue waits at anchor, unless the wind holds
+that ship; a ship's turn is its arrival at cruising speed, so a ship slowed on request keeps it. An hour at anchor
+costs what an hour late does.
 
 ``rules["lines"]`` holds each ship's firm, its previous port's distance and its ETA bias; the truth is each ship's
 ``arrival`` (at cruising speed) and the arrival times agreed during the week."""
@@ -377,8 +378,8 @@ def section(week: LinesWeek) -> str:
     lines = [
         "## Arrivals and the ships' agents",
         "- Each ship's agent reports its ETA 48 and 24 hours out, and the ship calls in an hour before it arrives; "
-        "reports made between watches arrive with the next one. ETAs are optimistic: most ships arrive later than their "
-        "agent says, by less as they near.",
+        "reports made between watches arrive with the next one. ETAs are optimistic: most ships arrive later than "
+        "their agent says, by less as they near.",
         "- Message a ship's agent to ask for its ETA or to request an arrival time. The agent agrees when the ship can "
         f"make it at {CRUISE_KN} kn or by slowing to as little as {SLOWEST_KN} kn once it has left its previous port, "
         "and the ship then arrives at that hour.",
@@ -390,8 +391,8 @@ def section(week: LinesWeek) -> str:
         "- Each hour a ship waits at anchor between its arrival and its berthing costs its sections, as an hour late "
         "does.",
         "- Agents, and their ships: " + "; ".join(
-            f"{firm_name(view, f)} ({f}): ships {', '.join(map(str, ids))}" for f, ids in sorted(firms_in(view).items()))
-        + "."]
+            f"{firm_name(view, f)} ({f}): ships {', '.join(map(str, ids))}"
+            for f, ids in sorted(firms_in(view).items())) + "."]
     rows = []
     for s in view.ships:
         if s.id in week.locks:

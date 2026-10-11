@@ -4,14 +4,14 @@ bias, played live through agentenv_portsim.lines.LinesWeek.
 
 Four players per week. The hindsight optimum knows every arrival and slows ships from the first watch it could ask,
 proven optimal by CP-SAT. The follower re-plans at every watch on the arrivals as known and requests arrival times
-through the agents as the env's planner would: for each ship whose window would freeze before the next watch, each ship
-it plans to slow, and each ship due within 12 hours of the next watch, which could otherwise arrive early unseen and
-hold up the queue; a refusal is a fact it keeps, and it probes until the ship agrees an hour, then re-plans, four rounds at most. The
-silent follower re-plans the same way but never asks. The naive policy is v2's. A week's reference cost, its anchor, is
-the follower's best over its four solver configurations, since no player that learns arrivals as they come can know
-what the hindsight optimum knows. A week qualifies when (a) at least 3 of the follower's configurations finish
-feasible, (b) the silent follower scores at most 0.9 in at least 3 of 4, so asking the agents matters, and (c) it has
-at most 10 watches.
+through the agents as the env's planner would: for each ship whose window would freeze before the next watch, each
+ship it plans to slow, and each ship due within 12 hours of the next watch, which could otherwise arrive early unseen
+and hold up the queue; a refusal is a fact it keeps, and it probes until the ship agrees an hour, then re-plans, four
+rounds at most. The silent follower re-plans the same way but never asks. The naive policy is v2's. A week's reference
+cost, its anchor, is the follower's best over its four solver configurations, since no player that learns arrivals as
+they come can know what the hindsight optimum knows. A week qualifies when (a) at least 3 of the follower's
+configurations finish feasible, (b) the silent follower scores at most 0.9 in at least 3 of 4, so asking the agents
+matters, and (c) it has at most 10 watches.
 
     uv run --with ortools==9.15.6755 python scripts/lines_references.py pack [--raw PATH] [--out DIR]
     uv run --with ortools==9.15.6755 python scripts/lines_references.py screen [--tasks id,...] [--out PATH]
@@ -35,7 +35,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 import ortools
-from berth_core import Plan, Task, TaskPack, plan_from_list, plan_to_list
+from berth_core import Plan, Task, plan_from_list, plan_to_list
 from berth_core.check import unavoidable_cost
 from live_references import CONFIGS, DETERMINISTIC_SECONDS, outcome, solve
 from marine_references import raw
@@ -145,7 +145,8 @@ def news_etas(task: Task) -> Task:
         hour = at.get(f"{e['type']}-{i}")
         if e["type"] == "late":
             eta = max(lines.estimate(task, e["ship"], hour), task.ships[e["ship"]].arrival - e["hours"] + 1)
-            e, text = e | {"eta": eta}, re.sub(r"it now arrives at hour \d+", f"its agent now gives ETA hour {eta}", text)
+            text = re.sub(r"it now arrives at hour \d+", f"its agent now gives ETA hour {eta}", text)
+            e = e | {"eta": eta}
         elif e["type"] == "extra":
             eta = lines.estimate(task, e["ship"], hour)
             e, text = e | {"eta": eta}, re.sub(r"arrives at hour \d+", f"has ETA hour {eta} from its agent", text)

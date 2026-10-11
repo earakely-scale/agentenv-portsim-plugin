@@ -106,8 +106,9 @@ class Tool:
 
 
 MESSAGE_TOOL = "message_agent"
-MESSAGE_DESCRIPTION = ("Message a ship's agent, the firm that deals with the port for its line: ask for its ships' ETAs or "
-                       "request arrival hours, several of its ships in one message. Each request gets the agent's reply.")
+MESSAGE_DESCRIPTION = ("Message a ship's agent, the firm that deals with the port for its line: ask for its ships' "
+                       "ETAs or request arrival hours, several of its ships in one message. Each request gets the "
+                       "agent's reply.")
 
 
 def message_schema(agents: list[str]) -> dict:
