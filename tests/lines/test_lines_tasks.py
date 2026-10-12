@@ -240,3 +240,17 @@ def test_generate_lines_takes_only_the_eval_pack_and_no_other_env(tmp_path, monk
     result = CliRunner().invoke(portsim, ["tasks", "generate", *args])
     assert result.exit_code == 2 and message in result.output
     assert not (tmp_path / "results").exists()
+
+
+def test_the_installed_lines_bundle_plays_the_lines_steps_and_wiring_noplay_drops_every_agent():
+    """The committed bundle is what `agent-env run portsim` plays, so it follows lines_steps exactly."""
+    root = files("agentenv_portsim.bundles") / "portsim-lines"
+
+    def bundled(name: str) -> list[dict]:
+        text = root.joinpath(f"tasks/{name}.json").read_text()
+        assert text == json.dumps(json.loads(text), indent=2, ensure_ascii=False) + "\n"
+        return json.loads(text)
+    week = tasks.lines_steps(TASK)
+    agents = {"deploy-agent", "peers", "play"} | {f"deploy-{f}" for f in FIRMS}
+    assert lines.task_ids()[0] == TASK.task_id and bundled("week") == week
+    assert bundled("wiring-noplay") == [s for s in week if s["id"] not in agents]

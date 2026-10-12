@@ -110,9 +110,10 @@ EVAL = {
     "v4": {"source": CALLS + ", with the port's 2024 pilot and tug traffic" + WEATHER_SOURCE,
            "selection": "15 marine weeks moved into real weather weeks, dealt from the 240 pairs of the 15 marine "
                         "weeks and 16 weather weeks where (a) the forecast-following re-planner costs no more than "
-                        "hindsight in at least 3 of its 4 configurations, (b) the re-planner blind to the wind scores "
-                        "at most 0.9 in at least 3 of 4, (c) the week has at most 10 watches and (d) no ship alongside "
-                        "at hour 0 is due to leave inside a window above 30 kn",
+                        "hindsight in at least 3 of its 4 configurations, (b) the re-planner blind to the wind (in a "
+                        "week whose forecast warned of a gale that never came, the one holding every warned window) "
+                        "scores at most 0.9 in at least 3 of 4, (c) the week has at most 10 watches and (d) no ship "
+                        "alongside at hour 0 is due to leave inside a window above 30 kn",
            "tools": ["get_situation", "check_plan", "confirm_berths", "advance"], "max_turns": WIND_MAX_TURNS,
            "reference": "min(the hindsight optimum, the best cost of the forecast-following re-planner over its 4 "
                         "solver configurations)",
