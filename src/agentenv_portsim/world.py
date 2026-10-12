@@ -160,15 +160,18 @@ class Week:
         return PLANNING_CALLS - self.planning_calls[-1]
 
     def windows(self, view: Task) -> list[dict]:
+        """Each confirmed window, where the port berths its ship when that differs (a late ship), and its status."""
         fixed = self.fixed
-        departures = {r.ship: r.departure for r in self.evaluate(view, self.plan).ships}
+        run = {r.ship: r for r in self.evaluate(view, self.plan).ships}
         rows = []
         for sid, (h, sec, cranes) in sorted(self.plan.items()):
-            dep = departures[sid]
-            status = ("open" if sid not in fixed else "departed" if dep <= self.hour
-                      else "berthed" if h <= self.hour else "frozen")
-            rows.append({"ship": sid, "berth_hour": h, "section": sec, "cranes": cranes, "departure": dep,
-                         "status": status})
+            r = run[sid]
+            moved = {"port_berth_hour": r.berth_hour, "port_section": r.section} if (r.berth_hour, r.section) != (
+                h, sec) else {}
+            status = ("open" if sid not in fixed else "departed" if r.departure <= self.hour
+                      else "berthed" if r.berth_hour <= self.hour else "frozen")
+            rows.append({"ship": sid, "berth_hour": h, "section": sec, "cranes": cranes} | moved
+                        | {"departure": r.departure, "status": status})
         return rows
 
     def unconfirmed(self, view: Task) -> list[int]:

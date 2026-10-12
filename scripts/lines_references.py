@@ -291,14 +291,18 @@ def hindsight_bounds(week: LinesWeek) -> dict[int, tuple[int, int]]:
     return out
 
 
-def extra_for(view: Task, fixed: Plan, bounds: dict[int, tuple[int, int]], turns: dict[int, int], base):
+def extra_for(view: Task, fixed: Plan, bounds: dict[int, tuple[int, int]], turns: dict[int, int], base,
+              agreed: dict | None = None):
     """Each open ship's arrival within its bounds and berthing at or after it, the hours between them charged; a ship
-    that starts while a ship earlier in the queue has arrived and waits is penalised, so the plans keep the queue."""
+    that starts while a ship earlier in the queue has arrived and waits is penalised, so the plans keep the queue. Given
+    ``agreed``, the queue protects only the ships that arrive later than at cruising speed, whose arrival must be
+    agreed, and ``agreed`` gets each ship's (arrival, agreed) variables."""
     def add(md, ships):
         base(md, ships)
-        terms, arrive = [], {}
+        terms, arrive, guard = [], {}, {}
         for s in view.ships:
             lo, hi = bounds[s.id]
+            guard[s.id] = agreed is None
             if s.id in fixed:
                 arrive[s.id] = lo
                 continue
@@ -309,17 +313,23 @@ def extra_for(view: Task, fixed: Plan, bounds: dict[int, tuple[int, int]], turns
             md.Add(wait == t - p)
             terms.append(s.sections * wait)
             arrive[s.id] = p
+            if agreed is not None and hi > lo:
+                guard[s.id] = md.NewBoolVar(f"agreed{s.id}")
+                md.Add(p >= lo + 1).OnlyEnforceIf(guard[s.id])
+                md.Add(p == lo).OnlyEnforceIf(guard[s.id].Not())
+        if agreed is not None:
+            agreed.update({s: (arrive[s], guard[s]) for s in arrive})
         ids = [s.id for s in view.ships]
         for x in ids:
             for y in ids:
-                if turns[x] < turns[y] and not (x in fixed and y in fixed):
+                if turns[x] < turns[y] and not (x in fixed and y in fixed) and guard[x] is not False:
                     tx, ty = ships[x][0], ships[y][0]
                     jump, there, broken = md.NewBoolVar(""), md.NewBoolVar(""), md.NewBoolVar("")
                     md.Add(ty < tx).OnlyEnforceIf(jump)
                     md.Add(ty >= tx).OnlyEnforceIf(jump.Not())
                     md.Add(ty >= arrive[x]).OnlyEnforceIf(there)
                     md.Add(ty < arrive[x]).OnlyEnforceIf(there.Not())
-                    md.AddBoolOr([jump.Not(), there.Not(), broken])
+                    md.AddBoolOr([jump.Not(), there.Not(), broken, *([] if guard[x] is True else [guard[x].Not()])])
                     terms.append(QUEUE_PENALTY * broken)
         return terms
     return add
@@ -333,15 +343,19 @@ def lines_solve(view: Task, fixed: Plan, before: int, hint: Plan, workers: int, 
 
 
 def hindsight(task: Task) -> tuple[int, Plan, dict[int, int]]:
+    """The best week in hindsight, each ship asked at the first watch its agent can commit: the queue protects only the
+    ships it slows, as the port's does only the ships whose arrival was agreed."""
     week = LinesWeek(task)
     bounds = hindsight_bounds(week)
-    truth = replace(lines.with_arrivals(task, {s.id: s.arrival for s in task.ships},
-                                        {s.id: s.arrival for s in task.ships}))
+    turns = {s.id: s.arrival for s in task.ships}
+    truth = lines.with_arrivals(task, turns, turns)
+    chosen, values = {}, {}
     plan = solve(truth, {}, 0, plan_from_list(task.reference["optimal_plan"]), 1, False,
-                 extra=extra_for(truth, {}, bounds, {s.id: s.arrival for s in task.ships}, pools(truth, {})),
-                 optimal=True)
-    arrivals = {s.id: min(max(plan[s.id][0], bounds[s.id][0]), bounds[s.id][1]) for s in task.ships}
-    graded = lines.evaluate(lines.with_arrivals(task, arrivals, {s.id: s.arrival for s in task.ships}), plan)
+                 extra=extra_for(truth, {}, bounds, turns, pools(truth, {}), chosen), optimal=True,
+                 solved=lambda solver: values.update({s: (solver.Value(p), solver.Value(g))
+                                                      for s, (p, g) in chosen.items()}))
+    arrivals = {s.id: values[s.id][0] for s in task.ships}
+    graded = lines.evaluate(lines.with_arrivals(task, arrivals, turns, [s for s, (_, g) in values.items() if g]), plan)
     assert graded.feasible, task.task_id
     return graded.cost, plan, arrivals
 
@@ -480,7 +494,9 @@ def screened(task: Task) -> dict:
     clauses = {"a": sum(c["cost"] is not None for c in rows) >= REACHED,
                "b": sum(c["reward"] is not None and c["reward"] <= SILENT_BAR for c in silent_rows) >= REACHED,
                "c": len(hours) <= MAX_WATCHES}
-    return row | {"optimal_cost": anchor, "hindsight_cost": best, "wind_optimal_cost": task.reference["optimal_cost"],
+    return row | {"optimal_cost": anchor, "hindsight_cost": best,
+                  "hindsight_arrivals": [arrivals[s.id] for s in task.ships],
+                  "wind_optimal_cost": task.reference["optimal_cost"],
                   "unavoidable_cost": unavoidable_cost(task), "rolling": rolled, "configs": rows,
                   "silent": (silent_first or {}) | {"configs": silent_rows},
                   "naive": outcome(naive.grade) | {"anchor_hours": naive.grade["anchor_hours"]},

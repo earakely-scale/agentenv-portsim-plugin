@@ -46,7 +46,7 @@ function virtualTime(task, t) {
 function statuses(step, t) {
   const out = new Map();
   const confirmed = new Map(step.windows.map((w) => [w.ship, w]));
-  for (const w of step.windows) out.set(w.ship, w.status === "open" && !step.last ? "open" : w.departure <= t ? "departed" : w.berth_hour <= t ? "berthed" : "frozen");
+  for (const w of step.windows) out.set(w.ship, w.status === "open" && !step.last ? "open" : w.departure <= t ? "departed" : (w.port_berth_hour ?? w.berth_hour) <= t ? "berthed" : "frozen");
   for (const p of step.plan) {
     const w = confirmed.get(p.ship);
     if (!w || w.berth_hour !== p.berth_hour || w.section !== p.section || w.cranes !== p.cranes) out.set(p.ship, "draft");

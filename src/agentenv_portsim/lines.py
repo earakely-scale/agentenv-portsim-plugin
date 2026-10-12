@@ -17,6 +17,7 @@ ship's ``arrival`` (at cruising speed) and the arrival times agreed during the w
 import json
 import math
 import os
+import re
 from collections.abc import Iterable
 from dataclasses import replace
 from importlib.resources import files
@@ -108,11 +109,12 @@ def estimate(task: Task, sid: int, hour: int, arrival: int | None = None) -> int
     return min(max(hour + 1, eta), slowest(task, sid, hour, a))
 
 
-def commits(task: Task, sid: int, hour: int, arrival: int, floor: int = 0) -> bool:
+def commits(task: Task, sid: int, hour: int, arrival: int) -> bool:
     """Whether the ship's agent can commit to an arrival hour at ``hour``: once the ship has sailed from its previous
-    port, or once its ETA is within 48 hours, the berth-planning horizon."""
+    port, or once its estimate is within 48 hours, the berth-planning horizon. The estimate, not an hour the agent has
+    offered since, so an offered hour can be agreed whichever was asked first."""
     dep = departure(task, sid, arrival)
-    return dep is None or hour >= dep or max(estimate(task, sid, hour, arrival), floor) - hour <= COMMIT_LEAD
+    return dep is None or hour >= dep or estimate(task, sid, hour, arrival) - hour <= COMMIT_LEAD
 
 
 def as_v4(task: Task) -> Task:
@@ -224,9 +226,10 @@ def _queued(task: Task, plan: Plan, res: PlanResult) -> None:
 def executed(task: Task, plan: Plan) -> Plan:
     """The windows as the port runs them. A ship that arrives before its window waits for it. One that arrives after
     its window starts is berthed at the first hour from its arrival when a free stretch of quay fits it, with the same
-    cranes, around every other ship's window without breaking a rule and ahead of no earlier ship still waiting; the
-    stretch nearest its planned sections first, and nobody else moves. Late ships are placed in the order they arrive;
-    with no such hour within a week, a window starts when its ship gets in, or once the wind lets it move."""
+    cranes, around every other ship's window without breaking a rule and ahead of no earlier ship with an agreed
+    arrival still waiting; the stretch nearest its planned sections first, and nobody else moves. Late ships are
+    placed in the order they arrive; with no such hour within a week, a window starts when its ship gets in, or once
+    the wind lets it move."""
     late = sorted((s for s, w in plan.items() if 0 <= s < len(task.ships) and w[0] < task.ships[s].arrival),
                   key=lambda s: (task.ships[s].arrival, s))
     out = {s: w for s, w in plan.items() if s not in late}
@@ -251,8 +254,9 @@ def executed(task: Task, plan: Plan) -> Plan:
 
 def _fits(task: Task, out: Plan, sid: int, window: tuple[int, int, int], before: dict[int, set[str]]) -> bool:
     turns = task.rules["lines"]["turns"]
-    if any(turns[x] < turns[sid] and _waiting(task, x, window[0], start) for x, (start, _, _) in out.items()
-           if 0 <= x < len(task.ships)):
+    agreed = set(task.rules["lines"].get("agreed", range(len(task.ships))))
+    if any(turns[x] < turns[sid] and x in agreed and _waiting(task, x, window[0], start)
+           for x, (start, _, _) in out.items() if 0 <= x < len(task.ships)):
         return False
     res = marine.evaluate(task, out | {sid: window})
     return not res.ships[sid].problems and all(
@@ -316,6 +320,7 @@ class LinesWeek(WindWeek):
         self.news = news_of(task)
         self.outcomes: dict[str, list[str]] = {}
         self.floor: dict[int, int] = {}
+        self.news_texts: dict[str, str] = {}
         super().__init__(task)
 
     def draft_excuses(self, plan: Plan) -> tuple[set[tuple[int, str]], dict[int, int]]:
@@ -325,30 +330,36 @@ class LinesWeek(WindWeek):
 
     def revealing(self, notice: Notice) -> None:
         """A delayed or bunched ship's news: an agreement made before it stands if the ship can still make that hour,
-        else it lapses; the news's ETA becomes what the planner knows."""
+        else it lapses; the news's ETA, what its agent last said moved later by the delay, becomes what the planner
+        knows."""
         event = notice.event
-        if event["type"] not in NEWS_ETA:
+        if event["type"] == "extra":
+            self._tell(event["ship"], self.hour, event["eta"])
+        if event["type"] not in ("late", "bunching"):
             return
-        etas = dict(zip(event["ships"], event["etas"], strict=True)) if event["type"] == "bunching" else {
-            event["ship"]: event["eta"]}
-        said = []
-        for sid, eta in etas.items():
-            truth = self.task.ships[sid].arrival
-            self.floor.pop(sid, None)
-            if event["type"] != "extra":
-                self.floor[sid] = min(eta, truth)
+        said, etas = [], {}
+        for sid in self._news_ships(event):
+            truth, before = self.task.ships[sid].arrival, before_news(self.task, sid)
+            last = max(estimate(self.task, sid, self.hour, before), self.floor.pop(sid, 0))
             if sid in self.locks:
-                at = self.locks[sid][2]
+                last = at = self.locks[sid][2]
                 start, left = self.progress(sid, self.hour, truth)
                 if math.ceil(start + left - 1e-9) <= at <= math.floor(start + left * STRETCH + 1e-9):
                     self.locks[sid] = (start, left, at)
+                    etas[sid] = at
                     said.append(f"The earlier agreement stands: {self.agreement(sid)}")
                     continue
                 del self.locks[sid]
                 said.append(f"{self.task.ships[sid].name} (ship {sid}) can no longer arrive at hour {at}: the earlier "
                             "agreement no longer holds.")
-            self._tell(sid, self.hour, eta)
+            etas[sid] = min(max(self.hour + 1, last + truth - before), slowest(self.task, sid, self.hour, truth))
+            self.floor[sid] = min(etas[sid], truth)
+            self._tell(sid, self.hour, etas[sid])
         self.outcomes[notice.event_id] = said
+        self.news_texts[notice.text] = (
+            re.sub(r"gives ETA hour \d+", f"gives ETA hour {etas[event['ship']]}", notice.text)
+            if event["type"] == "late" else
+            re.sub(r"ship (\d+) hour \d+", lambda m: f"ship {m[1]} hour {etas[int(m[1])]}", notice.text))
 
     def progress(self, sid: int, hour: int, truth: int) -> tuple[float, float]:
         """(the hour from which the ship can change pace, the cruising hours it still needs then) for a ship that
@@ -377,8 +388,8 @@ class LinesWeek(WindWeek):
                 last["text"] = self.agreement(event["ship"])
             elif reported and eta != event["eta"]:
                 last["text"] = report_text(self.task, event | {"eta": eta})
-            elif said := self.outcomes.get(event_id):
-                last["text"] = " ".join([last["text"], *said])
+            elif event_id in self.outcomes:
+                last["text"] = " ".join([self.news_texts.get(last["text"], last["text"]), *self.outcomes[event_id]])
             delivered = last["text"]
             if (reported and event["ship"] in self.locks and self.actual(event["ship"]) <= self.hour) or any(
                     m["hour"] == self.hour and m["text"] == delivered for m in self.messages[:-1]):
@@ -426,7 +437,8 @@ class LinesWeek(WindWeek):
     def view(self) -> Task:
         view = wind.known(self.task, self.revealed)
         visible = {s.id for s in view.ships}
-        notices = [text + "".join(f" Since then: {self.agreement(s)}" for s in self._news_ships(e) if s in self.locks)
+        notices = [self.news_texts.get(text, text)
+                   + "".join(f" Since then: {self.agreement(s)}" for s in self._news_ships(e) if s in self.locks)
                    for e, text in zip(view.disruptions, view.notices, strict=True)]
         return with_arrivals(replace(view, notices=notices), {s: self.known_arrival(view, s) for s in visible},
                              {s: self.known_turn(view, s) for s in visible}, visible & set(self.locks))
@@ -517,7 +529,7 @@ class LinesWeek(WindWeek):
         name, hour = self.task.ships[sid].name, self.hour
         if not self.pending(sid) and self.actual(sid) <= hour:
             out = {"ship": sid, "name": name, "agreed": False, "reason": f"already arrived at hour {self.actual(sid)}"}
-        elif sid not in self.locks and not commits(self.task, sid, hour, self.basis(sid), self.floor.get(sid, 0)):
+        elif sid not in self.locks and not commits(self.task, sid, hour, self.basis(sid)):
             eta = max(estimate(self.task, sid, hour, self.basis(sid)), self.floor.get(sid, 0))
             self._tell(sid, hour, eta)
             out = {"ship": sid, "name": name, "agreed": False, "eta": eta,

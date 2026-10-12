@@ -72,13 +72,13 @@ WATCHES = [(1, ["extra-0", "tug_outage-7", "pilot_shortage-8", "forecast-10"]), 
            (9, ["forecast-18"])]
 
 
-def wind_steps(task_id: str, episode_cap_usd: float = 5.0) -> list[dict]:
+def wind_steps(task_id: str, episode_cap_usd: float | None = None) -> list[dict]:
     return tasks.live_steps(PACK.get(task_id), episode_cap_usd, env="portsim-wind", week=WindWeek,
                             rules=tasks.WIND_RULES, max_turns=52)
 
 
 def marine_steps(task_id: str) -> list[dict]:
-    return tasks.live_steps(marine.pack().get(task_id), 5.0, env="portsim-marine", week=MarineWeek)
+    return tasks.live_steps(marine.pack().get(task_id), env="portsim-marine", week=MarineWeek)
 
 
 def actions(steps: list[dict]) -> list[list[dict]]:

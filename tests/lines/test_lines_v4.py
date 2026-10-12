@@ -25,6 +25,8 @@ def test_the_earlier_weeks_keep_v4s_timetable_and_hold_every_notice_to_its_lead(
     assert (world.Week.anchor_rows, MarineWeek.anchor_rows, WindWeek.anchor_rows, lines.LinesWeek.anchor_rows) == (
         False, False, False, True)
     assert world.Week.revealing is MarineWeek.revealing is WindWeek.revealing is not lines.LinesWeek.revealing
+    assert world.Week.draft_excuses is MarineWeek.draft_excuses is WindWeek.draft_excuses is not (
+        lines.LinesWeek.draft_excuses)
 
 
 def test_a_wind_weeks_target_is_the_week_as_known_until_it_is_done_then_the_truth():

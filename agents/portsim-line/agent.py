@@ -24,6 +24,7 @@ from agentenv_protocol.a2a_agent import (
 log = logging.getLogger("portsim-line")
 ROLE_HEADER = "AgentEnv-Role"
 MAX_REQUESTS = 20
+COMMIT_REFUSAL = "can't commit yet: "
 USAGE = ('send {"requests": [{"ship": 7, "ask": "eta", "request_arrival": null}, {"ship": 9, "ask": null, '
          '"request_arrival": 130}]}: one entry per ship, asking for its ETA or requesting an arrival hour')
 
@@ -56,10 +57,12 @@ def sentence(reply: dict) -> str:
     if reply.get("agreed") is True:
         return (f"{who} will arrive at hour {reply['arrival']}" + (", reducing speed" if reply.get("slowing") else "")
                 + f"; it keeps its turn, hour {reply['turn']}.")
+    if reply.get("agreed") is False and "eta" in reply:
+        return (f"{who} can't commit to hour {reply.get('asked')} yet: "
+                f"{reply['reason'].removeprefix(COMMIT_REFUSAL)}; ETA hour {reply['eta']}.")
     if reply.get("agreed") is False:
         offer = (f"; it can arrive at hour {reply['earliest']} at the earliest" if "earliest" in reply else
-                 f"; it can arrive at hour {reply['latest']} at the latest" if "latest" in reply else
-                 f"; ETA hour {reply['eta']}" if "eta" in reply else "")
+                 f"; it can arrive at hour {reply['latest']} at the latest" if "latest" in reply else "")
         return f"{who} can't make hour {reply.get('asked')}: {reply['reason']}{offer}."
     return f"{who}: ETA hour {reply['eta']}."
 

@@ -15,7 +15,7 @@ from test_marine_viewer import opened
 from wind_fixtures import use
 
 from agentenv_portsim import lines, record
-from agentenv_portsim.episodes import MESSAGE_TOOL, ReplayError, Runs, env, replay, week_of
+from agentenv_portsim.episodes import MESSAGE_TOOL, ReplayError, Runs, env, week_of
 from agentenv_portsim.lines import LinesWeek
 from agentenv_portsim.schedule import LINES_ENV
 from agentenv_portsim.sweep import Sweep, results
@@ -63,6 +63,11 @@ def answered(e: dict) -> dict:
     return e["reply"] | {"asked": e["arrival"]}
 
 
+def through_watch(msgs: list[dict], i: int) -> int:
+    """The end of the watch message i is in: just past the result of the next advance."""
+    return next(j for j in range(i, len(msgs)) if msgs[j]["role"] == "tool" and msgs[j]["name"] == "advance") + 1
+
+
 def basis(ship: int, watch: int) -> int:
     """The arrival the ship's agent works from at the watch: the plan as it stood until its news, then the truth."""
     pending = REF["watch_hours"][watch] < lines.first_known(TASK).get(ship, 0)
@@ -106,15 +111,16 @@ def test_a_lines_replay_gives_back_every_recorded_step_and_the_runs_grade(rollou
 
 
 def test_the_bulletins_leave_out_what_the_week_did_not_deliver(rollout):
-    """A repeat in one bulletin, and a report or call about an agreed ship once its agreed hour has passed, reach no
-    one: CMA CGM DALILA's call repeats its 24-hour report as the agreement at hour 24, and STEEN, agreed for 47, calls
-    in by the bulletin at 72."""
-    week, _, _ = replay(TASK, recorded()["messages"], LinesWeek)
-    assert [(b["event_id"], b["text"]) for b in rollout["live"]["bulletins"]] == [
-        (e["event_id"], e["text"]) for e in week.log if e["text"] is not None]
-    assert [(e["event_id"], e["hour"]) for e in week.log if e["text"] is None] == [
-        ("call-2-1", 24), ("eta-16-24", 72), ("call-3-1", 72), ("call-4-1", 72), ("call-6-1", 72), ("call-16-1", 72),
-        ("eta-8-24", 72), ("call-5-1", 96), ("call-7-1", 96)]
+    """A repeat in one bulletin, and a report or call about an agreed ship once its agreed hour has come, reach no
+    one: NAVIOS INDIGO, agreed for 6, calls in by the bulletin at 24, where CMA CGM DALILA's call repeats its 24-hour
+    report as the agreement; STEEN, agreed for 47, calls in by the bulletin at 72. ONE FREEDOM's agreement for 67,
+    made before its news, stands, and the news gives that hour."""
+    shown = {b["event_id"]: b["text"] for b in rollout["live"]["bulletins"]}
+    assert [(n.event_id, w.hour) for w in lines.timetable(TASK) for n in w.notices if n.event_id not in shown] == [
+        ("call-1-1", 24), ("call-2-1", 24), ("eta-16-24", 72), ("call-3-1", 72), ("call-4-1", 72), ("call-6-1", 72),
+        ("call-16-1", 72), ("call-5-1", 96), ("call-7-1", 96), ("call-9-1", 96)]
+    assert shown["late-4"] == TASK.notices[4].replace("ETA hour 56", "ETA hour 67") + (
+        " The earlier agreement stands: ONE FREEDOM (ship 6): arriving hour 67 (Wed 19:00), as agreed; turn hour 54.")
 
 
 def test_the_end_to_end_week_plays_the_follower_and_scores_its_reference(rollout):
@@ -140,8 +146,8 @@ def test_each_message_is_a_step_with_the_replies_the_planner_got(rollout):
 
 
 def test_each_step_carries_this_watchs_exchanges_and_the_arrivals_agreed_so_far(rollout):
-    """An agreement leaves the list only when the ship's news undoes it: ONE FREEDOM's hour 67, made before its news,
-    which then put it in at 54 at the earliest and 62 at the latest."""
+    """An agreement leaves the list only when the ship's news undoes it, and none does here: ONE FREEDOM's hour 67,
+    made before its news, stands."""
     agreed: set[int] = set()
     lapsed = []
     for step in rollout["steps"]:
@@ -155,19 +161,19 @@ def test_each_step_carries_this_watchs_exchanges_and_the_arrivals_agreed_so_far(
     assert {a["ship"]: a["arrival"] for a in rollout["steps"][-1]["lines"]["agreed"]} == {
         e["ship"]: e["arrival"] for e in rollout["live"]["lines"]["exchanges"]
         if e["ask"] == "request_arrival" and e["reply"].get("agreed") is True}
-    assert lapsed == [(3, 6)] and lines.first_known(TASK)[6] == REF["watch_hours"][3]
+    assert lapsed == [] and lines.first_known(TASK)[6] == REF["watch_hours"][3]
     assert [(e["watch"], e["arrival"]) for e in rollout["live"]["lines"]["exchanges"]
-            if e["ship"] == 6 and e["reply"]["agreed"]] == [(0, 67), (3, 62)]
+            if e["ship"] == 6 and e["reply"]["agreed"]] == [(0, 67)]
 
 
 def test_the_end_to_end_week_slows_ships_that_keep_their_turns(rollout):
-    """A turn is the arrival the ship's agent works from: ONE FREEDOM's was 48 before its news, 54 after."""
+    """A turn is the arrival the ship's agent works from: ONE FREEDOM's, agreed before its news, was 48."""
     final, exchanges = rollout["steps"][-1]["lines"]["agreed"], rollout["live"]["lines"]["exchanges"]
     slowed = {a["ship"] for a in final if a["arrival"] > TASK.ships[a["ship"]].arrival}
     turns = [(e["ship"], e["reply"]["turn"]) for e in exchanges if e["ship"] in slowed and e["reply"]["agreed"]]
     assert slowed and turns == [(e["ship"], basis(e["ship"], e["watch"])) for e in exchanges
                                 if e["ship"] in slowed and e["reply"]["agreed"]]
-    assert [t for s, t in turns if s == 6] == [48, 54]
+    assert [t for s, t in turns if s == 6] == [48] and basis(6, 3) == 54
 
 
 def test_a_reply_the_week_does_not_give_back_stops_the_replay(lines_runs, rollout):
@@ -179,7 +185,7 @@ def test_a_reply_the_week_does_not_give_back_stops_the_replay(lines_runs, rollou
         lines_runs.live(TASK, tampered, LinesWeek)
 
 
-def test_a_message_that_never_reached_the_env_leaves_the_week_as_it_was(lines_runs):
+def test_a_message_that_never_reached_the_env_leaves_the_week_as_it_was(lines_runs, rollout):
     msgs = recorded()["messages"]
     i = next(i for i, m in enumerate(msgs) if m["role"] == "assistant" and m.get("tool_calls"))
     refused = [{"role": "assistant", "content": "", "tool_calls": [
@@ -191,22 +197,25 @@ def test_a_message_that_never_reached_the_env_leaves_the_week_as_it_was(lines_ru
          "content": json.dumps({"error": "no agent 'nobody': message one of aperez, boluda"})},
         {"role": "tool", "tool_call_id": "silent", "name": MESSAGE_TOOL,
          "content": json.dumps({"error": "the agent globalliner didn't answer: ReadTimeout"})}]
-    steps = [[{k: v for k, v in s.items() if k != "turn"} for s in lines_runs.live(TASK, m, LinesWeek)["steps"]]
-             for m in ([*msgs[:i], *refused, *msgs[i:]], msgs)]
-    assert steps[0] == steps[1]
+    steps = [{k: v for k, v in s.items() if k != "turn"} for s in lines_runs.live(
+        TASK, [*msgs[:i], *refused, *msgs[i:through_watch(msgs, i)]], LinesWeek)["steps"]]
+    assert steps == [{k: v for k, v in s.items() if k != "turn"} for s in rollout["steps"][:len(steps)]]
+    assert steps[-1]["tool"] == "advance"
 
 
 def test_an_agent_that_failed_after_asking_the_env_leaves_its_requests_in_the_week(lines_runs, rollout):
     msgs = recorded()["messages"]
     a, i = agreeing(msgs, slowed(rollout))
     agent = json.loads(msgs[i]["content"])["agent"]
+    end = through_watch(msgs, i)
     failed = [*msgs[:i], msgs[i] | {"content": json.dumps({"agent": agent, "replies": [], "text": FAILED})},
-              *msgs[i + 1:]]
+              *msgs[i + 1:end]]
     steps = lines_runs.live(TASK, failed, LinesWeek)["steps"]
     k = next(k for k, s in enumerate(steps) if s["call_id"] == msgs[i]["tool_call_id"])
     assert steps[k]["result"]["replies"] == [] and own(steps, k) == own(rollout["steps"], k)
-    assert [s["lines"] for s in steps] == [s["lines"] for s in rollout["steps"]]
-    unsent = [*msgs[:i], *msgs[i + 1:]]
+    assert [s["lines"] for s in steps] == [s["lines"] for s in rollout["steps"][:len(steps)]]
+    assert steps[-1]["tool"] == "advance"
+    unsent = [*msgs[:i], *msgs[i + 1:end]]
     unsent[a] = msgs[a] | {"tool_calls": [c for c in msgs[a]["tool_calls"] if c["id"] != msgs[i]["tool_call_id"]]}
     with pytest.raises(ReplayError):
         lines_runs.live(TASK, unsent, LinesWeek)
@@ -229,7 +238,7 @@ def test_an_eta_query_and_another_firms_ship_replay_as_the_agent_answers(lines_r
                              f"agent's: {lines.firm_name(TASK, lines.firm(TASK, other))} handles it"}]
         return [*msgs[:a], msgs[a] | {"tool_calls": [*msgs[a]["tool_calls"], query]}, *msgs[a + 1:i + 1],
                 {"role": "tool", "tool_call_id": "query", "name": MESSAGE_TOOL,
-                 "content": json.dumps({"agent": agent, "replies": replies, "text": ""})}, *msgs[i + 1:]]
+                 "content": json.dumps({"agent": agent, "replies": replies, "text": ""})}]
 
     steps = lines_runs.live(TASK, asked(agreed), LinesWeek)["steps"]
     k = next(k for k, s in enumerate(steps) if s["call_id"] == "query")

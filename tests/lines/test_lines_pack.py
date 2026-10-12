@@ -36,6 +36,19 @@ def news(task) -> dict[int, list[tuple[int, int]]]:
     return out
 
 
+def reachable(task, sid: int, arrival: int, planned: int) -> int:
+    """The first arrival from ``arrival`` on from which the slowest course from hour 0 still makes ``planned``."""
+    return next(a for a in range(arrival, arrival + 500) if lines.slowest(task, sid, 0, a) >= planned)
+
+
+def delayed(task, sid: int, hour: int) -> int:
+    """What the ship's agent said at ``hour`` before the news, moved later by the delay, between the next hour and the
+    slowest the ship can arrive."""
+    before, truth = lines.before_news(task, sid), task.ships[sid].arrival
+    eta = lines.estimate(task, sid, hour, before) + truth - before
+    return min(max(hour + 1, eta), lines.slowest(task, sid, hour, truth))
+
+
 def test_the_pack_sits_beside_the_first_tasks_dir_or_in_the_package(monkeypatch):
     first = Path(os.environ["BERTH_TASKS_DIR"].split(":")[0])
     assert lines.pack_dir() == first.parent / LINES_PACK
@@ -58,11 +71,16 @@ def test_the_manifest_pins_the_pack_and_the_wind_pack_it_was_made_from():
 
 @pytest.mark.parametrize("task", WEEKS)
 def test_a_lines_week_is_its_wind_week_with_the_agents_the_arrivals_off_schedule_and_the_news_as_their_etas(task):
-    """Only the arrivals, rules.lines, the reference and the late, bunching and unscheduled-call news differ: each now
-    carries the agent's ETA as of the watch it reaches the planner, never at or before the hour a delayed ship would
-    have arrived without it."""
+    """Only the arrivals and the deadlines that move with them, rules.lines, the reference and the late, bunching,
+    unscheduled-call and emergency news differ: each now carries the agent's ETA as of the watch it reaches the
+    planner, or the moved deadline."""
     v4 = WIND.get(task.task_id)
-    assert replace(lines.as_v4(task), rules={}, reference={}, disruptions=[], notices=[]) == replace(
+    for s, was in zip(task.ships, v4.ships, strict=True):
+        assert s.berth_deadline == (None if was.berth_deadline is None else
+                                    was.berth_deadline + s.arrival - was.arrival)
+    restored = [replace(s, berth_deadline=was.berth_deadline) for s, was in zip(lines.as_v4(task).ships, v4.ships,
+                                                                                 strict=True)]
+    assert replace(task, ships=restored, rules={}, reference={}, disruptions=[], notices=[]) == replace(
         v4, rules={}, reference={}, disruptions=[], notices=[])
     assert {k: v for k, v in task.rules.items() if k != "lines"} == v4.rules
     firms = task.rules["lines"]["firms"]
@@ -75,23 +93,28 @@ def test_a_lines_week_is_its_wind_week_with_the_agents_the_arrivals_off_schedule
                                                      strict=True)):
         hour = at[f"{was['type']}-{i}"]
         if was["type"] == "late":
-            before = lines.before_news(task, was["ship"])
-            assert e == was | {"eta": max(lines.estimate(task, was["ship"], hour), before + 1)}
-            assert text == was_text.replace("was delayed leaving", "is running late from").replace(
+            assert e == was | {"eta": delayed(task, was["ship"], hour)}
+            assert text == was_text.replace("was delayed leaving", "has been held up at").replace(
                 f"it now arrives at hour {v4.ships[was['ship']].arrival}", f"its agent now gives ETA hour {e['eta']}")
         elif was["type"] == "extra":
             assert e == was | {"eta": lines.estimate(task, was["ship"], hour)}
             assert f"has ETA hour {e['eta']} from its agent" in text
         elif was["type"] == "bunching":
-            assert e == was | {"etas": [max(lines.estimate(task, s, hour), lines.before_news(task, s) + 1)
-                                        for s in was["ships"]]}
-            assert "their agents' ETAs: " + ", ".join(
-                f"ship {s} hour {x}" for s, x in zip(e["ships"], e["etas"], strict=True)) in text
+            assert e == was | {"etas": [delayed(task, s, hour) for s in was["ships"]]}
+            assert text == was_text.replace(
+                was_text[was_text.index(" and now arrive together"):was_text.index(" Their planned")],
+                "; their agents' ETAs: " + ", ".join(f"ship {s} hour {x}" for s, x in zip(e["ships"], e["etas"],
+                                                                                            strict=True)) + ".")
+        elif was["type"] == "emergency":
+            assert e == was | {"deadline": task.ships[was["ship"]].berth_deadline}
+            assert text == was_text.replace(f"docks by hour {was['deadline']}", f"docks by hour {e['deadline']}")
         else:
             assert (e, text) == (was, was_text)
 
 
-def test_a_delay_notice_never_gives_an_eta_at_or_before_the_hour_the_ship_would_have_arrived_without_it():
+def test_a_delay_notice_moves_the_eta_its_agent_gave_before_the_news_later_by_the_delay():
+    """NANTO's agent would have said hour 59 at the news, of the 63 it was due before it; 20 hours late, it says 79.
+    ONE FREEDOM's would have said 50 of 48; 6 hours late, 56."""
     seen = []
     for task in PACK.tasks:
         at = {n.event_id: w.hour for w in schedule(lines.as_v4(task)) for n in w.notices}
@@ -103,11 +126,12 @@ def test_a_delay_notice_never_gives_an_eta_at_or_before_the_hour_the_ship_would_
             else:
                 continue
             for sid, eta in rows:
-                seen.append((eta, lines.before_news(task, sid), lines.estimate(task, sid, at[f"{e['type']}-{i}"]),
-                             task.ships[sid].arrival))
-    assert all(before < eta == max(raw, before + 1) for eta, before, raw, _ in seen)
-    assert [(eta, before, raw, truth) for eta, before, raw, truth in seen if raw <= before and truth < eta] == []
-    assert (len(seen), sum(raw <= before for _, before, raw, _ in seen)) == (57, 15)
+                hour = at[f"{e['type']}-{i}"]
+                assert eta == delayed(task, sid, hour) <= lines.slowest(task, sid, hour, task.ships[sid].arrival)
+                seen.append((eta, lines.before_news(task, sid)))
+    assert (len(seen), sum(eta <= before for eta, before in seen)) == (57, 11)
+    assert (lines.estimate(E15, 5, 30, 63), E15.disruptions[3]["eta"]) == (59, 79)
+    assert (lines.estimate(E15, 6, 42, 48), E15.disruptions[4]["eta"]) == (50, 56)
 
 
 def test_each_ships_agent_and_how_far_off_it_is():
@@ -133,11 +157,11 @@ def test_each_ships_agent_and_how_far_off_it_is():
 
 
 def test_the_published_schedule_is_the_lines_estimate_from_72_hours_out_not_the_truth():
-    """Each ship arrives off its schedule by its agent's error from 72 hours out, at hour 1 at the earliest, so 72
-    hours out its agent's ETA is the schedule unless the ship can't arrive that late. A delayed or bunched ship's whole
-    story moves with it: it arrives after its news and later than it would have without it. An unscheduled call keeps
-    v4's arrival, which its notice announces."""
-    clamped = 0
+    """Each ship arrives off its schedule by its agent's error from 72 hours out, but never so early that slowing from
+    hour 0 couldn't still make the schedule, so 72 hours out its agent's ETA is the schedule. A delayed or bunched
+    ship's whole story moves with it: it arrives after its news and later than it would have without it. An
+    unscheduled call keeps v4's arrival, which its notice announces."""
+    raised = 0
     for task in PACK.tasks:
         news = lines.first_known(task)
         for s, was in zip(task.ships, WIND.get(task.task_id).ships, strict=True):
@@ -145,24 +169,25 @@ def test_the_published_schedule_is_the_lines_estimate_from_72_hours_out_not_the_
             miss = round(lines.ETA_ERROR * m["bias"] * lines.ETA_HORIZON)
             assert (m["scheduled"], m["v4_arrival"]) == (was.planned_hour, was.arrival)
             if s.id not in news:
-                assert (m["before_news"], s.arrival) == (None, max(1, was.planned_hour + miss))
+                assert (m["before_news"], s.arrival) == (None, reachable(task, s.id, max(1, was.planned_hour + miss),
+                                                                          was.planned_hour))
+                if s.arrival == was.planned_hour + miss:
+                    assert lines.estimate(task, s.id, s.arrival - lines.ETA_HORIZON) == m["scheduled"]
+                else:
+                    raised += 1
             elif was.planned_hour is None:
                 assert (m["before_news"], s.arrival) == (None, was.arrival)
             else:
-                before = max(was.planned_hour + miss, news[s.id] + 2)
+                before = reachable(task, s.id, max(was.planned_hour + miss, news[s.id] + 2), was.planned_hour)
                 assert (m["before_news"], s.arrival) == (before, max(was.arrival + miss, before + 1))
                 assert news[s.id] < before < s.arrival
-            if s.id not in news and s.arrival > 1:
-                far = s.arrival - lines.ETA_HORIZON
-                slowest = lines.slowest(task, s.id, far, s.arrival)
-                assert lines.estimate(task, s.id, far) == min(m["scheduled"], slowest)
-                clamped += slowest < m["scheduled"]
-    assert clamped == 18
+    assert raised == 25
     assert [(lines.scheduled(E15, s), lines.before_news(E15, s), E15.ships[s].arrival)
             for s in (1, 3, 5, 6, 9, 16)] == [
-        (7, None, 1), (36, None, 47), (54, 63, 83), (66, 48, 54), (111, None, 89), (None, None, 69)]
-    assert (lines.estimate(E15, 3, 47 - 72), lines.estimate(E15, 9, 89 - 72), lines.slowest(E15, 9, 89 - 72, 89)) == (
-        36, 103, 103)
+        (7, None, 5), (36, None, 47), (54, 63, 83), (66, 48, 54), (111, None, 97), (None, None, 69)]
+    assert (lines.slowest(E15, 1, 0, 4), lines.slowest(E15, 1, 0, 5)) == (6, 8)
+    assert (lines.slowest(E15, 9, 0, 96), lines.slowest(E15, 9, 0, 97)) == (110, 111)
+    assert (lines.estimate(E15, 3, 47 - 72), lines.estimate(E15, 9, 97 - 72)) == (36, 111)
 
 
 @pytest.mark.parametrize("task", WEEKS)
@@ -252,20 +277,20 @@ def test_a_late_bunched_or_unscheduled_ship_is_reported_from_the_truth_only_afte
 def test_the_reports_of_one_week_watch_by_watch():
     watches = lines.timetable(E15)
     assert [(w.hour, [n.event_id for n in reports(w)]) for w in watches] == [
-        (0, ["call-0-1", "call-1-1", "eta-2-48", "eta-3-48", "eta-6-48-plan"]),
-        (24, ["eta-2-24", "eta-4-48", "eta-5-48-plan", "eta-3-24", "call-2-1", "eta-6-24-plan"]),
+        (0, ["call-0-1", "eta-1-24", "eta-2-48", "eta-3-48", "eta-6-48-plan"]),
+        (24, ["eta-2-24", "eta-4-48", "call-1-1", "eta-5-48-plan", "eta-3-24", "call-2-1", "eta-6-24-plan"]),
         (30, ["eta-4-24"]),
-        (42, ["eta-5-48", "eta-7-48", "eta-9-48"]),
-        (72, ["eta-8-48", "eta-16-24", "call-3-1", "call-4-1", "call-6-1", "eta-5-24", "eta-7-24", "eta-9-24",
+        (42, ["eta-5-48", "eta-7-48"]),
+        (72, ["eta-8-48", "eta-16-24", "call-3-1", "call-4-1", "eta-9-48", "call-6-1", "eta-5-24", "eta-7-24",
               "call-16-1", "eta-8-24"]),
-        (96, ["eta-10-48", "call-5-1", "eta-11-48", "call-7-1", "call-9-1", "call-8-1", "eta-12-48"])]
+        (96, ["eta-9-24", "eta-10-48", "call-5-1", "eta-11-48", "call-7-1", "call-8-1", "call-9-1", "eta-12-48"])]
     assert news(lines.as_v4(E15)) == {5: [(2, 30)], 6: [(3, 42)], 16: [(3, 45)]}
     assert lines.first_known(E15) == {5: 30, 6: 42, 16: 42}
     opening = reports(watches[0])
     assert [(n.name, n.text) for n in (opening[0], opening[3])] == [
         ("A. Pérez y Cía", "PERSEUS (ship 0) calls in: at buoy S, arriving hour 1 (Mon 01:00)."),
         ("Global Liner Agencias", "STEEN (ship 3): ETA Tue 16:00 (hour 40), as of Mon 00:00.")]
-    assert reports(watches[1])[3].text == "STEEN (ship 3): ETA Tue 19:00 (hour 43), as of Mon 23:00."
+    assert reports(watches[1])[4].text == "STEEN (ship 3): ETA Tue 19:00 (hour 43), as of Mon 23:00."
     assert (opening[4].event_hour, opening[4].event) == (
         48, {"type": "eta", "ship": 6, "hour": 0, "lead": 48, "eta": 60})
     assert opening[4].text == "ONE FREEDOM (ship 6): ETA Wed 12:00 (hour 60), as of Mon 00:00."

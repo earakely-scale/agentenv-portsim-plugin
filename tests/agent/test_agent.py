@@ -313,7 +313,7 @@ async def test_the_result_carries_the_text_summary_usage_and_rollout(play):
                               "checks", "input_tokens", "output_tokens", "max_cost_usd", "error"]} == {
         "agent": "portsim-llm", "model": SONNET, "route": "messages", "end_reason": "submitted", "submitted": True,
         "reward": 1.0, "turns": 2, "tool_calls": 2, "checks": 1, "input_tokens": 3000, "output_tokens": 1000,
-        "max_cost_usd": 5.0, "error": None}
+        "max_cost_usd": None, "error": None}
     assert (result.usage.tool_call_count, result.usage.input_tokens, result.usage.output_tokens,
             result.usage.total_tokens) == (2, 3000, 1000, 4000)
     assert result.native_trajectory.format == "portsim-rollout"

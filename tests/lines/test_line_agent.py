@@ -11,7 +11,7 @@ from agentenv_portsim.tasks import LINES_RULES
 E15 = pack().get("dock-24B-w06x1-busy-0-e15")
 
 
-def test_each_reply_reads_as_a_sentence_a_refusal_with_the_hour_offered_an_eta_on_an_agreed_ship_too():
+def test_each_reply_reads_as_a_sentence_a_refusal_with_the_hour_offered_or_the_eta_an_agreed_ships_eta_too():
     week = LinesWeek(E15)
     assert sentence(week.status("globalliner", 3)) == "STEEN (ship 3): ETA hour 40."
     assert sentence(week.request("globalliner", 3, 46) | {"asked": 46}) == (
@@ -24,6 +24,9 @@ def test_each_reply_reads_as_a_sentence_a_refusal_with_the_hour_offered_an_eta_o
         "STEEN (ship 3): ETA hour 53, as agreed; its turn is hour 47.")
     assert sentence({"ship": 0, "name": "PERSEUS", "agreed": False, "reason": "already arrived at hour 1",
                      "asked": 5}) == "PERSEUS (ship 0) can't make hour 5: already arrived at hour 1."
+    assert sentence(week.request("noatum", 5, 60) | {"asked": 60}) == (
+        "NANTO (ship 5) can't commit to hour 60 yet: it hasn't sailed from Alicante and is more than 48 hours out; "
+        "ETA hour 55.")
 
 
 def test_the_usage_shows_the_same_three_key_requests_as_the_planners_rules():
