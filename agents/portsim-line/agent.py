@@ -63,7 +63,9 @@ def sentence(reply: dict) -> str:
     if reply.get("agreed") is False:
         offer = (f"; it can arrive at hour {reply['earliest']} at the earliest" if "earliest" in reply else
                  f"; it can arrive at hour {reply['latest']} at the latest" if "latest" in reply else "")
-        return f"{who} can't make hour {reply.get('asked')}: {reply['reason']}{offer}."
+        kept = (f"; it still arrives at hour {reply['agreed_arrival']}, as agreed" if "agreed_arrival" in reply
+                else "")
+        return f"{who} can't make hour {reply.get('asked')}: {reply['reason']}{offer}{kept}."
     return f"{who}: ETA hour {reply['eta']}."
 
 

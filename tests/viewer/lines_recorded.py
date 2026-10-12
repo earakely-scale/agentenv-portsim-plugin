@@ -25,7 +25,7 @@ from agentenv_portsim.sweep import Attempt, Sweep, context, outcome
 
 LINES_ROOT = Path(__file__).resolve().parent / "lines_runs"
 E2E_RUN, SONNET = "lines-e2e", "anthropic/claude-sonnet-5-5"
-E2E_INSTANCE = "@local/agentenv-portsim/portsim-lines/week-an8wcplh"
+E2E_INSTANCE = "@local/agentenv-portsim/portsim-lines/week-xyed1coy"
 
 
 def started(instance: str) -> str:

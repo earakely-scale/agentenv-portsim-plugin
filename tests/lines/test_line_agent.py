@@ -20,6 +20,9 @@ def test_each_reply_reads_as_a_sentence_a_refusal_with_the_hour_offered_or_the_e
         "STEEN (ship 3) can't make hour 54: can't slow down that much; it can arrive at hour 53 at the latest.")
     assert sentence(week.request("globalliner", 3, 53) | {"asked": 53}) == (
         "STEEN (ship 3) will arrive at hour 53, reducing speed; it keeps its turn, hour 47.")
+    assert sentence(week.request("globalliner", 3, 60) | {"asked": 60}) == (
+        "STEEN (ship 3) can't make hour 60: can't slow down that much; it can arrive at hour 53 at the latest; it "
+        "still arrives at hour 53, as agreed.")
     assert sentence(week.status("globalliner", 3) | {"agreed_before": True}) == (
         "STEEN (ship 3): ETA hour 53, as agreed; its turn is hour 47.")
     assert sentence({"ship": 0, "name": "PERSEUS", "agreed": False, "reason": "already arrived at hour 1",

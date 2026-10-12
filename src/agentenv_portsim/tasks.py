@@ -102,7 +102,8 @@ LINES_RULES = WIND_RULES.replace(
     "that follow are charged; a ship whose arrival you agreed arrives at that hour. Cost or "
     "rule breaks that news, or wind the forecast didn't show,").replace(
     "your confirmed windows (departed, berthed, frozen or open),",
-    "your confirmed windows (departed, berthed, frozen or open, and where the port berths a ship that got in late),"
+    "your confirmed windows (departed, berthed, frozen or open, and where the port berths a ship that gets in after "
+    "its window, on its latest ETA until it is in),"
 ) + """
 
 The ships' agents:
@@ -123,7 +124,8 @@ a free stretch of quay fits it, with the same cranes, around every other ship's 
 an earlier ship whose arrival you agreed still waiting; nothing else moves. A ship that gets in before its window \
 waits at anchor for it.
 - Ships berth first come, first served: no ship may start berthing while a ship earlier in the queue whose arrival \
-you agreed waits at anchor, unless the wind holds that ship. A ship's turn is when it would arrive at cruising speed, \
+you agreed waits at anchor, unless the wind holds that ship or the closures leave no stretch of quay long enough for \
+it. A ship's turn is when it would arrive at cruising speed, \
 so a ship slowed at your request keeps its turn.
 - Each hour a ship waits at anchor between its arrival and its berthing costs its sections, as an hour late does."""
 HF_BILL_TO_HELP = ("Bill the agent's Hugging Face router calls to this organization (X-HF-Bill-To) instead of the "

@@ -11,7 +11,7 @@ from dataclasses import replace
 import pytest
 from berth_core import Task, plan_to_list
 
-from agentenv_portsim import lines, marine, wind, world
+from agentenv_portsim import lines, marine, tasks, wind, world
 from agentenv_portsim.lines import LinesWeek
 from agentenv_portsim.schedule import label
 from agentenv_portsim.wind import WindWeek
@@ -115,18 +115,22 @@ def test_get_situation_ends_with_the_agents_and_the_arrivals_as_known():
                           "the agreement lapses.")
     assert section[2] == (
         "- Message a ship's agent to ask for its ETA or to request an arrival time. Once the ship has sailed from its "
-        "previous port or its ETA is within 48 hours, the agent agrees when it can make the hour at 17 kn or by "
-        "slowing to as little as 10 kn once it has sailed, and the ship then arrives at that hour; otherwise it "
+        "previous port or its agent's estimate is within 48 hours, the agent agrees when it can make the hour at 17 kn "
+        "or by slowing to as little as 10 kn once it has sailed, and the ship then arrives at that hour; otherwise it "
         "answers with the earliest or the latest hour the ship can make. Before that, the agent can't commit to an "
         "hour and gives its ETA.")
     assert section[5] == (
         "- Ships berth first come, first served: no ship may start berthing while a ship earlier in the queue whose "
-        "arrival you agreed waits at anchor, unless the wind holds that ship. A ship's turn is when it would arrive at "
-        "cruising speed, so a ship slowed at your request keeps its turn.")
+        "arrival you agreed waits at anchor, unless the wind holds that ship or the closures leave no stretch of quay "
+        "long enough for it. A ship's turn is when it would arrive at cruising speed, so a ship slowed at your request "
+        "keeps its turn.")
+    rules = tasks.LINES_RULES.splitlines()
+    assert section[3:6] == rules[rules.index("The ships' agents:") + 3:rules.index("The ships' agents:") + 6]
     assert section[4] == ("- A ship can't berth before it arrives. If it gets in after its window starts, the port "
                           "berths it at the first hour a free stretch of quay fits it, with the same cranes, around "
-                          "every other ship's window and the rules, never ahead of an earlier ship still waiting; "
-                          "nothing else moves. A ship that gets in before its window waits at anchor for it.")
+                          "every other ship's window and the rules, never ahead of an earlier ship whose arrival you "
+                          "agreed still waiting; nothing else moves. A ship that gets in before its window waits at "
+                          "anchor for it.")
     assert section[7] == (
         "- Agents, and their ships: A. Pérez y Cía (aperez): ships 0, 1, 12, 15; Boluda Lines (boluda): ships 7; "
         "CMA CGM Ibérica (cmacgm): ships 2, 11; COSCO Shipping Lines Spain (cosco): ships 4; Global Liner Agencias "
@@ -172,7 +176,8 @@ def test_an_agent_agrees_an_arrival_the_ship_can_make_and_otherwise_offers_the_e
     assert (arrival(week, 3), turn(week, 3), week.told[3]) == (53, 47, (0, 53))
     assert row(week, 3) == "- ship 3 STEEN: arrival hour 53, agreed hour 53, turn 47; from Valencia"
     assert week.request("globalliner", 3, 60) == {"ship": 3, "name": "STEEN", "agreed": False,
-                                                   "reason": "can't slow down that much", "latest": 53}
+                                                   "reason": "can't slow down that much", "latest": 53,
+                                                   "agreed_arrival": 53}
     assert week.request("globalliner", 3, 46)["earliest"] == 47 and week.told[3] == (0, 53)
     assert week.status("globalliner", 3) == {"ship": 3, "name": "STEEN", "eta": 53, "agreed": True, "turn": 47}
 
@@ -376,19 +381,20 @@ def test_an_earliest_offer_floors_the_ships_etas_until_its_news_which_floors_the
 def test_an_agreement_made_before_a_ships_news_stands_if_it_can_still_make_it_and_otherwise_lapses():
     """ONE FREEDOM's agent, working from the plan as it stood (hour 48), agrees hour 70 at hour 0, and NANTO's (hour
     63) agrees 70 at 24. NANTO's news at hour 30 puts it in at 83 at the earliest: the agreement lapses and the news
-    gives the agreed hour moved by the 20-hour delay. ONE FREEDOM's at 42 puts it in at 54 had it cruised; it left
-    Damietta when the truth has it leave and has sailed at the pace hour 70 set, so from 42 it can arrive between 68
-    and 84: the agreement stands, with the turn the truth gives, and the news gives the agreed hour."""
+    gives that hour, where the ship, not yet sailed, cruises in. ONE FREEDOM's at 42 puts it in at 54 had it
+    cruised; it left Damietta when the truth has it leave and has sailed at the pace hour 70 set, so from 42 it can
+    arrive between 68 and 84: the agreement stands, with the turn the truth gives, and the news gives the agreed
+    hour."""
     seen = []
     for week in walk(E15, agreeing((0, "one", 6, 70), (1, "noatum", 5, 70))):
         seen.append((week.hour, sorted(week.locks), week.told.get(5), week.told.get(6), week.turn(6)))
         if week.hour == 42:
             assert week.locks[6] == pytest.approx((42, 54 - 48 / 70 * 42, 70)) and week.reach(6, 42) == (68, 84)
-    assert seen[1:4] == [(24, [6], (15, 57), (0, 70), 48), (30, [6], (30, 90), (0, 70), 48),
+    assert seen[1:4] == [(24, [6], (15, 57), (0, 70), 48), (30, [6], (30, 83), (0, 70), 48),
                          (42, [6], (35, 83), (0, 70), 54)]
     news = {e["event_id"]: (e["watch"], e["text"]) for e in week.log if e["kind"] == "late"}
     assert news == {
-        "late-3": (2, E15.notices[3].replace("ETA hour 79", "ETA hour 90")
+        "late-3": (2, E15.notices[3].replace("ETA hour 79", "ETA hour 83")
                    + " NANTO (ship 5) can no longer arrive at hour 70: the earlier agreement no longer holds."),
         "late-4": (3, E15.notices[4].replace("ETA hour 56", "ETA hour 70")
                    + f" The earlier agreement stands: ONE FREEDOM (ship 6): arriving hour 70 ({label(70)}), as agreed; "
@@ -398,17 +404,56 @@ def test_an_agreement_made_before_a_ships_news_stands_if_it_can_still_make_it_an
     assert (week.truth().ships[5].arrival, week.audit()) == (83, {"ok": True, "problems": []})
 
 
+def through(week: LinesWeek, hour: int) -> None:
+    """The week's watches, with their notices delivered, up to ``hour``."""
+    while week.hour < hour:
+        week.open()
+        for n in week.watches[week.watch].notices:
+            week.notice(n.event_id, n.name, n.text, "trigger")
+
+
 def test_an_agreement_made_before_the_news_lapses_if_its_pace_since_leaves_the_ship_short_of_it():
     """ONE FREEDOM agreed for 64 at hour 0 has sailed at 48/64 of cruising speed since; from 42 it can't arrive before
-    65, so the agreement lapses. For 65 or 81 it can still make it."""
+    65, so the agreement lapses, and having slowed, it cruises in at 65, which the news gives as its ETA and the agent
+    now agrees from. For 65 or 81 it can still make it."""
     for at, stands in ((64, False), (65, True), (81, True)):
         week = LinesWeek(E15)
         assert week.request("one", 6, at)["agreed"]
-        while week.hour < 42:
-            week.open()
-            for n in week.watches[week.watch].notices:
-                week.notice(n.event_id, n.name, n.text, "trigger")
+        through(week, 42)
         assert (6 in week.locks) is stands, at
+    assert (week.actual(6), week.turn(6)) == (81, 54)
+    week = LinesWeek(E15)
+    week.request("one", 6, 64)
+    through(week, 42)
+    assert (week.actual(6), week.turn(6), week.told[6], week.floor[6], week.reach(6, 42)) == (65, 54, (42, 65), 65,
+                                                                                              (65, 81))
+    [news] = [m["text"] for m in week.messages if m["from"] == "ONE FREEDOM"]
+    assert "its agent now gives ETA hour 65 " in news and news.endswith("can no longer arrive at hour 64: the earlier "
+                                                                        "agreement no longer holds.")
+    assert week.request("one", 6, 66)["agreed"] and week.truth().ships[6].arrival == 66
+
+
+def test_at_its_news_a_ship_has_slowed_for_every_agreement_since_the_first():
+    """ONE FREEDOM agreed for 60 at hour 0, for 70 and 71 at 24 and 70 again at 30 has sailed slower since hour 0, not
+    only since 30: from 42 it can arrive between 66 and 82, and 70 stands. Agreeing 70 again changes nothing; agreed
+    for 56 only at 30, it slowed for 12 hours and cruises in at 58."""
+    def played(*agreements: tuple[int, int]) -> LinesWeek:
+        week = LinesWeek(E15)
+        for hour, at in agreements:
+            through(week, hour)
+            assert week.request("one", 6, at)["agreed"]
+        through(week, 42)
+        return week
+    week = played((0, 60), (24, 70), (24, 71), (30, 70))
+    assert (week.locks[6][2], week.reach(6, 42)) == (70, (66, 82))
+    assert played((0, 70), (30, 70)).reach(6, 42) == played((0, 70)).reach(6, 42) == (68, 84)
+    week = played((30, 56))
+    assert 6 not in week.locks and (week.actual(6), week.reach(6, 42)) == (58, (58, 69))
+
+
+def test_advance_leaves_where_the_ships_are_to_the_bulletin():
+    week = LinesWeek(E15)
+    assert set(week.open()) == {"watch", "hour", "time", "frozen_before", "unconfirmed", "note"}
 
 
 def test_other_ships_reports_keep_their_scheduled_text():

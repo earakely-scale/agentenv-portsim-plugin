@@ -145,7 +145,8 @@ function answerText(reply, asked) {
   if (reply.agreed) return `agreed h${reply.arrival}${reply.slowing ? ", slowing" : ""}`;
   const offer = reply.earliest != null ? ` (earliest h${reply.earliest})` : reply.latest != null ? ` (latest h${reply.latest})`
     : reply.eta != null ? ` (ETA h${reply.eta})` : "";
-  return `refused: ${reply.reason}${offer}`;
+  const kept = reply.agreed_arrival != null ? `; still agreed h${reply.agreed_arrival}` : "";
+  return `refused: ${reply.reason}${offer}${kept}`;
 }
 
 const answerDot = (reply) => `<i class="dot ${reply.error || reply.agreed === false ? "bad" : "ok"}"></i>`;
@@ -185,7 +186,7 @@ function resultHtml(task, step) {
   if (step.tool === "check_plan") return checkSummary(task, r) + (refused && `<div class="muted small">confirm_berths would refuse:</div>${refused}`) + problems;
   if (step.tool === "confirm_berths") return `<div class="res-line"><i class="dot ${r.refused.length ? "bad" : "ok"}"></i>Confirmed ${r.confirmed.length} · unchanged ${r.unchanged.length} · refused ${r.refused.length}</div>${refused}${problems}`;
   if (r.done) return `<div class="res-line"><i class="dot ${r.feasible ? "ok" : "bad"}"></i>Week done · ${r.feasible ? `feasible · cost ${r.cost}` : "infeasible"} · reward ${fmtNum(r.reward, 3)}</div>`;
-  return `<div class="res-line">Watch ${r.watch} · ${escapeHtml(r.time)} · freeze line h ${r.frozen_before}</div><div class="muted small">berthed ${names(task, r.berthed)} · departed ${names(task, r.departed)}${r.unconfirmed.length ? ` · unconfirmed ${names(task, r.unconfirmed)}` : ""}</div>`;
+  return `<div class="res-line">Watch ${r.watch} · ${escapeHtml(r.time)} · freeze line h ${r.frozen_before}</div><div class="muted small">${[r.berthed && `berthed ${names(task, r.berthed)}`, r.departed && `departed ${names(task, r.departed)}`, r.unconfirmed.length && `unconfirmed ${names(task, r.unconfirmed)}`].filter(Boolean).join(" · ")}</div>`;
 }
 
 function otherHtml(tc, out) {

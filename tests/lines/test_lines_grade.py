@@ -76,6 +76,18 @@ def test_a_late_ship_is_berthed_ahead_of_no_earlier_ship_still_waiting_and_late_
     assert lines.executed(truth, {4: (40, 3, 4), 3: (40, 5, 1)}) == {3: (47, 5, 1), 4: (49, 9, 4)}
 
 
+def test_hour_by_hour_the_port_places_the_late_ships_in_by_then_in_queue_order():
+    """With sections 2-14 closed, ONE FREEDOM holds the open stretch until 71. SEASPAN OCEANIA, slowed to 55 at the
+    planner's request, keeps its turn, 40, ahead of DALILA, in at 50 unagreed: at 71 both wait and the port berths
+    SEASPAN OCEANIA first, where taking them in arrival order would berth DALILA while it waits, a queue break."""
+    arrivals = CRUISING | {6: 30, 2: 50, 4: 55}
+    task = lines.with_arrivals(replace(E15, blocks=[Block(2, 14, 0, 150, "closed")]), arrivals,
+                               arrivals | {4: 40}, agreed=[4])
+    plan = {6: (30, 15, 4), 2: (20, 15, 2), 4: (20, 15, 2)}
+    assert lines.executed(task, plan) == {6: (30, 15, 4), 4: (71, 15, 2), 2: (124, 15, 2)}
+    assert not any(queue(lines.evaluate(task, plan), s) for s in plan)
+
+
 def test_a_late_ship_waits_out_the_wind_and_with_no_room_for_a_week_its_window_starts_when_it_gets_in():
     """DALILA (334 m) getting in at 45 waits out the wind above 25 kn to 47 and STEEN (138 m) doesn't; NAVIOS INDIGO
     (261 m) in at 98 waits out the hour above 30 kn and takes sections 8-13, clear of the dredging from hour 104;
@@ -146,6 +158,16 @@ def test_no_ship_starts_while_one_earlier_in_the_queue_waits_at_anchor_unless_th
         "berths at hour 89 while ship 6 ONE FREEDOM, earlier in the queue, waits at anchor"]
 
 
+def test_a_ship_the_closures_leave_no_stretch_long_enough_for_holds_no_one_in_the_queue():
+    """With sections 2-15 closed until 100, no stretch of 8 is open for ONE FREEDOM waiting since 54, so VERONICA B
+    may berth at 95; with 2-14 closed, 15-22 is open for it, and VERONICA B jumps the queue."""
+    plan = {6: (107, 15, 4), 7: (95, 17, 1)}
+    for last, jumped in ((15, []), (14, ["berths at hour 95 while ship 6 ONE FREEDOM, earlier in the queue, waits at "
+                                         "anchor"])):
+        truth = cruising(replace(E15, blocks=[*E15.blocks, Block(2, last, 0, 100, "closed")]))
+        assert queue(lines.evaluate(truth, plan), 7) == jumped, last
+
+
 def test_the_queue_protects_only_a_ship_whose_arrival_was_agreed():
     """Unagreed, ONE FREEDOM's wait at anchor costs its hours there and VERONICA B jumps no queue."""
     plan = {6: (107, 15, 4), 7: (95, 4, 1)}
@@ -178,7 +200,8 @@ def test_an_eta_that_proved_wrong_is_charged_while_the_wind_no_forecast_showed_i
     """Naive on e09: NEXOE MAERSK's window froze at hour 24, after the ETA of hour 20 its agent gave; it got in at 44,
     with PERSEUS alongside its sections, and the port berthed it at the first free stretch, sections 9-13. Its
     lateness and hours at anchor are charged, as the week as known then holds them too with the truth's arrivals; the
-    hour more that wind no forecast showed cost it is excused, as are PERSEUS's tugs short at 62."""
+    hour more that wind no forecast showed cost it is excused, as are PERSEUS's tugs short at 62. ZIM CHINA's wait from
+    107 to 113, for the cranes the outage announced after its last chance took, is excused too."""
     views = []
 
     def policy(week: LinesWeek):
@@ -202,8 +225,8 @@ def test_an_eta_that_proved_wrong_is_charged_while_the_wind_no_forecast_showed_i
     late, held = lines.evaluate(truth, plan).ships[1], lines.evaluate(known, plan).ships[1]
     assert lines.evaluate(eta, plan).ships[1].problems == held.problems == late.problems == []
     assert (lines.evaluate(eta, plan).ships[1].cost, held.cost, late.cost) == (120, 305, 315)
-    assert week.excuses()[1] == {1: late.cost - held.cost, 4: 20} == {1: 10, 4: 20}
-    assert week.grade["excused_cost"] == 30
+    assert week.excuses()[1] == {1: late.cost - held.cost, 4: 20, 5: 432} == {1: 10, 4: 20, 5: 432}
+    assert week.grade["excused_cost"] == 462
     assert (4, "tugs short at hour 62: your ships need 2, 0 free") in problems(week.grade["excused"])
     assert {world.rule(p) for _, p in problems(week.grade["excused"])} == {"no_move", "tugs"}
     assert (truth.no_move_windows(truth.ships[1]), known.no_move_windows(known.ships[1])) == ([(57, 62), (223, 226)],
@@ -216,9 +239,9 @@ def test_a_draft_is_weighed_with_its_own_excuses():
     changes the cost the news excuses; the earlier weeks weigh every draft with the confirmed plan's excuses."""
     week = naive(E09.task_id)
     draft = {s: w for s, w in week.plan.items() if s != 4}
-    assert week.excuses() == ({(2, "tugs"), (3, "tugs"), (3, "no_move"), (4, "tugs")}, {1: 10, 4: 20})
+    assert week.excuses() == ({(2, "tugs"), (3, "tugs"), (3, "no_move"), (4, "tugs")}, {1: 10, 4: 20, 5: 432})
     assert week.draft_excuses(draft) == week.excuses(draft) == ({(2, "tugs"), (3, "tugs"), (3, "no_move")},
-                                                                {1: 20, 16: 30})
+                                                                {1: 20, 5: 432, 16: 30})
     assert world.Week.draft_excuses(week, draft) == week.excuses()
 
 

@@ -154,8 +154,9 @@ def test_the_lines_rules_are_the_wind_rules_with_three_sentences_changed_and_the
         "rules, never ahead of an earlier ship whose arrival you agreed still waiting; nothing else moves. A ship that "
         "gets in before its window waits at anchor for it.",
         "- Ships berth first come, first served: no ship may start berthing while a ship earlier in the queue whose "
-        "arrival you agreed waits at anchor, unless the wind holds that ship. A ship's turn is when it would arrive at "
-        "cruising speed, so a ship slowed at your request keeps its turn.",
+        "arrival you agreed waits at anchor, unless the wind holds that ship or the closures leave no stretch of quay "
+        "long enough for it. A ship's turn is when it would arrive at cruising speed, so a ship slowed at your request "
+        "keeps its turn.",
         "- Each hour a ship waits at anchor between its arrival and its berthing costs its sections, as an hour late "
         "does."]
     changed = [i for i, (a, b) in enumerate(zip(wind_rules, ours, strict=False)) if a != b]
@@ -163,7 +164,8 @@ def test_the_lines_rules_are_the_wind_rules_with_three_sentences_changed_and_the
     assert changed == [1, situation, len(wind_rules) - 1]
     assert ours[situation] == wind_rules[situation].replace(
         "(departed, berthed, frozen or open)",
-        "(departed, berthed, frozen or open, and where the port berths a ship that got in late)")
+        "(departed, berthed, frozen or open, and where the port berths a ship that gets in after its window, on its "
+        "latest ETA until it is in)")
     assert ours[1] == wind_rules[1].replace(
         "ships report delays and unscheduled calls, the harbour master",
         "each ship's agent reports its ETA and calls in before it arrives, the line desk reports unscheduled calls, "

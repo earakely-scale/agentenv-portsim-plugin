@@ -68,6 +68,12 @@ def through_watch(msgs: list[dict], i: int) -> int:
     return next(j for j in range(i, len(msgs)) if msgs[j]["role"] == "tool" and msgs[j]["name"] == "advance") + 1
 
 
+def through_situation(msgs: list[dict], i: int) -> int:
+    """Just past the first get_situation result after the watch message i is in, which shows where its ships are."""
+    return next(j for j in range(through_watch(msgs, i), len(msgs))
+                if msgs[j]["role"] == "tool" and msgs[j]["name"] == "get_situation") + 1
+
+
 def basis(ship: int, watch: int) -> int:
     """The arrival the ship's agent works from at the watch: the plan as it stood until its news, then the truth."""
     pending = REF["watch_hours"][watch] < lines.first_known(TASK).get(ship, 0)
@@ -215,7 +221,7 @@ def test_an_agent_that_failed_after_asking_the_env_leaves_its_requests_in_the_we
     assert steps[k]["result"]["replies"] == [] and own(steps, k) == own(rollout["steps"], k)
     assert [s["lines"] for s in steps] == [s["lines"] for s in rollout["steps"][:len(steps)]]
     assert steps[-1]["tool"] == "advance"
-    unsent = [*msgs[:i], *msgs[i + 1:end]]
+    unsent = [*msgs[:i], *msgs[i + 1:through_situation(msgs, i)]]
     unsent[a] = msgs[a] | {"tool_calls": [c for c in msgs[a]["tool_calls"] if c["id"] != msgs[i]["tool_call_id"]]}
     with pytest.raises(ReplayError):
         lines_runs.live(TASK, unsent, LinesWeek)
