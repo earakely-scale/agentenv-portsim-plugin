@@ -27,7 +27,8 @@ T1, T2, T3 = "dock-24B-w06x1-busy-0", "dock-24B-w06x1-standard-0", "dock-36A-w35
 ROW_KEYS = ["sweep", "model", "task_id", "rep", "attempt", "started_utc", "wall_seconds", "exit", "instance", "outcome",
             "failed_step", "error_code", "error", "retryable", "reward", "submitted", "feasible", "plan_cost",
             "optimal_cost", "checks", "calls", "end_reason", "turns", "tool_calls", "input_tokens", "output_tokens",
-            "cached_tokens", "cache_write_tokens", "cost_usd", "agent_reward", "transcript"]
+            "cached_tokens", "cache_write_tokens", "cost_usd", "priced_cost_usd", "failed_requests", "agent_reward",
+            "transcript"]
 
 
 def sweep_run(*args: str, name: str = "s"):
@@ -60,7 +61,10 @@ def test_an_attempt_is_one_row_with_the_grade_the_episode_and_the_agents_summary
         "reward": 0.944468, "submitted": True, "feasible": True, "plan_cost": 92, "optimal_cost": 87, "checks": 1,
         "calls": 2, "end_reason": "submitted", "turns": 2, "tool_calls": 2, "input_tokens": 25105,
         "output_tokens": 17392, "cached_tokens": 0, "cache_write_tokens": 0, "cost_usd": 0.224018,
-        "agent_reward": 0.944468, "transcript": f"transcripts/anthropic-claude-sonnet-5-5/{T1}-r1-a1.json"}
+        "priced_cost_usd": None, "failed_requests": None, "agent_reward": 0.944468,
+        "transcript": f"transcripts/anthropic-claude-sonnet-5-5/{T1}-r1-a1.json"}
+    assert sweep.priced(row) == 0.224018 == sweep.priced(row | {"priced_cost_usd": 0.224018, "failed_requests": 0})
+    assert sweep.priced(row | {"cost_usd": 2.7, "priced_cost_usd": 0.23, "failed_requests": 1}) == 0.23
     out = Path("results/runs/s")
     assert json.loads((out / row["transcript"]).read_text())["uri"] == (
         "file:///state/agent-env/object_store/trajectories/play.json")

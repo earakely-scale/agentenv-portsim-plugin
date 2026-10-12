@@ -121,6 +121,11 @@ def cost(row: dict, cap: float) -> float:
     return cap if row["cost_usd"] is None else row["cost_usd"]
 
 
+def priced(row: dict) -> float | None:
+    """What a run's tokens cost: its spend without the failed provider requests the cap books at their worst case."""
+    return row["cost_usd"] if row.get("priced_cost_usd") is None else row["priced_cost_usd"]
+
+
 def context(instance: str) -> dict:
     with namespace_routing():
         return get_task_instance_store().get(instance).context or {}
@@ -236,7 +241,8 @@ def outcome(sweep: Sweep, attempt: Attempt, earlier: list[dict], interrupted: bo
            "checks": episode.get("checks_used"), "calls": episode.get("calls_used"),
            **{key: s.get(key) for key in ("end_reason", "turns", "tool_calls", "input_tokens", "output_tokens",
                                           "cached_tokens", "cache_write_tokens")},
-           "cost_usd": spent, "agent_reward": s.get("reward"), "transcript": transcript}
+           "cost_usd": spent, "priced_cost_usd": s.get("priced_cost_usd"), "failed_requests": s.get("failed_requests"),
+           "agent_reward": s.get("reward"), "transcript": transcript}
     if sweep.live:
         row |= {"submitted": episode["end_reason"] == "done" if scored else None,
                 "checks": sum(episode["planning_calls"]) if scored else None, "watches": episode.get("watches"),
@@ -442,7 +448,7 @@ class Pooled:
         rows = [r for rs in by_task.values() for r in rs]
         pub = self.episodes(model, ours)
         turns = [r["turns"] for r in rows if r["turns"] is not None]
-        costs = [r["cost_usd"] for r in rows if r["cost_usd"] is not None]
+        costs = [priced(r) for r in rows if priced(r) is not None]
         known, unknown, _ = self.spend(self.attempts(model))
         if pub is None:
             pub_mean = diff = pub_submitted = pub_feasible = pub_optimal = pub_turns = pub_tokens = "–"
@@ -572,7 +578,7 @@ class Live(Pooled):
         """Median turns, tokens, cached tokens and cost per episode, and the model's spend."""
         turns = [r["turns"] for r in rows if r["turns"] is not None]
         cached = [r["cached_tokens"] for r in rows if r["cached_tokens"] is not None]
-        costs = [r["cost_usd"] for r in rows if r["cost_usd"] is not None]
+        costs = [priced(r) for r in rows if priced(r) is not None]
         known, unknown, _ = self.spend(self.attempts(model))
         return [f"{statistics.median(turns):g}" if turns else "–", _tokens(rows),
                 f"{statistics.mean(cached) / 1000:.1f}k" if cached else "–",

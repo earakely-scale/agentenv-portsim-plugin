@@ -40,7 +40,7 @@ from huggingface_hub import CommitOperationAdd, CommitOperationDelete, HfApi
 from agentenv_portsim import lines as lines_weeks
 from agentenv_portsim import marine, tasks, wind
 from agentenv_portsim.schedule import LINES_ENV, MARINE_ENV, WIND_ENV, WIND_MAX_TURNS, schedule
-from agentenv_portsim.sweep import EVAL_PACK, RUNS, TIERS, ci, results
+from agentenv_portsim.sweep import EVAL_PACK, RUNS, TIERS, ci, priced, results
 
 ROOT = Path(__file__).resolve().parents[1]
 CARD = ROOT / "hub/dataset/README.md"
@@ -153,7 +153,7 @@ def episode_rows(sweep_dir: Path, version: str, by_id: dict, episode_ids: dict[s
                "difficulty": task.difficulty, "quay": task.quay, "num_ships": len(task.ships), "reward": r["reward"],
                "feasible": r["feasible"], "cost": r["plan_cost"], "optimal_cost": r["optimal_cost"],
                "turns": r["turns"], "tool_calls": r["tool_calls"], "input_tokens": r["input_tokens"],
-               "output_tokens": r["output_tokens"], "cost_usd": r["cost_usd"], "seconds": record["seconds"],
+               "output_tokens": r["output_tokens"], "cost_usd": priced(r), "seconds": record["seconds"],
                "wall_seconds": r["wall_seconds"], "end_reason": r["end_reason"], "sweep": sweep_dir.name}
         if version == "v1":
             row |= {"submitted": r["submitted"], "checks": r["checks"]}

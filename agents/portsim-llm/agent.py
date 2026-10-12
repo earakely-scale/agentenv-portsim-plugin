@@ -1,7 +1,8 @@
 """PortSimEnv's harness loop (FineEnvs portsim-v1 b0f4c2f, berth_openenv/agent.py) as an A2A agent: one episode on the
 env's MCP tools through agent-env's model endpoint, on the API upstream calls for the model's provider. Cost is usage
 times PRICES, or the most a request could cost when its usage is lost (it failed, or the harness cut its stream); when
-PORTSIM_MAX_COST_USD is set, an episode stops before a request that could take it past that. An env that lists advance
+PORTSIM_MAX_COST_USD is set, an episode stops before a request that could take it past that. The summary also gives the
+cost without the failed requests, which may not have been billed, and how many failed. An env that lists advance
 is a live week in watches: the episode ends on advance's done, with no tool-call cap, and Anthropic requests carry one
 rolling cache breakpoint."""
 
@@ -488,7 +489,8 @@ class Episode:
         self.reward: float | None = None
         self.live = False
         self.tool_calls = self.checks = self.cached = self.written = 0
-        self.spent = 0.0
+        self.spent = self.unbilled = 0.0
+        self.failed_requests = 0
         self.failure: tuple[str, str] | None = None
         self.error: str | None = None
 
@@ -559,6 +561,8 @@ class Episode:
                     if getattr(e, "status_code", None) in REFUSED:
                         return self.fail("provider_refused", error=e)
                     self.spent += most
+                    self.unbilled += most
+                    self.failed_requests += 1
                     if resend == STREAM_RETRIES or not mid_stream(e) or (
                             self.max_cost is not None and self.spent + most > self.max_cost):
                         return self.fail("provider_error", error=e)
@@ -637,6 +641,7 @@ class Episode:
                    "checks": self.checks, "input_tokens": usage["input_tokens"],
                    "output_tokens": usage["output_tokens"], "cached_tokens": self.cached,
                    "cache_write_tokens": self.written, "cost_usd": round(self.spent, 6), "max_cost_usd": self.max_cost,
+                   "priced_cost_usd": round(self.spent - self.unbilled, 6), "failed_requests": self.failed_requests,
                    "seconds": record["seconds"], "error": self.error}
         text = (f"{record['end_reason']}: reward {json.dumps(self.reward)}, {record['turns']} turns, "
                 f"{self.tool_calls} tool calls, ${self.spent:.4f} ({self.model})")

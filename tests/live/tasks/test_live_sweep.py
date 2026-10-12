@@ -20,8 +20,8 @@ A, B = "dock-36A-w35x1-standard-0", "dock-24B-w07x1-busy-0"
 ROW_KEYS = ["sweep", "model", "task_id", "rep", "attempt", "started_utc", "wall_seconds", "exit", "instance", "outcome",
             "failed_step", "error_code", "error", "retryable", "reward", "submitted", "feasible", "plan_cost",
             "optimal_cost", "checks", "calls", "end_reason", "turns", "tool_calls", "input_tokens", "output_tokens",
-            "cached_tokens", "cache_write_tokens", "cost_usd", "agent_reward", "transcript", "watches", "excused_cost",
-            "regret"]
+            "cached_tokens", "cache_write_tokens", "cost_usd", "priced_cost_usd", "failed_requests", "agent_reward",
+            "transcript", "watches", "excused_cost", "regret"]
 FAKE = textwrap.dedent("""
     import json, os, sys, uuid
     from pathlib import Path
@@ -92,7 +92,8 @@ def test_a_live_attempt_is_a_row_with_the_weeks_grade_watches_and_planning_calls
         "reward": 1.0, "submitted": True, "feasible": True, "plan_cost": 10, "optimal_cost": 226, "checks": 14,
         "calls": 31, "end_reason": "done", "turns": 30, "tool_calls": 31, "input_tokens": 412000,
         "output_tokens": 38000, "cached_tokens": 351000, "cache_write_tokens": 40000, "cost_usd": 0.4,
-        "agent_reward": 1.0, "transcript": f"transcripts/anthropic-claude-sonnet-5-5/{A}-r1-a1.json", "watches": 5,
+        "priced_cost_usd": None, "failed_requests": None, "agent_reward": 1.0,
+        "transcript": f"transcripts/anthropic-claude-sonnet-5-5/{A}-r1-a1.json", "watches": 5,
         "excused_cost": 0, "regret": -216}
     assert (second["reward"], second["submitted"], second["end_reason"], second["agent_reward"],
             second["excused_cost"], second["regret"]) == (0.8116, False, "turn_limit", None, 20, 20)
