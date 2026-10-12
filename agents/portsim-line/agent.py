@@ -58,7 +58,8 @@ def sentence(reply: dict) -> str:
                 + f"; it keeps its turn, hour {reply['turn']}.")
     if reply.get("agreed") is False:
         offer = (f"; it can arrive at hour {reply['earliest']} at the earliest" if "earliest" in reply else
-                 f"; it can arrive at hour {reply['latest']} at the latest" if "latest" in reply else "")
+                 f"; it can arrive at hour {reply['latest']} at the latest" if "latest" in reply else
+                 f"; ETA hour {reply['eta']}" if "eta" in reply else "")
         return f"{who} can't make hour {reply.get('asked')}: {reply['reason']}{offer}."
     return f"{who}: ETA hour {reply['eta']}."
 

@@ -154,36 +154,60 @@ def drift(task: Task) -> Task:
         arrival = s.arrival
         if e is None:
             planned = s.arrival
-            arrival = max(1, planned + miss)
+            arrival = reachable(task, s.id, max(1, planned + miss), planned)
         elif e["type"] != "extra":
             planned = s.arrival - e["hours"] if e["type"] == "late" else s.planned_hour
-            before = max(planned + miss, news[s.id] + 2)
+            before = reachable(task, s.id, max(planned + miss, news[s.id] + 2), planned)
             arrival = max(s.arrival + miss, before + 1)
         metas.append(m | {"scheduled": planned, "before_news": before, "v4_arrival": s.arrival})
-        ships.append(replace(s, arrival=arrival))
-    return replace(task, ships=ships, rules=task.rules | {"lines": task.rules["lines"] | {"ships": metas}})
+        moved = arrival - s.arrival
+        ships.append(replace(s, arrival=arrival, berth_deadline=None if s.berth_deadline is None else
+                             s.berth_deadline + moved))
+    events, notices = [], []
+    for e, text in zip(task.disruptions, task.notices, strict=True):
+        if e["type"] == "emergency":
+            deadline = ships[e["ship"]].berth_deadline
+            text = re.sub(r"docks by hour \d+", f"docks by hour {deadline}", text)
+            e = e | {"deadline": deadline}
+        events.append(e)
+        notices.append(text)
+    return replace(task, ships=ships, disruptions=events, notices=notices,
+                   rules=task.rules | {"lines": task.rules["lines"] | {"ships": metas}})
+
+
+def reachable(task: Task, sid: int, arrival: int, planned: int) -> int:
+    """The arrival, no earlier than the slowest course from hour 0 could still make the published schedule."""
+    while lines.slowest(task, sid, 0, arrival) < planned:
+        arrival += 1
+    return arrival
+
+
+def delayed(task: Task, sid: int, hour: int) -> int:
+    """A delay notice's ETA: what the ship's agent said before the news, moved later by the delay."""
+    before, truth = lines.before_news(task, sid), task.ships[sid].arrival
+    eta = lines.estimate(task, sid, hour, before) + truth - before
+    return min(max(hour + 1, eta), lines.slowest(task, sid, hour, truth))
 
 
 def news_etas(task: Task) -> Task:
-    """v4's late, bunching and unscheduled-call notices as the agents' ETAs at the watch they reach the planner; a
-    delay notice never gives an ETA at or before the hour the ship would have arrived without it."""
+    """v4's late, bunching and unscheduled-call notices as the agents' ETAs at the watch they reach the planner."""
     at = {n.event_id: w.hour for w in schedule.schedule(lines.as_v4(task)) for n in w.notices}
     events, notices = [], []
     for i, (e, text) in enumerate(zip(task.disruptions, task.notices, strict=True)):
         hour = at.get(f"{e['type']}-{i}")
         if e["type"] == "late":
-            eta = max(lines.estimate(task, e["ship"], hour), lines.before_news(task, e["ship"]) + 1)
+            eta = delayed(task, e["ship"], hour)
             text = re.sub(r"it now arrives at hour \d+", f"its agent now gives ETA hour {eta}", text).replace(
-                "was delayed leaving", "is running late from")
+                "was delayed leaving", "has been held up at")
             e = e | {"eta": eta}
         elif e["type"] == "extra":
             eta = lines.estimate(task, e["ship"], hour)
             e, text = e | {"eta": eta}, re.sub(r"arrives at hour \d+", f"has ETA hour {eta} from its agent", text)
         elif e["type"] == "bunching":
-            etas = [max(lines.estimate(task, s, hour), lines.before_news(task, s) + 1) for s in e["ships"]]
+            etas = [delayed(task, s, hour) for s in e["ships"]]
             e, text = e | {"etas": etas}, re.sub(
-                r"now arrive together between hours \d+ and \d+ \(each ship's arrival hour is in the table\)",
-                "now arrive together; their agents' ETAs: "
+                r" and now arrive together between hours \d+ and \d+ \(each ship's arrival hour is in the table\)",
+                "; their agents' ETAs: "
                 + ", ".join(f"ship {s} hour {x}" for s, x in zip(e["ships"], etas, strict=True)), text)
         events.append(e)
         notices.append(text)
@@ -254,13 +278,16 @@ def latest(week: LinesWeek, sid: int, arrival: int) -> int:
 
 def hindsight_bounds(week: LinesWeek) -> dict[int, tuple[int, int]]:
     """Each ship's arrival range for the hindsight player: from cruising speed to the slowest it could arrive if
-    asked at the watch that brings its news, or from hour 0 for a ship with none; an agreement made before a ship's
-    news is the plan as it stood, which the news may undo."""
+    asked at the first watch its agent can commit (once the ship has sailed or its ETA is within 48 hours) after its
+    news, if any: an agreement made before a ship's news is the plan as it stood."""
     first = lines.first_known(week.task)
+    hours = [w.hour for w in week.watches]
     out = {}
     for s in week.task.ships:
-        asked = first.get(s.id, 0)
-        out[s.id] = (s.arrival, s.arrival if asked >= s.arrival else week.reach(s.id, asked, s.arrival)[1])
+        asked = next((h for h in hours if h >= first.get(s.id, 0) and lines.commits(week.task, s.id, h, s.arrival)),
+                     None)
+        out[s.id] = (s.arrival, s.arrival if asked is None or asked >= s.arrival else
+                     week.reach(s.id, asked, s.arrival)[1])
     return out
 
 
@@ -337,7 +364,7 @@ def planning(week: LinesWeek, low: dict[int, int], high: dict[int, int], ask: bo
 
 def lock(week: LinesWeek, sid: int, want: int, low: dict[int, int], high: dict[int, int]) -> int | None:
     """Request ``want``, and on a counter-offer request the hour offered. Each offer is a fact the follower keeps;
-    returns the agreed hour, or None."""
+    returns the agreed hour, or None, as when the ship hasn't sailed yet."""
     firm = lines.firm(week.task, sid)
     reply = week.request(firm, sid, want)
     if reply["agreed"]:
@@ -347,7 +374,8 @@ def lock(week: LinesWeek, sid: int, want: int, low: dict[int, int], high: dict[i
     elif "latest" in reply:
         high[sid] = offer = reply["latest"]
     else:
-        week.arrived.add(sid)
+        if reply["reason"].startswith("already arrived"):
+            week.arrived.add(sid)
         return None
     return offer if week.request(firm, sid, offer)["agreed"] else None
 

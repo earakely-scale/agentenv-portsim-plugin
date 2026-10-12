@@ -265,8 +265,8 @@ agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.5.2 --task dock-36A-w06x1
     --model zai-org/GLM-5.3-Flash:baseten   # the shortest wind week, 4 watches
 ```
 
-It downloads the dataset's bundles at that tag, shows what it will run and asks before it runs; the task stops the
-episode before it could spend $5. It prints the reward and the instance id, as `agent-env run` does; to replay a week
+It downloads the dataset's bundles at that tag, shows what it will run and asks before it runs; the tasks set no
+cost cap. It prints the reward and the instance id, as `agent-env run` does; to replay a week
 in 3D, play it as a sweep ([Publish your own runs](#publish-your-own-runs) has the sweep and the `view`).
 [On the Hugging Face Hub](#on-the-hugging-face-hub) has the other bundles and `agent-env hf publish`.
 
@@ -390,8 +390,9 @@ What differs from upstream's harness:
   `openai/gpt-6-astra`, `fireworks_ai/kimi-k3`, `groq/qwen/qwen3.8-27b` and so on) and the four open models on the
   Hugging Face router; any other model fails before its first request. A request whose usage never arrives (it failed,
   or the harness cut its stream) is charged the most it could have cost, except one the provider refused (401, 402 or
-  403: the key or the account), which costs nothing and ends the run as `provider_refused`. The episode stops before a
-  request that could take its spend past `PORTSIM_MAX_COST_USD` ($5 in the generated tasks).
+  403: the key or the account), which costs nothing and ends the run as `provider_refused`. When the agent's
+  `PORTSIM_MAX_COST_USD` is set, the episode stops before a request that could take its spend past it; the generated
+  tasks set none, and a sweep sets its `--episode-cap-usd`.
 - **Failures.** A model error after the SDK's retries, an env error, a turn that would start after the task's two
   hours, or the cost cap fails the run as an infrastructure error, with the episode so far, instead of scoring it.
   Chat completions retry eight times, about 40 seconds, because a provider's tokens-per-minute limit (Groq's) answers
@@ -1489,8 +1490,8 @@ agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.5.2 --bundle dock-v1-eval
   isn't registered yet, it prints the setup command.
 - It makes the checks `agent-env run` makes, shows what it would build and run, and asks before it runs: `--yes`
   skips the question, and `--dry-run` stops there. `--task`, `--eval`, `--model` and `--sandbox` work as in
-  `agent-env run`, the model endpoint is set as for any run ([Play a model](#play-a-model)), and each task stops an
-  episode before it could spend $5.
+  `agent-env run`, and the model endpoint is set as for any run ([Play a model](#play-a-model)); the tasks set no
+  cost cap.
 - Its runs are stored under ids rooted at `@local/hf/earakely-scale/PortSimEnv-AgentEnv/<bundle>`, wherever the
   download lands, so a run of the same commit reuses what an earlier run wrote.
 

@@ -4,10 +4,11 @@ schedule is the same estimate from 72 hours out, and the ETAs are optimistic and
 planner can ask a firm for a ship's ETA and request an arrival time, which the firm agrees when the ship can make it
 by slowing down, or answers with the earliest or latest hour it can make. Until the port's news about a delayed ship,
 its agent works from the plan as it stood; the news keeps an earlier agreement only if the ship can still make it. A
-window that starts before its ship gets in begins when it does: the berth waits, and the ship's lateness and any
-clash it then causes are the planner's. Ships berth first come, first served: none may start while a ship earlier in
-the queue waits at anchor, unless the wind holds that ship; a ship's turn is its arrival at cruising speed, so a ship
-slowed on request keeps it. An hour at anchor costs what an hour late does.
+ship that gets in after its window starts is berthed by the port at the next hour a free stretch of quay fits it,
+nobody else moving; one that gets in early waits at anchor for its window. Ships berth first come, first served: none
+may start while a ship earlier in the queue, with an agreed arrival, waits at anchor, unless the wind holds that ship;
+a ship's turn is its arrival at cruising speed, so a ship slowed on request keeps it. An hour at anchor costs what an
+hour late does.
 
 ``rules["lines"]`` holds each ship's firm, its previous port's distance, its ETA bias, its scheduled arrival, its
 arrival before its news (for a delayed ship) and its v4 arrival, from which the news is timed; the truth is each
@@ -16,6 +17,7 @@ ship's ``arrival`` (at cruising speed) and the arrival times agreed during the w
 import json
 import math
 import os
+from collections.abc import Iterable
 from dataclasses import replace
 from importlib.resources import files
 from pathlib import Path
@@ -36,6 +38,8 @@ REPORT_LEADS = (48, 24)
 CALL_LEAD = 1
 ETA_ERROR = 0.2
 ETA_HORIZON = 72
+COMMIT_LEAD = 48
+DISPATCH_HOURS = 168
 SPEAKER = "Ship's agent"
 REPORTS = ("eta", "call")
 NEWS_ETA = ("late", "bunching", "extra")
@@ -102,6 +106,13 @@ def estimate(task: Task, sid: int, hour: int, arrival: int | None = None) -> int
         return a
     eta = a - round(ETA_ERROR * meta(task, sid)["bias"] * min(a - hour, ETA_HORIZON))
     return min(max(hour + 1, eta), slowest(task, sid, hour, a))
+
+
+def commits(task: Task, sid: int, hour: int, arrival: int, floor: int = 0) -> bool:
+    """Whether the ship's agent can commit to an arrival hour at ``hour``: once the ship has sailed from its previous
+    port, or once its ETA is within 48 hours, the berth-planning horizon."""
+    dep = departure(task, sid, arrival)
+    return dep is None or hour >= dep or max(estimate(task, sid, hour, arrival), floor) - hour <= COMMIT_LEAD
 
 
 def as_v4(task: Task) -> Task:
@@ -187,35 +198,74 @@ def report_text(task: Task, event: dict) -> str:
             f"{label(event['hour'])}.")
 
 
+def _waiting(task: Task, sid: int, hour: int, start: int) -> bool:
+    """Whether the ship is at anchor at ``hour``, in by then and berthing later, unheld by the wind."""
+    ship = task.ships[sid]
+    return ship.arrival <= hour < start and not any(a <= hour < b for a, b in task.no_move_windows(ship))
+
+
 def _queued(task: Task, plan: Plan, res: PlanResult) -> None:
-    """Each ship that starts berthing while a ship earlier in the queue waits at anchor, unheld by the wind, breaks
-    the queue rule; the first such ship is named."""
+    """Each ship that starts berthing while a ship earlier in the queue, with an agreed arrival, waits at anchor breaks
+    the queue rule; the first such ship is named. A wait the planner couldn't foresee, an unagreed ship arriving off
+    its ETA, costs its hours at anchor instead."""
     turns = task.rules["lines"]["turns"]
+    agreed = set(task.rules["lines"].get("agreed", range(len(task.ships))))
     starts = {r.ship: r.berth_hour for r in res.ships if r.berth_hour is not None}
     for y, ty in sorted(starts.items()):
         for x in sorted(starts, key=lambda x: (turns[x], x)):
             if turns[x] >= turns[y]:
                 break
-            if task.ships[x].arrival <= ty < starts[x] and not any(
-                    a <= ty < b for a, b in task.no_move_windows(task.ships[x])):
+            if x in agreed and _waiting(task, x, ty, starts[x]):
                 res.ships[y].problems.append(f"berths at hour {ty} while ship {x} {task.ships[x].name}, earlier in "
                                              f"the queue, waits at anchor")
                 break
 
 
 def executed(task: Task, plan: Plan) -> Plan:
-    """The windows as the port runs them: a ship can't berth before it arrives, so a window that starts earlier begins
-    when the ship gets in, or once the wind lets it move; the berth waits for it."""
-    out = {}
-    for sid, (hour, section, cranes) in plan.items():
-        ship = task.ships[sid] if 0 <= sid < len(task.ships) else None
-        start = hour
-        if ship is not None and hour < ship.arrival:
-            start = ship.arrival
-            while any(a <= start < b for a, b in task.no_move_windows(ship)):
-                start += 1
-        out[sid] = (start, section, cranes)
+    """The windows as the port runs them. A ship that arrives before its window waits for it. One that arrives after
+    its window starts is berthed at the first hour from its arrival when a free stretch of quay fits it, with the same
+    cranes, around every other ship's window without breaking a rule and ahead of no earlier ship still waiting; the
+    stretch nearest its planned sections first, and nobody else moves. Late ships are placed in the order they arrive;
+    with no such hour within a week, a window starts when its ship gets in, or once the wind lets it move."""
+    late = sorted((s for s, w in plan.items() if 0 <= s < len(task.ships) and w[0] < task.ships[s].arrival),
+                  key=lambda s: (task.ships[s].arrival, s))
+    out = {s: w for s, w in plan.items() if s not in late}
+    for sid in late:
+        _, section, cranes = plan[sid]
+        ship, base = task.ships[sid], marine.evaluate(task, out)
+        before = {r.ship: set(r.problems) for r in base.ships}
+        taken = [(r.section, r.section + task.ships[r.ship].sections, r.berth_hour, r.departure) for r in base.ships
+                 if r.berth_hour is not None and r.departure is not None]
+        taken += [(b.first, b.last + 1, b.start, b.end) for b in task.blocks]
+        stay = ship.handling_for(cranes)
+        sections = sorted(range(task.first_section, task.last_section - ship.sections + 2),
+                          key=lambda x: (abs(x - section), x))
+        held = task.no_move_windows(ship)
+        out[sid] = next(((hour, x, cranes) for hour in range(ship.arrival, ship.arrival + DISPATCH_HOURS)
+                         if not any(a <= hour < b for a, b in held) for x in sections
+                         if not any(x < hi and lo < x + ship.sections and hour < end and start < hour + stay
+                                    for lo, hi, start, end in taken)
+                         and _fits(task, out, sid, (hour, x, cranes), before)), _slid(task, sid, plan[sid]))
     return out
+
+
+def _fits(task: Task, out: Plan, sid: int, window: tuple[int, int, int], before: dict[int, set[str]]) -> bool:
+    turns = task.rules["lines"]["turns"]
+    if any(turns[x] < turns[sid] and _waiting(task, x, window[0], start) for x, (start, _, _) in out.items()
+           if 0 <= x < len(task.ships)):
+        return False
+    res = marine.evaluate(task, out | {sid: window})
+    return not res.ships[sid].problems and all(
+        set(r.problems) <= before.get(r.ship, set()) for r in res.ships if r.ship != sid)
+
+
+def _slid(task: Task, sid: int, window: tuple[int, int, int]) -> tuple[int, int, int]:
+    """The window started when its ship gets in, or once the wind lets it move."""
+    ship, (_, section, cranes) = task.ships[sid], window
+    start = ship.arrival
+    while any(a <= start < b for a, b in task.no_move_windows(ship)):
+        start += 1
+    return start, section, cranes
 
 
 def evaluate(task: Task, plan: Plan) -> PlanResult:
@@ -240,10 +290,15 @@ def anchor_hours(task: Task, res: PlanResult) -> int:
                if r.berth_hour is not None and r.berth_hour > task.ships[r.ship].arrival)
 
 
-def with_arrivals(task: Task, arrivals: dict[int, int], turns: dict[int, int]) -> Task:
+def with_arrivals(task: Task, arrivals: dict[int, int], turns: dict[int, int],
+                  agreed: Iterable[int] | None = None) -> Task:
+    """The task with these arrivals and queue turns, and the ships whose arrival is agreed (every ship's when not
+    given), whom the queue rule protects."""
     ships = [replace(s, arrival=arrivals[s.id]) for s in task.ships]
-    return replace(task, ships=ships, rules=task.rules | {"lines": task.rules["lines"] | {
-        "turns": [turns[s.id] for s in task.ships]}})
+    lines = task.rules["lines"] | {"turns": [turns[s.id] for s in task.ships]}
+    if agreed is not None:
+        lines["agreed"] = sorted(agreed)
+    return replace(task, ships=ships, rules=task.rules | {"lines": lines})
 
 
 class LinesWeek(WindWeek):
@@ -263,6 +318,11 @@ class LinesWeek(WindWeek):
         self.floor: dict[int, int] = {}
         super().__init__(task)
 
+    def draft_excuses(self, plan: Plan) -> tuple[set[tuple[int, str]], dict[int, int]]:
+        """The excuses the draft itself would earn, so a problem the confirmed plan has and the draft fixes isn't
+        charged to the draft."""
+        return self.excuses(plan)
+
     def revealing(self, notice: Notice) -> None:
         """A delayed or bunched ship's news: an agreement made before it stands if the ship can still make that hour,
         else it lapses; the news's ETA becomes what the planner knows."""
@@ -273,12 +333,15 @@ class LinesWeek(WindWeek):
             event["ship"]: event["eta"]}
         said = []
         for sid, eta in etas.items():
+            truth = self.task.ships[sid].arrival
             self.floor.pop(sid, None)
+            if event["type"] != "extra":
+                self.floor[sid] = min(eta, truth)
             if sid in self.locks:
-                at, truth = self.locks[sid][2], self.task.ships[sid].arrival
-                earliest, latest = self.reach(sid, self.hour, truth)
-                if earliest <= at <= latest:
-                    self.locks[sid] = (*self.remaining(sid, self.hour, truth), at)
+                at = self.locks[sid][2]
+                start, left = self.progress(sid, self.hour, truth)
+                if math.ceil(start + left - 1e-9) <= at <= math.floor(start + left * STRETCH + 1e-9):
+                    self.locks[sid] = (start, left, at)
                     said.append(f"The earlier agreement stands: {self.agreement(sid)}")
                     continue
                 del self.locks[sid]
@@ -286,6 +349,17 @@ class LinesWeek(WindWeek):
                             "agreement no longer holds.")
             self._tell(sid, self.hour, eta)
         self.outcomes[notice.event_id] = said
+
+    def progress(self, sid: int, hour: int, truth: int) -> tuple[float, float]:
+        """(the hour from which the ship can change pace, the cruising hours it still needs then) for a ship that
+        agreed an hour before its news, on its true track: it left its previous port when the truth has it leave,
+        and has since sailed at the pace the agreement set."""
+        ref, left, at = self.locks[sid]
+        pace = left / (at - ref) if at > ref else 1.0
+        dep = departure(self.task, sid, truth)
+        since = ref if dep is None else max(ref, dep)
+        start = max(hour, since)
+        return start, truth - since - pace * (start - since)
 
     def notice(self, event_id: str, name: str, text: str, via: str) -> dict:
         out = super().notice(event_id, name, text, via)
@@ -306,7 +380,7 @@ class LinesWeek(WindWeek):
             elif said := self.outcomes.get(event_id):
                 last["text"] = " ".join([last["text"], *said])
             delivered = last["text"]
-            if (reported and event["ship"] in self.locks and self.actual(event["ship"]) < self.hour) or any(
+            if (reported and event["ship"] in self.locks and self.actual(event["ship"]) <= self.hour) or any(
                     m["hour"] == self.hour and m["text"] == delivered for m in self.messages[:-1]):
                 self.messages.pop()
                 delivered = None
@@ -355,7 +429,7 @@ class LinesWeek(WindWeek):
         notices = [text + "".join(f" Since then: {self.agreement(s)}" for s in self._news_ships(e) if s in self.locks)
                    for e, text in zip(view.disruptions, view.notices, strict=True)]
         return with_arrivals(replace(view, notices=notices), {s: self.known_arrival(view, s) for s in visible},
-                             {s: self.known_turn(view, s) for s in visible})
+                             {s: self.known_turn(view, s) for s in visible}, visible & set(self.locks))
 
     @staticmethod
     def _news_ships(event: dict) -> list[int]:
@@ -364,7 +438,7 @@ class LinesWeek(WindWeek):
 
     def truth(self) -> Task:
         ids = range(len(self.task.ships))
-        return with_arrivals(self.task, {s: self.actual(s) for s in ids}, {s: self.turn(s) for s in ids})
+        return with_arrivals(self.task, {s: self.actual(s) for s in ids}, {s: self.turn(s) for s in ids}, self.locks)
 
     def past(self, revealed: list[str], target: Task) -> Task:
         """The week as known then, with the target's arrivals and turns: an ETA that proved wrong is no news, so the
@@ -372,7 +446,9 @@ class LinesWeek(WindWeek):
         view = wind.known(self.task, revealed)
         arrivals = {s.id: s.arrival for s in target.ships}
         turns = dict(zip(arrivals, target.rules["lines"]["turns"], strict=True))
-        return with_arrivals(view, {s.id: arrivals[s.id] for s in view.ships}, {s.id: turns[s.id] for s in view.ships})
+        agreed = {s.id for s in view.ships} & set(target.rules["lines"].get("agreed", arrivals))
+        return with_arrivals(view, {s.id: arrivals[s.id] for s in view.ships}, {s.id: turns[s.id] for s in view.ships},
+                             agreed)
 
     def target(self) -> Task:
         return self.truth() if self.done else self.view
@@ -441,6 +517,12 @@ class LinesWeek(WindWeek):
         name, hour = self.task.ships[sid].name, self.hour
         if not self.pending(sid) and self.actual(sid) <= hour:
             out = {"ship": sid, "name": name, "agreed": False, "reason": f"already arrived at hour {self.actual(sid)}"}
+        elif sid not in self.locks and not commits(self.task, sid, hour, self.basis(sid), self.floor.get(sid, 0)):
+            eta = max(estimate(self.task, sid, hour, self.basis(sid)), self.floor.get(sid, 0))
+            self._tell(sid, hour, eta)
+            out = {"ship": sid, "name": name, "agreed": False, "eta": eta,
+                   "reason": f"can't commit yet: it hasn't sailed from {self.task.ships[sid].from_port} and is more "
+                             f"than {COMMIT_LEAD} hours out"}
         else:
             earliest, latest = self.reach(sid, hour)
             if earliest <= arrival <= latest:
@@ -493,17 +575,20 @@ def section(week: LinesWeek) -> str:
         "- Each ship's agent reports its ETA 48 and 24 hours out, and the ship calls in an hour before it arrives; "
         "reports made between watches arrive with the next one. The published schedule is the lines' estimate from "
         "about three days out. Both are optimistic: most ships arrive later than they say, by less as they near.",
-        "- Message a ship's agent to ask for its ETA or to request an arrival time. The agent agrees when the ship can "
-        f"make it at {CRUISE_KN} kn or by slowing to as little as {SLOWEST_KN} kn once it has left its previous port, "
-        "and the ship then arrives at that hour; otherwise it answers with the earliest or the latest hour the ship "
-        "can make.",
+        "- Message a ship's agent to ask for its ETA or to request an arrival time. Once the ship has sailed from its "
+        f"previous port or its ETA is within {COMMIT_LEAD} hours, the agent agrees when it can make the hour at "
+        f"{CRUISE_KN} kn or by slowing to as little as {SLOWEST_KN} kn once it has sailed, and the ship then arrives "
+        "at that hour; otherwise it answers with the earliest or the latest hour the ship can make. Before that, the "
+        "agent can't commit to an hour and gives its ETA.",
         "- Until the port's news about a delayed ship, its agent works from the plan as it stood. The news keeps an "
         "earlier agreement only if the ship can still make that hour; otherwise the agreement lapses.",
-        "- A ship can't berth before it arrives: a window that starts earlier begins when the ship gets in, or once "
-        "the wind lets it move.",
-        "- Ships berth first come, first served: no ship may start berthing while a ship earlier in the queue waits at "
-        "anchor, unless the wind holds that ship. A ship's turn is when it would arrive at cruising speed, so a ship "
-        "slowed at your request keeps its turn.",
+        "- A ship can't berth before it arrives. If it gets in after its window starts, the port berths it at the "
+        "first hour a free stretch of quay fits it, with the same cranes, around every other ship's window and the "
+        "rules, never ahead of an earlier ship still waiting; nothing else moves. A ship that gets in before its "
+        "window waits at anchor for it.",
+        "- Ships berth first come, first served: no ship may start berthing while a ship earlier in the queue whose "
+        "arrival you agreed waits at anchor, unless the wind holds that ship. A ship's turn is when it would arrive at "
+        "cruising speed, so a ship slowed at your request keeps its turn.",
         "- Each hour a ship waits at anchor between its arrival and its berthing costs its sections, as an hour late "
         "does.",
         "- Agents, and their ships: " + "; ".join(

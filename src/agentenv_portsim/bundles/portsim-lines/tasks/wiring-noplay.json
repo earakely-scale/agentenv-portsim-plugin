@@ -115,6 +115,15 @@
             "type": "tool",
             "tool": "port_notice",
             "args": {
+              "event_id": "call-1-1",
+              "name": "A. Pérez y Cía",
+              "text": "NAVIOS INDIGO (ship 1) calls in: at buoy S, arriving hour 5 (Mon 05:00)."
+            }
+          },
+          {
+            "type": "tool",
+            "tool": "port_notice",
+            "args": {
               "event_id": "eta-5-48-plan",
               "name": "Noatum Maritime",
               "text": "NANTO (ship 5): ETA Wed 09:00 (hour 57), as of Mon 15:00."
@@ -171,7 +180,7 @@
             "args": {
               "event_id": "late-3",
               "name": "NANTO",
-              "text": "Ship 5 NANTO is running late from Alicante: its agent now gives ETA hour 76 (planned slot hour 54). Its planned departure stays hour 67."
+              "text": "Ship 5 NANTO has been held up at Alicante: its agent now gives ETA hour 79 (planned slot hour 54). Its planned departure stays hour 67."
             }
           },
           {
@@ -225,7 +234,7 @@
             "args": {
               "event_id": "late-4",
               "name": "ONE FREEDOM",
-              "text": "Ship 6 ONE FREEDOM is running late from Damietta: its agent now gives ETA hour 57 (planned slot hour 66). Its planned departure stays hour 106."
+              "text": "Ship 6 ONE FREEDOM has been held up at Damietta: its agent now gives ETA hour 56 (planned slot hour 66). Its planned departure stays hour 106."
             }
           },
           {
@@ -271,15 +280,6 @@
               "event_id": "eta-7-48",
               "name": "Boluda Lines",
               "text": "VERONICA B (ship 7): ETA Thu 13:00 (hour 85), as of Tue 17:00."
-            }
-          },
-          {
-            "type": "tool",
-            "tool": "port_notice",
-            "args": {
-              "event_id": "eta-9-48",
-              "name": "Hapag-Lloyd Spain",
-              "text": "NAGOYA EXPRESS (ship 9): ETA Fri 07:00 (hour 103), as of Tue 17:00."
             }
           }
         ]
@@ -349,6 +349,15 @@
             "type": "tool",
             "tool": "port_notice",
             "args": {
+              "event_id": "eta-9-48",
+              "name": "Hapag-Lloyd Spain",
+              "text": "NAGOYA EXPRESS (ship 9): ETA Fri 15:00 (hour 111), as of Wed 01:00."
+            }
+          },
+          {
+            "type": "tool",
+            "tool": "port_notice",
+            "args": {
               "event_id": "call-6-1",
               "name": "Ocean Network Express Spain",
               "text": "ONE FREEDOM (ship 6) calls in: at buoy S, arriving hour 54 (Wed 06:00)."
@@ -370,15 +379,6 @@
               "event_id": "eta-7-24",
               "name": "Boluda Lines",
               "text": "VERONICA B (ship 7): ETA Thu 15:00 (hour 87), as of Wed 17:00."
-            }
-          },
-          {
-            "type": "tool",
-            "tool": "port_notice",
-            "args": {
-              "event_id": "eta-9-24",
-              "name": "Hapag-Lloyd Spain",
-              "text": "NAGOYA EXPRESS (ship 9): ETA Fri 00:00 (hour 96), as of Wed 17:00."
             }
           },
           {
@@ -430,6 +430,15 @@
             "type": "tool",
             "tool": "port_notice",
             "args": {
+              "event_id": "eta-9-24",
+              "name": "Hapag-Lloyd Spain",
+              "text": "NAGOYA EXPRESS (ship 9): ETA Fri 08:00 (hour 104), as of Thu 01:00."
+            }
+          },
+          {
+            "type": "tool",
+            "tool": "port_notice",
+            "args": {
               "event_id": "eta-10-48",
               "name": "Noatum Maritime",
               "text": "MIRROR (ship 10): ETA Sat 04:00 (hour 124), as of Thu 09:00."
@@ -466,18 +475,18 @@
             "type": "tool",
             "tool": "port_notice",
             "args": {
-              "event_id": "call-9-1",
+              "event_id": "call-8-1",
               "name": "Hapag-Lloyd Spain",
-              "text": "NAGOYA EXPRESS (ship 9) calls in: at buoy S, arriving hour 89 (Thu 17:00)."
+              "text": "CAPE CITIUS (ship 8) calls in: at buoy S, arriving hour 92 (Thu 20:00)."
             }
           },
           {
             "type": "tool",
             "tool": "port_notice",
             "args": {
-              "event_id": "call-8-1",
+              "event_id": "call-9-1",
               "name": "Hapag-Lloyd Spain",
-              "text": "CAPE CITIUS (ship 8) calls in: at buoy S, arriving hour 92 (Thu 20:00)."
+              "text": "NAGOYA EXPRESS (ship 9) calls in: at buoy S, arriving hour 97 (Fri 01:00)."
             }
           },
           {

@@ -233,10 +233,7 @@
     "a2a_agent_id": "portsim-llm",
     "env_ids": [
       "portsim-marine"
-    ],
-    "env_vars": {
-      "PORTSIM_MAX_COST_USD": "5"
-    }
+    ]
   },
   {
     "id": "clock",

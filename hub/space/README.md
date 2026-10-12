@@ -106,7 +106,7 @@ agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.5.2 --task dock-36A-w06x1
 
 `agent-env hf run` downloads the card and the bundles at that tag, checks that the plugins the card names are
 installed, shows what it will run and asks first (`--yes` skips the question). `dock-36A-w06x1-standard-0-e07` is the
-shortest lines and wind week, 4 watches, and each task stops an episode before it could spend $5. To replay your own
+shortest lines and wind week, 4 watches, and the tasks set no cost cap. To replay your own
 runs on the same viewer, locally, play them as a sweep:
 
 ```bash

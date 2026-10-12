@@ -216,7 +216,7 @@ class Week:
             view, plan, _, _, refused, entry_problems = self._merge(raw)
         except PlanError as e:
             return {"error": str(e), "planning_calls_left": self.calls_left}
-        ships = charge(self.evaluate(view, plan), *self.excuses())
+        ships = charge(self.evaluate(view, plan), *self.draft_excuses(plan))
         arrivals = {s.id: s.arrival for s in view.ships}
         rows = []
         for r, charged, forgiven, waived in ships:
@@ -281,6 +281,10 @@ class Week:
         if via != "load":
             self.messages.append({"hour": self.hour, "from": name, "text": text})
         return {"applied": event_id, "watch": self.watch}
+
+    def draft_excuses(self, plan: Plan) -> tuple[set[tuple[int, str]], dict[int, int]]:
+        """The excuses check_plan weighs a draft with: the confirmed plan's."""
+        return self.excuses()
 
     def revealing(self, notice: Notice) -> None:
         """What the news changes in the week beyond the view, before its excuses are weighed."""

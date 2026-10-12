@@ -407,7 +407,7 @@ agent-env run portsim --task smoke
 ```
 
 Then play a week straight from this dataset. You need a Hugging Face token with the "Make calls to Inference
-Providers" permission, on an account with credits; each task stops an episode before it could spend $5.
+Providers" permission, on an account with credits; the tasks set no cost cap.
 
 ```bash
 # with "Make calls to Inference Providers", on an account with credits
