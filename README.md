@@ -35,11 +35,13 @@ flowchart TD
 
 In the newest version, the lines port (v5), the agent runs one container quay at the Port of Barcelona in real wind
 and deals with the shipping lines as a terminal does: each ship's agent, the firm the port's 2024 record names for the
-call, is its own A2A agent on AgentEnv. The agents report ETAs that firm up as their ships near, most of them
-optimistic; the planner can ask them for the latest and request arrival times, which a ship agrees when it can make
-them by slowing down. Ships berth first come, first served, a ship slowed on request keeping its turn, and an hour at
-anchor costs what an hour late does. The weeks are the wind port's (v4): each of its 15 weeks is moved into a real
-Barcelona weather week of 2023 to 2025, with the ECMWF forecasts as they were issued at every watch.
+call, is its own A2A agent on AgentEnv. The published schedule is the lines' estimate from three days out, and the
+agents report ETAs that firm up as their ships near, most of them optimistic. The planner can ask them for the latest
+and request arrival times: once a ship has sailed or is within 48 hours, its agent agrees an hour the ship can make,
+slowing down if need be, or offers the earliest or the latest it can. The port berths a ship that misses its window at
+its next free slot, ships whose arrival was agreed berth first come, first served, keeping their turn when slowed, and
+an hour at anchor costs what an hour late does. The weeks are the wind port's (v4): each of its 15 weeks is moved into
+a real Barcelona weather week of 2023 to 2025, with the ECMWF forecasts as they were issued at every watch.
 
 In every version the ships and their week come from 2024, and the week has just gone wrong: late and bunched ships,
 closed quay sections, crane breakdowns, gales, emergencies. The agent decides when, where along the quay and with how
@@ -62,14 +64,16 @@ port (v5), the wind port (v4), the marine port (v3) and the live week (v2) are n
 - **Watch:** a point in the week where the agent re-plans: watch 0 at hour 0, then one at each bulletin.
 - **Bulletin:** the news a watch brings, from ships and the port's services; in v4 also Port Control's forecast.
 - **Freeze:** from watch 1 on, a window starting less than 6 hours after the current hour is frozen and can't change.
-- **Excuse:** a rule break or cost that news (in v4, unforecast wind too) brought to a window after its last chance
-  to change; not charged.
+- **Excuse:** a rule break or cost that news (in v4 and v5, unforecast wind too) brought to a window after its last
+  chance to change; not charged.
 - **Re-planner (rolling):** CP-SAT re-planning at each watch on the week as known; in v4 forecast-following, or blind
-  to the wind; in v5 the follower, which also requests arrival times through the agents.
-- **Anchor:** what a wind or lines week scores 1.0 at: the lower of the hindsight optimum and the best cost of the
+  to the wind; in v5 the follower, which also requests arrival times through the agents and takes their counter-offers.
+- **Anchor:** what a wind or lines week scores 1.0 at: the lower of the hindsight cost and the best cost of the
   re-planner that follows the forecasts (v4) or the agents' ETAs and requests arrival times (v5).
-- **Ship's agent:** in v5, the firm that deals with the port for a ship's line, deployed as its own A2A agent.
-- **Turn:** in v5, a ship's place in the first-come queue: when it would arrive at cruising speed.
+- **Ship's agent:** in v5, the firm that deals with the port for a ship's line, deployed as its own A2A agent: it
+  reports the ship's ETAs and agrees arrival times with the planner.
+- **Turn:** in v5, a ship's place in the first-come queue, which holds for the ships whose arrival was agreed: when it
+  would arrive at cruising speed, so a ship slowed on request keeps it.
 - **Bundle:** what `agent-env run` plays: a folder of tasks and their verifiers, or one a plugin ships (`portsim`).
 - **CP-SAT:** Google OR-Tools' constraint solver; it proves the hindsight optimum, the best plan knowing the whole week.
 
@@ -85,8 +89,9 @@ port (v5), the wind port (v4), the marine port (v3) and the live week (v2) are n
 
 - **Five environments, in one image.**
   - **v5, the lines port,** `portsim-lines`, plays v4's wind week with the shipping lines answering back: each ship's
-    agent is its own A2A agent (`portsim-line`) the planner messages for ETAs and arrival times, ships berth first
-    come, first served, and an hour at anchor costs as an hour late does ([The lines port](#the-lines-port)).
+    agent is its own A2A agent (`portsim-line`) the planner messages for ETAs and arrival times, the port berths a
+    ship that misses its window at its next free slot, ships whose arrival was agreed berth first come, first served,
+    and an hour at anchor costs as an hour late does ([The lines port](#the-lines-port)).
   - **v4, the wind port,** `portsim-wind`, plays v3's marine week in a real Barcelona weather week of 2023 to 2025: the
     wind that blew at the port's anemometer sets the rules, and at every watch the forecast arrives in a Barcelona Port
     Control bulletin, standing in for the port's own forecasts: the ECMWF run published by then, adjusted to that
@@ -910,7 +915,7 @@ the 15 weeks.
 ## The lines port
 
 The lines port is v5: the wind week with the shipping lines answering back. The env `portsim-lines`
-(`src/agentenv_portsim/lines.py`) plays a wind week from the same image, with the same tools, freeze, wind, pilots
+(`src/agentenv_portsim/lines.py`) plays v4's 15 wind weeks from the same image, with the same freeze, wind, pilots
 and tugs. What changes is who the planner deals with. Each ship in the week has its agent, the firm that deals with
 the port for its line, named in the port's 2024 record, and each firm with a ship in the week is its own A2A agent,
 `portsim-line`, deployed beside the planner and peered with it. The other ports, their envs and their tasks are
@@ -918,42 +923,58 @@ unchanged.
 
 What is new, in one week:
 
-- **Arrivals are uncertain.** The planner sees the published schedule at hour 0, then each ship's ETA as its agent
-  reports it, 48 and 24 hours out, and the ship's call an hour before it arrives. ETAs are optimistic and firm up as
-  the ship nears: most ships arrive later than their agent says.
+- **The schedule is an estimate.** The published schedule is the line's estimate from 72 hours out: each ship really
+  arrives at its scheduled hour plus its agent's long-range error, mostly later, so the schedule doesn't give the
+  truth away.
+- **ETAs firm up.** Each ship's agent reports its ETA 48 and 24 hours out, and the ship calls in an hour before it
+  arrives. The ETAs are optimistic: most ships arrive later than their agent says, by less as they near, and the call
+  is exact.
 - **The planner can ask.** `message_agent` sends one agent requests for its ships: the latest ETA, or an arrival
-  hour. An agent agrees an hour when the ship can make it at cruising speed, or by slowing once it has left its
-  previous port, and the ship then arrives at that hour; a refusal says only which way it can't go.
-- **Berthing is first come, first served.** No ship may start berthing while a ship earlier in the queue waits at
-  anchor, unless the wind holds that ship. A ship's turn is when it would arrive at cruising speed, so a ship slowed
-  at the planner's request keeps its turn.
-- **A ship can't berth before it arrives.** A window that starts earlier begins when the ship gets in, or once the
-  wind lets it move; the berth waits, and the lateness, clashes and queue breaks that follow are the planner's.
+  hour. An agent commits to an hour once its ship has sailed from its previous port or its own estimate is within 48
+  hours; before that it says it can't commit yet and gives its ETA. Then it agrees an hour the ship can make at
+  cruising speed, or by slowing once it has sailed, and the ship arrives at that hour; otherwise it offers the earliest
+  or the latest hour the ship can make, and an offered hour can be agreed at once.
+- **News can undo an agreement.** Until the port's news about a delayed or bunched ship, its agent works from the plan
+  as it stood. At the news, an earlier agreement stands if the ship can still make that hour; otherwise it lapses and
+  the ship cruises in from where it is.
+- **The port berths late ships.** A ship that gets in after its window starts is berthed by the port at the first hour
+  a free stretch of quay fits it, and nobody else moves. A ship that gets in before its window waits at anchor for it.
+- **First come, first served, for agreed ships.** No ship may start berthing while an earlier ship whose arrival was
+  agreed waits at anchor, unless the wind holds that ship or the closures leave no stretch of quay long enough for its
+  stay. A ship's turn is when it would arrive at cruising speed, so a ship slowed at the planner's request keeps its
+  turn.
 - **Waiting at anchor costs.** Each hour a ship waits between its arrival and its berthing costs its sections, as an
   hour late does.
 
 The planner's levers are the sections, the cranes, when to commit, and arrival times: asking a ship to slow turns
-waiting at anchor into slower sailing, and fixes its arrival, which an ETA doesn't. The planner no longer reorders
-ships: the queue does.
+waiting at anchor into slower sailing and fixes its arrival, which an ETA doesn't. An agreement binds the planner too:
+the queue holds only for the ships whose arrival it agreed, and an unagreed ship that arrives off its ETA costs its
+hours at anchor instead.
 
 ### The lines rules and their sources
 
-Each number comes from a public source or is labelled an assumption. `data/dock-v1-lines/manifest.json` carries
-these rules in brief under `lines.grounding`.
+Each number comes from a public source or is labelled an assumption. `data/dock-v1-lines/manifest.json` carries the
+sources in brief under `lines.grounding`.
 
 | Rule | Value | Source |
 |---|---|---|
-| Agents | the shipping agent the port's 2024 record names for the call (CONSIGNATARI); a week has 6 to 9 | Port de Barcelona open data, the 2024 calls of every ship type (CC BY-SA 4.0), pinned by sha256 as for the marine port. An unscheduled call takes its ship's nearest 2024 call |
-| Reports | ETAs 48 and 24 hours out, and an arrival call 1 hour out; a report made between watches arrives with the next one | The EU and Spain require a notice at least 24 hours before arrival ([Directive 2002/59/EC](https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=CELEX%3A32002L0059) art. 4; [Orden FOM/1194/2011](https://www.boe.es/buscar/act.php?id=BOE-A-2011-8339) art. 9); the [IMO Just In Time Arrival Guide](https://wwwcdn.imo.org/localresources/en/OurWork/PartnershipsProjects/Documents/GIA-just-in-time-lores.pdf) puts berth planning at about 48 hours; the 2025 berthing ordinance ([BOE-A-2025-5157](https://www.boe.es/diario_boe/txt.php?id=BOE-A-2025-5157)) defines arrival by the call made 1 hour before buoy S. The 48-hour report and delivery at the next watch are **assumptions** |
-| ETA error | mean absolute error 20% of the hours left (about 10 hours at 48, 5 at 24), 80% of ships later than their ETA, exact from the call; drawn once per ship | **Assumption**, inside the published range: Busan New Port 2022–23 (agent ETAs 24–48 hours out, mean error 5 h 15 min, [JMSE](https://doi.org/10.3390/jmse11061234)), Antwerp 2019 (10–15 hours, [Veenstra and Harmelink](https://pure.eur.nl/ws/files/58012351/Veenstra_Harmelink2021_Article_OnTheQualityOfShipArrivalPredi.pdf)), MSC's Barcelona–Valencia loop 2017–18 (80% later than the leg's ETA, 60% of those within 10 hours, [STM](https://stm-stmvalidation.s3.eu-west-1.amazonaws.com/uploads/20200225092917/STM_ID_5.3.4_STM-VALIDATION-USE-CASES-ANALYISIS-1.pdf)) |
+| Agents | the shipping agent the port's 2024 record names for the call (CONSIGNATARI); a week has 7 to 9, for its 14 to 28 ships | Port de Barcelona open data, the 2024 calls of every ship type (CC BY-SA 4.0), pinned by sha256 as for the marine port. An unscheduled call takes its ship's nearest 2024 call |
+| Schedule | the line's estimate from 72 hours out: each ship arrives at its scheduled hour plus round(20% × its bias × 72) hours, mostly later, a delayed or bunched ship with its delay on top; the scheduled hour is never later than the ship could still make by slowing from hour 0. An unscheduled call keeps v4's arrival, which its notice announces | **Assumption**: the ETA error below, from 72 hours out |
+| Reports | ETAs 48 and 24 hours out, and an arrival call 1 hour out; a report made between watches arrives with the next one, and the latest made before hour 0 opens the week | The EU and Spain require a notice at least 24 hours before arrival ([Directive 2002/59/EC](https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=CELEX%3A32002L0059) art. 4; [Orden FOM/1194/2011](https://www.boe.es/buscar/act.php?id=BOE-A-2011-8339) art. 9); the [IMO Just In Time Arrival Guide](https://wwwcdn.imo.org/localresources/en/OurWork/PartnershipsProjects/Documents/GIA-just-in-time-lores.pdf) puts berth planning at about 48 hours; the 2025 berthing ordinance ([BOE-A-2025-5157](https://www.boe.es/diario_boe/txt.php?id=BOE-A-2025-5157)) defines arrival by the call made 1 hour before buoy S. The 48-hour report and delivery at the next watch are **assumptions** |
+| ETA error | 20% of the hours left, counted to 72 at most, times the ship's bias: positive (the ship later than its ETA) in 80% of ships, its size half-normal with mean 1, capped at 4, drawn once per ship. So the mean absolute error is about 10 hours at 48 hours out and 5 at 24; no ETA is later than the slowest the ship can arrive, and the call is exact | **Assumption**, inside the published range: Busan New Port 2022–23 (agent ETAs 24–48 hours out, mean error 5 h 15 min, [JMSE](https://doi.org/10.3390/jmse11061234)), Antwerp 2019 (10–15 hours, [Veenstra and Harmelink](https://pure.eur.nl/ws/files/58012351/Veenstra_Harmelink2021_Article_OnTheQualityOfShipArrivalPredi.pdf)), MSC's Barcelona–Valencia loop 2017–18 (80% later than the leg's ETA, 60% of those within 10 hours, [STM](https://stm-stmvalidation.s3.eu-west-1.amazonaws.com/uploads/20200225092917/STM_ID_5.3.4_STM-VALIDATION-USE-CASES-ANALYISIS-1.pdf)) |
+| Commitment | an agent commits to an arrival hour once its ship has sailed from its previous port or its own estimate is within 48 hours; before that it refuses and gives its ETA | The IMO Just In Time Arrival Guide's berth-planning horizon, about 48 hours |
+| Requests | once it can commit, an agent agrees an hour the ship can make at cruising speed, or by slowing once it has sailed, and the ship arrives at that hour; otherwise it offers the earliest or the latest hour the ship can make, and an offered hour can be agreed at once | The requested time of arrival of the IMO Just In Time Arrival Guide: the port requests an arrival time and the ship adjusts its speed to make it, or answers with what it can make |
 | Speeds | cruise 17 kn, slowest 10 kn: a ship h hours out can arrive up to 0.7 h hours later, and only once it has left its previous port | **Assumption**: two-stroke engines run continuously down to 10% load (Wärtsilä); cruising speeds of 12–20 kn on MSC's loop; the IMO JIT container study's economical speed is 10 kn |
-| Previous port | its distance from Barcelona, so a ship from Valencia (165 nm, a quarter of the calls) can absorb at most about 7 hours | [NGA Pub. 151](https://maritimesafetyinnovationlab.org/wp-content/uploads/2015/01/pub151-distances-btw-ports.pdf), Distances Between Ports (2001; no copyright claimed); a port it doesn't list takes its nearest listed neighbour |
-| Queue | first come, first served by arrival, a slowed ship keeping its turn; the wind's hold is the only exception | Barcelona's container terminals berthed first come, first served in 2024 ([El Mercantil](https://elmercantil.com/2024/11/05/barcelona-ultima-su-ordenanza-de-prioridad-de-escalas-para-pertrecharse-contra-la-congestion/), [Transporte XXI](https://www.transportexxi.com/preferencia-para-atracar-en-barcelona/)), and the 2025 ordinance made it the general rule (art. 3). Keeping a slowed ship's turn is the virtual-arrival arrangement; the ordinance's other exceptions (technical incompatibility, occupancy thresholds, BEST's local-cargo priority) are left out |
+| Previous port | its distance from Barcelona, so a ship from Valencia (165 nm, more than a quarter of the ships in these weeks) can absorb at most about 7 hours | [NGA Pub. 151](https://maritimesafetyinnovationlab.org/wp-content/uploads/2015/01/pub151-distances-btw-ports.pdf), Distances Between Ports (2001; no copyright claimed); a port it doesn't list takes its nearest listed neighbour |
+| News | until the port's news about a delayed or bunched ship, its agent works from the plan as it stood; at the news an earlier agreement stands if the ship can still make that hour, and lapses otherwise | **Assumption** |
+| Late ships | the port berths a ship that gets in after its window starts at the first hour a free stretch of quay fits it, breaking no rule and moving nobody else; a ship that gets in early waits at anchor for its window | **Assumption** |
+| Queue | first come, first served for the ships whose arrival was agreed, a slowed ship keeping its turn; the exceptions are an earlier ship the wind holds, or one for whose stay the closures leave no stretch of quay long enough | Barcelona's container terminals berthed first come, first served in 2024 ([El Mercantil](https://elmercantil.com/2024/11/05/barcelona-ultima-su-ordenanza-de-prioridad-de-escalas-para-pertrecharse-contra-la-congestion/), [Transporte XXI](https://www.transportexxi.com/preferencia-para-atracar-en-barcelona/)), and the 2025 ordinance made it the general rule (art. 3), exempting a ship the quay can't take. Keeping a slowed ship's turn is the virtual-arrival arrangement. Holding the queue only for agreed ships is an **assumption**: the planner can't foresee an unagreed ship arriving off its ETA. The ordinance's other exceptions (occupancy thresholds, BEST's local-cargo priority) are left out |
 | Anchor | an hour at anchor costs the ship's sections, as an hour late does | The main-engine fuel a ship saves by slowing instead of waiting is worth 1.3–1.8 hours of its charter (Third IMO GHG Study table 14; VLSFO $626/t, Ship & Bunker's 2024 average; Alphaliner charter rates, June 2024), and an hour late costs more than charter alone, so 1 is the round value inside the evidence |
 
 `scripts/lines_references.py pack` builds the pack from the wind pack and the pinned 2024 calls: each ship's agent,
-its previous port's distance and its ETA bias, and v4's delay, bunching and unscheduled-call notices rewritten as the
-agents' ETAs at the watch they arrive (a delay notice never gives an ETA at or before the slot the ship is late for).
+its previous port's distance and its ETA bias; each arrival moved off its schedule by its agent's error from 72 hours
+out, a delayed or bunched ship's whole story with it; and v4's delay, bunching and unscheduled-call notices rewritten
+to give the agents' ETAs at the watch they arrive.
 
 ### How a lines week runs on AgentEnv
 
@@ -974,45 +995,94 @@ apply_server_config     end-week: the rest of the week, the grade and the audit
 env_outcome_verifier    portsim-live-verifier
 ```
 
+The planner keeps the wind port's tools, with `message_agent` added and these changes:
+
+- `get_situation` ends with a section on arrivals and the ships' agents: their rules, which agent handles which ship,
+  and each ship's arrival as known now, agreed, called in, its latest ETA or the published schedule. A window row adds
+  `port_berth_hour` and `port_section` when the port would berth its ship elsewhere, on the ship's latest ETA until it
+  is in. `check_plan` rows add each ship's hours at anchor (`anchor_h`).
+- `confirm_berths` also returns the confirmed plan's problems and cost, as `check_plan` does, in the same planning
+  call. The other ports' `confirm_berths` is unchanged.
+- `advance` returns only the watch, the hour and the freeze line. Which ships berthed or left is news the bulletin
+  brings, and `get_situation` shows where the ships are once it has arrived.
+- `message_agent(agent, requests)` comes from the peering: up to 20 requests a message, each
+  `{"ship": 7, "ask": "eta", "request_arrival": null}` for the latest ETA or
+  `{"ship": 9, "ask": null, "request_arrival": 130}` for an arrival hour. The gateway's `get_time` stays visible.
+
+How the agents and the port answer:
+
 - A firm agent has no model. It answers each request from the env, through the gateway's `/step` route under its
-  role: `ship_status` for an ETA, `agree_arrival` for an hour, which the env accepts only if the ship can make it. The
-  same requests therefore always get the same answers, and a week replays the same way.
+  role: `ship_status` for an ETA, `agree_arrival` for an hour. The same requests therefore always get the same answers,
+  and a week replays the same way. At watch 0 of `dock-24B-w06x1-busy-0-e15`, for instance:
+
+  ```
+  SEASPAN OCEANIA (ship 4): ETA hour 49.
+  CAPE CITIUS (ship 8) can't commit to hour 100 yet: it hasn't sailed from Genoa and is more than 48 hours out; ETA hour 97.
+  STEEN (ship 3) can't make hour 40: can't arrive that early; it can arrive at hour 47 at the earliest.
+  STEEN (ship 3) will arrive at hour 50, reducing speed; it keeps its turn, hour 47.
+  STEEN (ship 3) can't make hour 60: can't slow down that much; it can arrive at hour 53 at the latest; it still arrives at hour 50, as agreed.
+  ```
+
 - The agents' routine reports reach the planner the way all news does, through the watch triggers, as a terminal gets
-  them through the port's single window.
+  them through the port's single window: a report made between watches arrives with the next bulletin, and an agreed
+  ship's reports restate its agreement. An agent's later ETAs for a ship never fall below the earliest hour it has
+  offered for it.
+- **News.** v4's notices of a delayed ship and of ships bunched by the Red Sea diversions keep their watches, and now
+  give the agents' ETAs. Until a ship's news, its agent works from the plan as it stood. At the news, an earlier
+  agreement stands if the ship, on its true track at the paces its agreements have set since the first, can still make
+  that hour, and the notice gives the agreed hour; otherwise it lapses (`ONE FREEDOM (ship 6) can no longer arrive at
+  hour 60: the earlier agreement no longer holds.`), the ship cruises in from where it is, and the notice gives its
+  agent's estimate of that arrival. Without an agreement, the notice's ETA is what the agent last said, its ETA or the
+  earliest hour it had offered, moved later by the delay. Later ETAs never fall below the notice's ETA or the real
+  arrival, whichever is earlier.
+- **The port's dispatch.** A ship that gets in after its window starts is berthed by the port at the first hour from
+  its arrival when a free stretch of quay fits it, nearest its planned sections first, with the same cranes, around
+  every other ship's window without breaking a rule, and never ahead of an earlier ship whose arrival was agreed and
+  which still waits; nobody else moves. Late ships are placed hour by hour, in queue order; after 168 hours without a
+  slot, a window just starts when its ship gets in, or once the wind lets it move.
 - The firm agents call `/step` rather than opening an MCP session: AgentEnv's gateway (0.9.1306) runs its MCP
   lifespan per session, so a second client's short session would replace, then close, the env sessions and trigger
   driver the planner relies on. The `/step` route keeps its own sessions.
 
+The env was validated in six rounds of GPT-6 Astra runs, each followed by an independent recomputation of every agent
+reply, notice, report, window row, confirm result and port placement. The last round found no mismatch in about
+299,000 env answers.
+
 ### The lines grade and the references
 
-The grade is the wind port's, on the windows as the port runs them: a window starts when its ship gets in if that is
-later, and the cost adds each ship's hours at anchor. ETAs are not news, so nothing an ETA got wrong is excused;
-closures, outages, cuts and unforecast wind keep their excuses. The score is reward v3's against each week's
-**anchor**, as in the wind port the lower of the hindsight optimum's cost and the follower's best:
+The grade is the wind port's, on the windows as the port runs them: a late ship where the port berths it, and each hour
+a ship waits at anchor charged its sections, as an hour late is. The cost is lateness, plus hours at anchor, plus move
+penalties. Rule breaks are what the confirmed windows, as run, break among themselves, and a ship that starts berthing
+while an earlier agreed ship waits; any rule break makes the week infeasible, under 0.2. The excuse is v4's: cost or a
+rule break that news, or wind the forecast didn't show, brings to a window after its last chance to change is not
+charged. An ETA that proves wrong is not news: the excuse weighs every window against the ships' real arrivals, so what
+a ship arriving off its ETA brings is charged. The score is reward v3's against each week's **anchor**, as in the wind
+port the lower of hindsight's cost and the follower's best:
 
-- **Hindsight:** CP-SAT with every arrival known, slowing ships from the first watch it could ask. It is the anchor
-  on all 15 weeks. Planners that learn arrivals as they come and lock them through the agents play close to it, and
-  can beat it: it keeps the references' stricter queue, without the wind's exception, and isn't proven optimal. A
-  week at or below its cost scores 1.0.
+- **Hindsight:** CP-SAT knowing every arrival. It asks each ship at the first watch its agent could commit, and not
+  before its news, and protects in the queue only the ships it slows, as the port protects only agreed ones. It is
+  the anchor in 13 of the 15 weeks.
 - **Follower:** re-plans at every watch with CP-SAT on the arrivals as known, the queue and the cost of waiting, and
-  requests arrival times through the same agents: for each ship whose window would freeze before the next watch,
-  each ship it plans to slow, and each ship due soon after the next watch. A refusal is a fact it keeps. Its best
-  cost over its four solver configurations is 1.05 to 5.75 times hindsight's, and it scores 0.485 in its first
-  configuration (0.21 to 0.89 by week).
-- **Silent:** the follower that never asks: 0.116.
-- **Naive:** v2's online policy: 0.137.
+  requests arrival times through the same agents: for each ship whose window would freeze before the next watch, each
+  ship it plans to slow, and each ship due within 12 hours of the next watch. It takes each counter-offer, and a
+  refusal is a fact it keeps. Its best cost over its four solver configurations is 0.78 to 2.25 times hindsight's,
+  below it in 2 weeks, where it is the anchor, and it scores 0.548 in its first configuration (0.20 to 1.0 by week).
+- **Silent:** the follower that never asks: 0.242. It keeps every week feasible, since the port berths a ship that
+  misses its window and only agreed ships hold the queue, but its ships wait 2,386 hours at anchor over the 15 weeks,
+  against the follower's 550.
+- **Naive:** v2's online policy: 0.184, feasible in 7 of the 15 weeks.
+
+The references keep the queue stricter than the grade, with no wind or closure exception, so hindsight isn't proven
+optimal: a planner that uses an exception can beat the anchor, and scores 1.0.
 
 A week qualifies when at least 3 of the follower's configurations finish feasible, the silent follower scores at most
-0.9 in at least 3 of 4, so asking the agents matters, and it has at most 10 watches. All 15 wind weeks qualify.
-
-Neither the silent follower nor the naive policy keeps any week feasible, and neither does a silent follower that
-pads every unagreed ETA by once or 2.5 times its mean error. A late ship that slides into another ship's window breaks
-a rule (a clash, the crane pool, pilots and tugs, or the queue), and a rule break caps the week below 0.2. So in
-practice a feasible lines week needs the planner to agree the arrivals of the ships it can't leave room for.
+0.9 in at least 3 of 4, so asking the agents matters, and it has at most 10 watches. All 15 wind weeks qualify, each
+with all 4 of the follower's configurations feasible and the silent follower at most 0.9 in all 4. A lines week gets
+72 turns, 7 for each of 10 watches and 2 more, so the turns don't give the watch count away.
 
 ```bash
 uv run --with ortools==9.15.6755 python scripts/lines_references.py pack         # the pack from dock-v1-wind
-uv run --with ortools==9.15.6755 python scripts/lines_references.py screen       # the four players, about 4 minutes
+uv run --with ortools==9.15.6755 python scripts/lines_references.py screen       # the four players, up to 23 min a week
 uv run --with ortools==9.15.6755 python scripts/lines_references.py references   # anchors, replay, references
 ```
 
@@ -1028,9 +1098,9 @@ agent-env portsim sweep report lines-sonnet --lines   # results/lines.md
 PYTHONPATH=tests python scripts/live_e2e.py --env portsim-lines --policy rolling   # zero-spend e2e
 ```
 
-A local run deploys the env stack and 7 to 10 agents. The e2e plays the follower's messages and windows through the
-real task with a stand-in model: every agent reply and every watch's messages must come out as in process, and the
-week must score the follower's reward.
+A local run deploys the env stack and 8 to 10 agents: the planner and one for each of the week's 7 to 9 firms. The
+e2e plays the follower's messages and windows through the real task with a stand-in model: every agent reply and every
+watch's messages must come out as in process, and the week must score the follower's reward.
 
 ### Lines results
 

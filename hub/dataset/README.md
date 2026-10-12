@@ -161,42 +161,65 @@ also the collection
 v5 plays v4's 15 wind weeks with the shipping lines answering back. Every ship has its agent: the shipping agent the
 Port de Barcelona's record of its 2024 calls names for the call, such as Hapag-Lloyd Spain or Noatum Maritime. Each
 agent with ships in the week is deployed as its own A2A agent (`portsim-line`, named by the firm's id) and peered with
-the planner, whose model gets a `message_agent` tool; a week has 7 to 9 agents for its 14 to 28 ships. What v5 adds to
-the wind week:
+the planner, whose model gets a `message_agent` tool; a week has 7 to 9 agents for its 14 to 28 ships. An agent has no
+model: it answers from the env, so the same messages always get the same replies. What v5 adds to the wind week:
 
+- **A schedule that is an estimate.** The published schedule is the line's estimate from 72 hours out: each ship
+  arrives at its scheduled hour plus its agent's long-range error, mostly later, so the schedule doesn't give the
+  truth away.
 - **ETAs that firm up.** Each ship's agent reports its ETA 48 and 24 hours out, and the ship calls in an hour before
-  it reaches buoy S; a report made between watches arrives with the next one. The ETAs are optimistic: most ships
-  arrive later than their agent says, by less as they near. The notices of a late ship, a bunch of ships or an
-  unscheduled call give their agents' ETAs, not the hours the ships really arrive.
+  it reaches buoy S; a report made between watches arrives with the next bulletin. An ETA is off by 20% of the hours
+  left, counted to 72 at most, scaled by the ship's bias, and mostly early: most ships arrive later than their agent
+  says, by less as they near, and the call is exact. The notices of a late ship, a bunch of ships or an unscheduled
+  call give their agents' ETAs, not the hours the ships really arrive.
 - **Requested arrival times.** `message_agent(agent, requests)` asks one agent for its ships' latest ETAs or requests
-  an arrival hour. The agent agrees when the ship can make it at its cruising 17 kn, or by slowing to as little as
-  10 kn once it has left its previous port, and the ship then arrives at that hour; a refusal says whether the ship
-  can't arrive that early or can't slow down that much.
-- **A ship berths when it gets in.** A window that starts before its ship arrives begins when the ship gets in, or
-  once the wind lets it move, and the berth waits for it.
-- **First come, first served.** No ship may start berthing while a ship earlier in the queue waits at anchor, unless
-  the wind holds that ship. A ship's turn is when it would arrive at cruising speed, so a ship slowed on request keeps
-  its turn.
+  an arrival hour, up to 20 requests a message, each `{"ship": 7, "ask": "eta", "request_arrival": null}` or
+  `{"ship": 9, "ask": null, "request_arrival": 130}`. An agent commits to an hour once its ship has sailed from its
+  previous port or its own estimate is within 48 hours; before that it replies that it can't commit yet and gives its
+  ETA. Then it agrees an hour the ship can make at its cruising 17 kn, or by slowing to as little as 10 kn once it has
+  sailed, and the ship arrives at that hour; otherwise it offers the earliest or the latest hour the ship can make,
+  which can be agreed at once. A refusal for a ship already agreed restates the agreement.
+- **News can undo an agreement.** Until the port's news about a delayed or bunched ship, its agent works from the plan
+  as it stood. At the news, an earlier agreement stands if the ship, on its true track at the paces its agreements
+  set, can still make that hour; otherwise it lapses and the ship cruises in from where it is. Without an agreement,
+  the notice's ETA is what the agent last said, moved later by the delay.
+- **The port berths late ships.** A ship that gets in after its window starts is berthed by the port at the first hour
+  a free stretch of quay fits it, nearest its planned sections and with the same cranes, around every other window
+  without breaking a rule and never ahead of an earlier agreed ship still waiting; nobody else moves. A ship that gets
+  in before its window waits at anchor for it.
+- **First come, first served, for agreed ships.** No ship may start berthing while an earlier ship whose arrival was
+  agreed waits at anchor, unless the wind holds that ship or the closures leave no stretch of quay long enough for its
+  stay. A ship's turn is when it would arrive at cruising speed, so a ship slowed on request keeps its turn.
 - **An hour at anchor costs an hour late:** each hour a ship waits between its arrival and its berthing costs its
   sections.
 
-**How it is graded.** As v4, on the windows confirmed and the week as it really happened, in the wind that blew. An
-ETA that proves wrong is not news, so the excuse never waives it: a ship that arrives later than its agent said berths
-when it gets in, and the lateness, clashes and queue breaks that follow are charged, unless the planner agreed that
-ship's arrival. Rewards are scored against the
-**anchor**, as in v4 the lower of the **hindsight** optimum's cost and the **follower**'s best over its 4 solver
-configurations. Hindsight knows every arrival and slows ships from the first watch it could ask; it is the anchor in
-all 15 weeks, and planners that lock arrivals through the agents play close to it. The follower is a CP-SAT re-planner
-that re-plans at every watch on the arrivals as known and requests arrival times through the agents, for each ship
-whose window would freeze before the next watch, each ship it plans to slow and each ship due within 12 hours of the
-next watch; its best cost is 1.05 to 5.75 times hindsight's. The
-**silent** follower re-plans the same way but never asks the agents, and the naive policy is v2's. A week qualifies
-when (a) at least 3 of the follower's 4 configurations finish feasible, (b) the silent follower scores 0.9 or less in
-at least 3 of its 4, so asking the agents matters, and (c) the week has at most 10 watches; all 15 wind weeks do.
+Besides `message_agent`, the planner's tools change three ways: `get_situation` shows where the port would berth a late
+ship (`port_berth_hour`, `port_section`, on its latest ETA until it is in), `confirm_berths` also returns the confirmed
+plan's problems and cost, as `check_plan` does, and `advance` returns only the watch, the hour and the freeze line. The
+env was validated in six rounds of GPT-6 Astra runs, each followed by an independent recomputation of every agent reply,
+notice, report, window row, confirm result and port placement; the last round found no mismatch in about 299,000 env
+answers.
 
-**Where the agents come from, and what is assumed.** The pack's manifest
+**How it is graded.** As v4, on the windows confirmed, as the port runs them, and the week as it really happened, in the
+wind that blew. The cost adds each ship's hours at anchor, and a rule break is what the confirmed windows break among
+themselves, or a ship berthing while an earlier agreed ship waits; any rule break makes the week infeasible. The excuse
+is v4's, and an ETA that proves wrong is not news to it: it weighs every window against the ships' real arrivals, so
+what a ship arriving off its agent's ETA brings is charged. Rewards are scored against the **anchor**, as in v4 the
+lower of the **hindsight** cost and the **follower**'s best over its 4 solver configurations. Hindsight is CP-SAT
+knowing every arrival: it asks each ship at the first watch its agent could commit, and not before its news, and
+protects in the queue only the ships it slows. It is the anchor in 13 of the 15 weeks. The follower is a CP-SAT
+re-planner that re-plans at every watch on the arrivals as known and requests arrival times through the agents, for each
+ship whose window would freeze before the next watch, each ship it plans to slow and each ship due within 12 hours of
+the next watch, taking each counter-offer; its best cost is 0.78 to 2.25 times hindsight's, and it scores 0.548 in its
+first configuration. The **silent** follower re-plans the same way but never asks the agents (0.242), and the naive
+policy is v2's (0.184). The references keep the queue stricter than the grade, with no wind or closure exception, so a
+planner that uses an exception can beat the anchor and score 1.0. A week qualifies when (a) at least 3 of the follower's
+4 configurations finish feasible, (b) the silent follower scores 0.9 or less in at least 3 of its 4, so asking the
+agents matters, and (c) the week has at most 10 watches; all 15 wind weeks do.
+
+**Where the agents come from, and what is assumed.** The sources, each assumption marked; the pack's manifest
 ([data/dock-v1-lines/manifest.json](https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.5.2/data/dock-v1-lines/manifest.json))
-gives each rule's source and marks each assumption:
+carries most of them in brief:
 
 - *The agents:* the shipping agent (`CONSIGNATARI`) of each call in the Port de Barcelona's 2024 calls of every ship
   type, the record v3's other traffic comes from (CC BY-SA 4.0); an unscheduled call takes its ship's nearest 2024
@@ -209,15 +232,22 @@ gives each rule's source and marks each assumption:
   before arrival, the IMO Just In Time Arrival Guide (2020) puts berth planning at about 48 hours, and the 2025
   berthing ordinance (BOE-A-2025-5157) defines arrival by the call an hour before buoy S. The 48-hour report and the
   delivery at the next watch are assumptions.
-- *The ETA error*, an assumption inside the published range: off by 20% of the hours left on average, with 80% of
-  ships later than their ETA, and each ship's bias drawn. Published: agents' ETAs 24 to 48 hours out off by 5 h 15 min
-  on average at Busan New Port (2022-23) and by 10 to 15 hours at Antwerp (2019), and 80% of arrivals later than the
-  leg's ETA on MSC's Barcelona-Valencia loop (2017-18).
+- *The ETA error*, an assumption inside the published range: off by 20% of the hours left on average, counted to 72
+  at most, with 80% of ships later than their ETA, and each ship's bias drawn; the published schedule is the same
+  estimate from 72 hours out. Published: agents' ETAs 24 to 48 hours out off by 5 h 15 min on average at Busan New
+  Port (2022-23) and by 10 to 15 hours at Antwerp (2019), and 80% of arrivals later than the leg's ETA on MSC's
+  Barcelona-Valencia loop (2017-18).
+- *The commitment and the requests:* an agent commits once its ship has sailed or its estimate is within 48 hours, the
+  IMO Just In Time Arrival Guide's berth-planning horizon, and answers a request it can't meet with the earliest or the
+  latest hour the ship can make, after the guide's requested time of arrival.
 - *The speeds*, assumptions: cruising 17 kn and slowing to 10 kn, inside the 12 to 20 kn of MSC's Barcelona-Valencia
   loop and the 10 kn economical speed of the IMO's Just In Time container study.
 - *The queue:* Barcelona's container terminals berthed first come, first served in 2024, and the 2025 ordinance made
-  it the general rule (art. 3). A slowed ship keeping its turn is the virtual-arrival arrangement; the ordinance's
-  other exceptions are left out.
+  it the general rule (art. 3), exempting a ship the quay can't take. A slowed ship keeping its turn is the
+  virtual-arrival arrangement; holding the queue only for agreed ships is an assumption, and the ordinance's other
+  exceptions are left out.
+- *The news and the late ships*, assumptions: an agreement survives a delay only if the ship can still make it, and
+  the port berths a ship that misses its window at its next free slot, moving nobody else.
 - *The anchor cost*, an assumption: an hour at anchor costs the same as an hour late, the round value inside the
   evidence (the fuel a ship saves by slowing instead of waiting is worth 1.3 to 1.8 hours of its charter, and an hour
   late costs more than the charter alone).
@@ -310,35 +340,41 @@ pack, which all five versions use, not this dataset's version.
   window above 25 kn of 4 hours or more, or an hour above 30 kn, at Y7; a false-alarm week (`bust` in the tables)
   stayed below that, though its forecasts showed hours above 25 kn that didn't blow. The 14 wind weeks set in a storm
   week are the storm wind weeks.
-- **Ship's agent** (v5): the firm that deals with the port for a ship's line, as the port's 2024 record names it for
-  the call; each is its own A2A agent, which the planner messages. **ETA**: an agent's estimate of the hour its ship
-  arrives. **Turn**: a ship's place in the first-come, first-served queue, the hour it would arrive at cruising speed.
-  **Hours at anchor**: the hours ships wait between their arrival and their berthing, each charged as an hour late.
+- **Ship's agent** (v5): the firm that deals with the port for a ship's line, as the port's 2024 record names it for the
+  call; each is its own A2A agent, which the planner messages. **ETA**: an agent's estimate of the hour its ship
+  arrives; the published schedule is the same estimate from 72 hours out. **Agreed arrival**: an hour a ship's agent has
+  agreed, once the ship has sailed or its estimate is within 48 hours; the ship arrives then, unless news makes the hour
+  impossible and the agreement lapses. **Turn**: a ship's place in the first-come, first-served queue, the hour it would
+  arrive at cruising speed; the queue holds for the ships whose arrival was agreed. **Hours at anchor**: the hours ships
+  wait between their arrival and their berthing, each charged as an hour late. **Port berth**: where the port berths a
+  ship that gets in after its window starts, at the first hour a free stretch of quay fits it.
 - **Optimum**: the cost of the best plan CP-SAT, a constraint solver, finds for the week as it really happened. A
   **solver configuration** is one of the 4 ways the references run CP-SAT: 1 or 8 workers, each with or without an
   earliest-finish tie-break. **Hindsight** (v4, v5): that optimum with the whole week known, in the wind that blew; in
-  v5 it also knows every arrival and slows ships from the first watch it could ask.
+  v5 it also knows every arrival, asks each ship at the first watch its agent could commit, and not before its news,
+  and protects in the queue only the ships it slows.
   **Anchor** (v4, v5): what the week scores against, its `optimal_cost`. In v4, the lower of the hindsight optimum and
   the forecast-following re-planner's best cost over its 4 solver configurations: the agent's cost is net of its
   excuses while hindsight pays for all the wind, so following the forecast can cost less than hindsight, and the
-  anchor is below it in 5 of the 15 wind weeks. In v5, the lower of the hindsight optimum and the follower's best
-  cost over its 4 solver configurations: hindsight in all 15 lines weeks.
-- **Rolling**: a CP-SAT re-planner that only knows what has been announced; in v4 that includes the forecast, so it
-  is the forecast-following re-planner. **Blind** (v4): the same re-planner with the wind taken out of the week as
-  known. **Hold** (v4, the false-alarm week): the same, holding every window any forecast so far has shown.
-  **Follower** (v5): the rolling re-planner on the arrivals as known, which requests arrival times through the ships'
-  agents (the references' `rolling` columns). **Silent** (v5): the same, never asking. **Naive**: a simple policy that
-  pushes ships later (in v2 to v5, it keeps each confirmed window that still fits and moves the rest; it knows nothing
-  of pilots and tugs, so in v3 it often breaks their rule). **Unavoidable**: the cost no plan avoids; in v4 and v5, in
-  the wind that blew (the floor). **Regret**: cost above the optimum, in v4 and v5 above the anchor. **Excused cost**:
-  cost the grade excuses, which is not charged: in v2 and v3, cost that news put on a frozen window; in v4 and v5, the
-  cost the excuse waives.
+  anchor is below it in 5 of the 15 wind weeks. In v5, the lower of the hindsight cost and the follower's best cost
+  over its 4 solver configurations: hindsight in 13 of the 15 lines weeks, the follower in the other 2.
+- **Rolling**: a CP-SAT re-planner that only knows what has been announced; in v4 that includes the forecast, so it is
+  the forecast-following re-planner. **Blind** (v4): the same re-planner with the wind taken out of the week as known.
+  **Hold** (v4, the false-alarm week): the same, holding every window any forecast so far has shown. **Follower** (v5):
+  the rolling re-planner on the arrivals as known, which requests arrival times through the ships' agents and takes
+  their counter-offers (the references' `rolling` columns). **Silent** (v5): the same, never asking. **Naive**: a simple
+  policy that pushes ships later (in v2 to v5, it keeps each confirmed window that still fits and moves the rest; it
+  knows nothing of pilots and tugs, so in v3 it often breaks their rule). **Unavoidable**: the cost no plan avoids; in
+  v4 and v5, in the wind that blew (the floor). **Regret**: cost above the optimum, in v4 and v5 above the anchor.
+  **Excused cost**: cost the grade excuses, which is not charged: in v2 and v3, cost that news put on a frozen window;
+  in v4 and v5, the cost the excuse waives.
 - **The excuse** (v4, v5): per ship, at its freeze, on the whole plan. A ship first frozen at watch k is compared with
-  the week as known at watch k−1, its news and its forecast, and a rule break or cost the week adds to that is
-  excused, once. So wind that no forecast had shown by then is excused, and wind the forecast showed and that blew is
-  charged, as an ignored warning. A problem ships share (an overlap, or pilots, tugs or the move limit short at an
-  hour) is judged for each of them as the ship decided last saw it. In v5 an ETA that proves wrong is not news: what a
-  ship arriving off its agent's ETA brings is charged, unless its arrival was agreed.
+  the week as known at watch k−1, its news and its forecast, and a rule break or cost the week adds to that is excused,
+  once. So wind that no forecast had shown by then is excused, and wind the forecast showed and that blew is charged, as
+  an ignored warning. A problem ships share (an overlap, or pilots, tugs or the move limit short at an hour) is judged
+  for each of them as the ship decided last saw it. In v5 an ETA that proves wrong is not news: what a ship arriving off
+  its agent's ETA brings, lateness and hours at anchor, is charged; a ship whose arrival was agreed arrives at the
+  agreed hour.
 - **Reward**: 0.2 + 0.8·e^(−gap/0.5) for a valid plan, where gap = max(0, cost − optimum) / (max(0, optimum −
   unavoidable) + 100), so the optimum scores 1.0; in v4 and v5 the anchor and the floor take the optimum's and the
   unavoidable cost's places. A plan that breaks a rule scores under 0.2 (0.2 times the share of ships placed
