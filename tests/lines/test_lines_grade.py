@@ -160,12 +160,16 @@ def test_no_ship_starts_while_one_earlier_in_the_queue_waits_at_anchor_unless_th
 
 def test_a_ship_the_closures_leave_no_stretch_long_enough_for_holds_no_one_in_the_queue():
     """With sections 2-15 closed until 100, no stretch of 8 is open for ONE FREEDOM waiting since 54, so VERONICA B
-    may berth at 95; with 2-14 closed, 15-22 is open for it, and VERONICA B jumps the queue."""
+    may berth at 95; with 2-14 closed, 15-22 is open for it, and VERONICA B jumps the queue. A stretch open now but
+    closing before the ship's stay is out is no room: with 15-22 also closed from 110, ONE FREEDOM's 40 hours from 95
+    fit nowhere."""
     plan = {6: (107, 15, 4), 7: (95, 17, 1)}
-    for last, jumped in ((15, []), (14, ["berths at hour 95 while ship 6 ONE FREEDOM, earlier in the queue, waits at "
-                                         "anchor"])):
-        truth = cruising(replace(E15, blocks=[*E15.blocks, Block(2, last, 0, 100, "closed")]))
-        assert queue(lines.evaluate(truth, plan), 7) == jumped, last
+    jumped = ["berths at hour 95 while ship 6 ONE FREEDOM, earlier in the queue, waits at anchor"]
+    for blocks, broken in (([Block(2, 15, 0, 100, "closed")], []), ([Block(2, 14, 0, 100, "closed")], jumped),
+                           ([Block(2, 14, 0, 100, "closed"), Block(15, 22, 110, 120, "closed")], [])):
+        truth = cruising(replace(E15, blocks=blocks))
+        assert queue(lines.evaluate(truth, plan), 7) == broken, blocks
+    assert E15.ships[6].handling_for(4) == 40
 
 
 def test_the_queue_protects_only_a_ship_whose_arrival_was_agreed():

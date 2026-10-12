@@ -186,7 +186,7 @@ function resultHtml(task, step) {
   if (step.tool === "check_plan") return checkSummary(task, r) + (refused && `<div class="muted small">confirm_berths would refuse:</div>${refused}`) + problems;
   if (step.tool === "confirm_berths") return `<div class="res-line"><i class="dot ${r.refused.length ? "bad" : "ok"}"></i>Confirmed ${r.confirmed.length} · unchanged ${r.unchanged.length} · refused ${r.refused.length}</div>${refused}${problems}`;
   if (r.done) return `<div class="res-line"><i class="dot ${r.feasible ? "ok" : "bad"}"></i>Week done · ${r.feasible ? `feasible · cost ${r.cost}` : "infeasible"} · reward ${fmtNum(r.reward, 3)}</div>`;
-  return `<div class="res-line">Watch ${r.watch} · ${escapeHtml(r.time)} · freeze line h ${r.frozen_before}</div><div class="muted small">${[r.berthed && `berthed ${names(task, r.berthed)}`, r.departed && `departed ${names(task, r.departed)}`, r.unconfirmed.length && `unconfirmed ${names(task, r.unconfirmed)}`].filter(Boolean).join(" · ")}</div>`;
+  return `<div class="res-line">Watch ${r.watch} · ${escapeHtml(r.time)} · freeze line h ${r.frozen_before}</div><div class="muted small">${[r.berthed && `berthed ${names(task, r.berthed)}`, r.departed && `departed ${names(task, r.departed)}`, r.unconfirmed?.length && `unconfirmed ${names(task, r.unconfirmed)}`].filter(Boolean).join(" · ")}</div>`;
 }
 
 function otherHtml(tc, out) {

@@ -133,7 +133,7 @@ def test_the_opening_ends_with_the_agents_and_the_rules_are_the_lines_rules():
     assert play["prompt"] != tasks.live_steps(TASK, 5.0, week=WindWeek)[6]["prompt"]
 
 
-def test_the_lines_rules_are_the_wind_rules_with_three_sentences_changed_and_the_agents_added():
+def test_the_lines_rules_are_the_wind_rules_with_four_sentences_changed_and_the_agents_added():
     wind_rules, ours = tasks.WIND_RULES.split("\n"), tasks.LINES_RULES.split("\n")
     assert ours[len(wind_rules):] == [
         "",
@@ -161,7 +161,10 @@ def test_the_lines_rules_are_the_wind_rules_with_three_sentences_changed_and_the
         "does."]
     changed = [i for i, (a, b) in enumerate(zip(wind_rules, ours, strict=False)) if a != b]
     situation = next(i for i, line in enumerate(wind_rules) if line.startswith("- get_situation()"))
-    assert changed == [1, situation, len(wind_rules) - 1]
+    confirm = next(i for i, line in enumerate(wind_rules) if line.startswith("- confirm_berths("))
+    assert changed == [1, situation, confirm, len(wind_rules) - 1]
+    assert ours[confirm] == wind_rules[confirm] + (" It returns the confirmed plan's problems and cost, as check_plan "
+                                                   "does.")
     assert ours[situation] == wind_rules[situation].replace(
         "(departed, berthed, frozen or open)",
         "(departed, berthed, frozen or open, and where the port berths a ship that gets in after its window, on its "

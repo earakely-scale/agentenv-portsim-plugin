@@ -193,6 +193,14 @@ class PortSimLinesEnv(PortSimWindEnv):
     WEEK = LinesWeek
     task_pack = staticmethod(lines.pack)
 
+    @tool(description="Confirm berth windows with the ships: each entry sets or changes one ship's window; ships left "
+                      "out keep theirs. From watch 1 on, windows starting before the freeze line (6 hours from now) "
+                      "are frozen, and new ones must start at or after it. Returns the confirmed plan's problems and "
+                      "cost, as check_plan does. Uses one of this watch's 3 planning calls.")
+    def confirm_berths(self, plan: WindowsArg) -> str:
+        week = self._week(open_only=True)
+        return _reply(week, week.confirm(_raw(plan)))
+
     @tool(description="A ship's state as its agent knows it now: its ETA, or the arrival agreed and its turn in the "
                       "queue, or when it arrived. Records what the agent tells the planner. For the ships' agents.")
     def ship_status(self, agent: str, ship: int) -> str:

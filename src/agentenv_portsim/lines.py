@@ -200,17 +200,17 @@ def report_text(task: Task, event: dict) -> str:
             f"{label(event['hour'])}.")
 
 
-def _waiting(task: Task, sid: int, hour: int, start: float) -> bool:
-    """Whether the ship is at anchor at ``hour``, in by then and berthing later, unheld by the wind and with a stretch
-    of quay the closures leave long enough for it."""
-    ship = task.ships[sid]
+def _waiting(task: Task, sid: int, hour: int, window: tuple[float, int, int]) -> bool:
+    """Whether the ship is at anchor at ``hour``, in by then and berthing later in ``window``, unheld by the wind and
+    with a stretch of quay the closures leave clear for its stay."""
+    ship, (start, _, cranes) = task.ships[sid], window
     return (ship.arrival <= hour < start and not any(a <= hour < b for a, b in task.no_move_windows(ship))
-            and _room(task, ship.sections, hour))
+            and _room(task, ship.sections, hour, ship.handling_for(cranes)))
 
 
-def _room(task: Task, sections: int, hour: int) -> bool:
-    """Whether the closures at ``hour`` leave a stretch of that many sections."""
-    shut = [(b.first, b.last + 1) for b in task.blocks if b.kind == "closed" and b.start <= hour < b.end]
+def _room(task: Task, sections: int, hour: int, stay: int) -> bool:
+    """Whether the closures leave a stretch of that many sections clear from ``hour`` for ``stay`` hours."""
+    shut = [(b.first, b.last + 1) for b in task.blocks if b.kind == "closed" and b.start < hour + stay and hour < b.end]
     return any(not any(x < hi and lo < x + sections for lo, hi in shut)
                for x in range(task.first_section, task.last_section - sections + 2))
 
@@ -227,7 +227,7 @@ def _queued(task: Task, plan: Plan, res: PlanResult) -> None:
         for x in sorted(starts, key=lambda x: (turns[x], x)):
             if turns[x] >= turns[y]:
                 break
-            if x in agreed and _waiting(task, x, ty, starts[x]):
+            if x in agreed and _waiting(task, x, ty, plan[x]):
                 res.ships[y].problems.append(f"berths at hour {ty} while ship {x} {task.ships[x].name}, earlier in "
                                              f"the queue, waits at anchor")
                 break
@@ -265,7 +265,7 @@ def executed(task: Task, plan: Plan) -> Plan:
             stay = ship.handling_for(cranes)
             sections = sorted(range(task.first_section, task.last_section - ship.sections + 2),
                               key=lambda x: (abs(x - section), x))
-            waiting = late - set(out)
+            waiting = {s: (math.inf, *plan[s][1:]) for s in late - set(out)}
             window = next(((hour, x, cranes) for x in sections
                            if not any(x < hi and lo < x + ship.sections and hour < end and start < hour + stay
                                       for lo, hi, start, end in taken)
@@ -275,15 +275,15 @@ def executed(task: Task, plan: Plan) -> Plan:
     return out
 
 
-def _fits(task: Task, out: Plan, waiting: set[int], sid: int, window: tuple[int, int, int],
+def _fits(task: Task, out: Plan, waiting: dict[int, tuple[float, int, int]], sid: int, window: tuple[int, int, int],
           before: dict[int, set[str]]) -> bool:
     """Whether the port can berth the late ship in this window: no earlier ship with an agreed arrival waits, whether
     berthing later in its window or a late ship not yet placed, and the window adds no problem."""
     turns = task.rules["lines"]["turns"]
     agreed = set(task.rules["lines"].get("agreed", range(len(task.ships))))
-    starts = {x: w[0] for x, w in out.items() if 0 <= x < len(task.ships)} | dict.fromkeys(waiting - {sid}, math.inf)
-    if any(turns[x] < turns[sid] and x in agreed and _waiting(task, x, window[0], start)
-           for x, start in starts.items()):
+    windows = {x: w for x, w in out.items() if 0 <= x < len(task.ships)} | {
+        x: w for x, w in waiting.items() if x != sid}
+    if any(turns[x] < turns[sid] and x in agreed and _waiting(task, x, window[0], w) for x, w in windows.items()):
         return False
     res = marine.evaluate(task, out | {sid: window})
     return not res.ships[sid].problems and all(
@@ -353,9 +353,17 @@ class LinesWeek(WindWeek):
         super().__init__(task)
 
     def open(self) -> dict:
-        """The next watch, without the ships berthed and departed: which have is news its bulletin brings, and
-        get_situation shows them once it has."""
-        return {k: v for k, v in super().open().items() if k not in ("berthed", "departed")}
+        """The next watch, without the ships berthed, departed and still without a window: those are news its bulletin
+        brings, and get_situation shows them once it has."""
+        return {k: v for k, v in super().open().items() if k not in ("berthed", "departed", "unconfirmed")}
+
+    def confirm(self, raw) -> dict:
+        """Confirms, and reports the confirmed plan's problems and cost as check_plan would, at no extra call."""
+        out = super().confirm(raw)
+        if "error" in out:
+            return out
+        return ({k: v for k, v in out.items() if k != "planning_calls_left"} | self.assess(self.view, self.plan)
+                | {"planning_calls_left": out["planning_calls_left"]})
 
     def draft_excuses(self, plan: Plan) -> tuple[set[tuple[int, str]], dict[int, int]]:
         """The excuses the draft itself would earn, so a problem the confirmed plan has and the draft fixes isn't
@@ -389,7 +397,7 @@ class LinesWeek(WindWeek):
                 del self.locks[sid], self.paces[sid]
                 if earliest > truth:
                     self.resumed[sid] = earliest
-                etas[sid] = earliest
+                etas[sid] = max(estimate(self.task, sid, self.hour, self.basis(sid)), earliest)
                 said.append(f"{self.task.ships[sid].name} (ship {sid}) can no longer arrive at hour {at}: the earlier "
                             "agreement no longer holds.")
             self.floor[sid] = min(etas[sid], self.actual(sid))
@@ -417,7 +425,9 @@ class LinesWeek(WindWeek):
         out = super().notice(event_id, name, text, via)
         event = self.scheduled[event_id].event
         reported = event["type"] in REPORTS
-        eta = max(event["eta"], self.floor.get(event["ship"], 0)) if reported else None
+        made = (estimate(self.task, event["ship"], event["hour"], self.resumed[event["ship"]])
+                if event["type"] == "eta" and event["ship"] in self.resumed else event.get("eta"))
+        eta = max(made, self.floor.get(event["ship"], 0)) if reported else None
         if reported:
             self._tell(event["ship"], event["hour"], eta)
             if event["type"] == "call" and event["ship"] not in self.locks:

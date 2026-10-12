@@ -103,7 +103,10 @@ LINES_RULES = WIND_RULES.replace(
     "rule breaks that news, or wind the forecast didn't show,").replace(
     "your confirmed windows (departed, berthed, frozen or open),",
     "your confirmed windows (departed, berthed, frozen or open, and where the port berths a ship that gets in after "
-    "its window, on its latest ETA until it is in),"
+    "its window, on its latest ETA until it is in),").replace(
+    "- confirm_berths(plan): confirms windows with the ships; ships you leave out keep their windows.",
+    "- confirm_berths(plan): confirms windows with the ships; ships you leave out keep their windows. It returns the "
+    "confirmed plan's problems and cost, as check_plan does."
 ) + """
 
 The ships' agents:

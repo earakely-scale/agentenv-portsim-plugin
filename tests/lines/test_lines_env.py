@@ -72,7 +72,7 @@ async def card(env) -> dict:
         return (await http.get("/.well-known/agent-env.json")).json()
 
 
-async def test_the_lines_env_is_the_wind_env_with_the_agents_two_tools(env, tools):
+async def test_the_lines_env_is_the_wind_env_with_the_agents_two_tools_and_a_confirm_that_reports(env, tools):
     other = PortSimWindEnv()
     other.create_app()
     ours, theirs = await card(env), await card(other)
@@ -80,8 +80,12 @@ async def test_the_lines_env_is_the_wind_env_with_the_agents_two_tools(env, tool
     assert {e["uri"] for e in ours["capabilities"]["extensions"]} == {LIVE_LOAD_URI, END_WEEK_URI, CLOCK_URI}
     assert ours["capabilities"]["operations"] == theirs["capabilities"]["operations"]
     named = {t["name"]: t for t in ours["capabilities"]["tools"]}
-    assert [t for t in ours["capabilities"]["tools"] if t["name"] not in ("ship_status", "agree_arrival")] == (
-        theirs["capabilities"]["tools"])
+    confirm = next(t for t in theirs["capabilities"]["tools"] if t["name"] == "confirm_berths")
+    assert named["confirm_berths"] == confirm | {"description": confirm["description"].replace(
+        " Uses one", " Returns the confirmed plan's problems and cost, as check_plan does. Uses one")}
+    assert [t for t in ours["capabilities"]["tools"] if t["name"] not in ("ship_status", "agree_arrival",
+                                                                         "confirm_berths")] == [
+        t for t in theirs["capabilities"]["tools"] if t["name"] != "confirm_berths"]
     assert set(named) == {t["name"] for t in theirs["capabilities"]["tools"]} | {"ship_status", "agree_arrival"}
     assert [t.name for t in await tools.client.list_tools()] == [
         "get_situation", "check_plan", "confirm_berths", "advance", "port_notice", "ship_status", "agree_arrival"]

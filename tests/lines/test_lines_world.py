@@ -414,8 +414,8 @@ def through(week: LinesWeek, hour: int) -> None:
 
 def test_an_agreement_made_before_the_news_lapses_if_its_pace_since_leaves_the_ship_short_of_it():
     """ONE FREEDOM agreed for 64 at hour 0 has sailed at 48/64 of cruising speed since; from 42 it can't arrive before
-    65, so the agreement lapses, and having slowed, it cruises in at 65, which the news gives as its ETA and the agent
-    now agrees from. For 65 or 81 it can still make it."""
+    65, so the agreement lapses, and having slowed, it cruises in at 65; the news gives its agent's own estimate of
+    that, 71, as its later ETAs do, and the agent now agrees from 65. For 65 or 81 it can still make it."""
     for at, stands in ((64, False), (65, True), (81, True)):
         week = LinesWeek(E15)
         assert week.request("one", 6, at)["agreed"]
@@ -425,10 +425,11 @@ def test_an_agreement_made_before_the_news_lapses_if_its_pace_since_leaves_the_s
     week = LinesWeek(E15)
     week.request("one", 6, 64)
     through(week, 42)
-    assert (week.actual(6), week.turn(6), week.told[6], week.floor[6], week.reach(6, 42)) == (65, 54, (42, 65), 65,
+    assert (week.actual(6), week.turn(6), week.told[6], week.floor[6], week.reach(6, 42)) == (65, 54, (42, 71), 65,
                                                                                               (65, 81))
+    assert week.status("one", 6)["eta"] == 71
     [news] = [m["text"] for m in week.messages if m["from"] == "ONE FREEDOM"]
-    assert "its agent now gives ETA hour 65 " in news and news.endswith("can no longer arrive at hour 64: the earlier "
+    assert "its agent now gives ETA hour 71 " in news and news.endswith("can no longer arrive at hour 64: the earlier "
                                                                         "agreement no longer holds.")
     assert week.request("one", 6, 66)["agreed"] and week.truth().ships[6].arrival == 66
 
@@ -453,7 +454,7 @@ def test_at_its_news_a_ship_has_slowed_for_every_agreement_since_the_first():
 
 def test_advance_leaves_where_the_ships_are_to_the_bulletin():
     week = LinesWeek(E15)
-    assert set(week.open()) == {"watch", "hour", "time", "frozen_before", "unconfirmed", "note"}
+    assert set(week.open()) == {"watch", "hour", "time", "frozen_before", "note"}
 
 
 def test_other_ships_reports_keep_their_scheduled_text():
@@ -548,3 +549,19 @@ def test_the_notices_list_adds_the_agreement_to_an_agreed_late_ships_delay_notic
     [text] = [t for e, t in zip(week.view.disruptions, week.view.notices, strict=True)
               if e["type"] == "late" and e["ship"] == 6]
     assert text == E15.notices[late] + " Since then: " + week.agreement(6)
+
+
+def test_confirm_berths_reports_the_confirmed_plans_problems_and_cost_as_check_plan_does():
+    """A clash confirmed at watch 0 is reported with the confirmation, as check_plan reports it, for one planning call;
+    v4's confirm reports only what it confirmed."""
+    plan = [{"ship": 3, "berth_hour": 47, "section": 4, "cranes": 1}, {"ship": 8, "berth_hour": 47, "section": 4}]
+    week = LinesWeek(E15)
+    checked = week.check(plan)
+    confirmed = week.confirm(plan)
+    assert list(confirmed) == ["confirmed", "unchanged", "refused", "entry_problems", "feasible", "cost", "delay_cost",
+                               "moves", "excused_cost", "ships", "planning_calls_left"]
+    assert {k: confirmed[k] for k in checked if k != "planning_calls_left"} == {
+        k: v for k, v in checked.items() if k != "planning_calls_left"}
+    assert (confirmed["feasible"], confirmed["confirmed"], confirmed["planning_calls_left"]) == (False, [3, 8], 1)
+    v4 = WindWeek(wind.pack().get(E15.task_id))
+    assert set(v4.confirm(plan)) == {"confirmed", "unchanged", "refused", "entry_problems", "planning_calls_left"}

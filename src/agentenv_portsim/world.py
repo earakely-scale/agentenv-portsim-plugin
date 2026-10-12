@@ -219,6 +219,11 @@ class Week:
             view, plan, _, _, refused, entry_problems = self._merge(raw)
         except PlanError as e:
             return {"error": str(e), "planning_calls_left": self.calls_left}
+        return self.assess(view, plan) | {"refused": refused, "entry_problems": entry_problems,
+                                          "planning_calls_left": self.calls_left}
+
+    def assess(self, view: Task, plan: Plan) -> dict:
+        """The plan on the week as known now: the ships with a problem or a cost, and the plan's cost."""
         ships = charge(self.evaluate(view, plan), *self.draft_excuses(plan))
         arrivals = {s.id: s.arrival for s in view.ships}
         rows = []
@@ -237,8 +242,7 @@ class Week:
         cost = sum(r.cost for r, *_ in ships) - excused_cost
         return {"feasible": feasible, "cost": cost if feasible else None,
                 "delay_cost": cost - MOVE_PENALTY * moves if feasible else None, "moves": moves if feasible else None,
-                "excused_cost": excused_cost, "ships": rows, "refused": refused, "entry_problems": entry_problems,
-                "planning_calls_left": self.calls_left}
+                "excused_cost": excused_cost, "ships": rows}
 
     def confirm(self, raw) -> dict:
         if error := self._planning_call():
