@@ -185,12 +185,14 @@ def _lines_run(sweep: Path, instance: str) -> None:
     transcript = Path("transcripts/anthropic-claude-opus-5-5") / f"{FILM}-r1-a1.json"
     (sweep / transcript).parent.mkdir(parents=True)
     (sweep / transcript).write_text(json.dumps({"messages": [{"role": "user", "content": "hi"}], "steps": [],
-                                                "final": {}, "seconds": 60.0}))
+                                                "final": {}, "seconds": 60.0, "turns": 0, "end_reason": "done",
+                                                "errors": [], "usage": {"input_tokens": 0, "output_tokens": 0}}))
     row = {"sweep": sweep.name, "model": OPUS, "task_id": FILM, "rep": 1, "attempt": 1, "instance": instance,
-           "outcome": "scored", "reward": 0.5, "submitted": True, "feasible": True, "plan_cost": 500,
-           "optimal_cost": 407, "turns": 20, "tool_calls": 30, "input_tokens": 1000, "output_tokens": 100,
-           "cost_usd": 0.5, "wall_seconds": 100.0, "end_reason": "done", "watches": 5, "regret": 93, "excused_cost": 0,
-           "anchor_hours": 12, "messages": len(EXCHANGES), "transcript": transcript.as_posix()}
+           "started_utc": "2026-10-11T09:00:00Z", "outcome": "scored", "reward": 0.5, "submitted": True,
+           "feasible": True, "plan_cost": 500, "optimal_cost": 407, "turns": 20, "tool_calls": 30,
+           "input_tokens": 1000, "output_tokens": 100, "cost_usd": 0.5, "wall_seconds": 100.0, "end_reason": "done",
+           "watches": 5, "regret": 93, "excused_cost": 0, "anchor_hours": 12, "messages": len(EXCHANGES),
+           "transcript": transcript.as_posix()}
     (sweep / "results.jsonl").write_text(json.dumps(row) + "\n")
 
 
@@ -269,6 +271,9 @@ def test_a_dry_build_with_a_lines_sweep_publishes_its_run_in_both_kinds_of_table
     assert {"runs/lines-r6-opus/sweep.json", "runs/lines-r6-opus/results.jsonl"} <= {
         p.relative_to(out).as_posix() for p in out.rglob("*")}
     assert not (out / "runs/lines-r6-opus/bundle").exists()
+    stored = json.loads((out / "runs/lines-r6-opus/summaries.json").read_text())
+    assert stored["plugin"] == hub.VERSION
+    assert [(e["model"], e["task_id"]) for e in stored["runs"]["lines-r6-opus"]["episodes"]] == [(OPUS, FILM)]
     card = (out / "README.md").read_text()
     v5 = card.split("<!-- board:v5 -->")[1].split("<!-- /board:v5 -->")[0]
     assert "At the anchor" in v5 and "| Claude Opus 5.5 | Anthropic | 1 of 1 | **0.500**" in v5

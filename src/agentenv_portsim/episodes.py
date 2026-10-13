@@ -3,9 +3,13 @@ final plan, a live run replayed through its Week from the recorded tool calls; a
 messages to the ships' agents, each played on the week as the agent asks the env."""
 
 import json
+import threading
+from collections.abc import Callable
 from dataclasses import dataclass
 from functools import cached_property
+from importlib.metadata import version
 from pathlib import Path
+from typing import Any, TypeVar
 
 import click
 from berth_core import MOVE_PENALTY, Plan, PlanError, Task, TaskPack, evaluate, grade, parse_plan, plan_to_list
@@ -26,6 +30,11 @@ STEPS = ("check_plan", "confirm_berths", "advance")
 MESSAGE_TOOL = "message_agent"
 MAX_REQUESTS = 20
 """portsim-line's cap on the requests in one message."""
+V = TypeVar("V")
+SUMMARIES = "summaries.json"
+"""Beside a published sweep: its runs' episode summaries as the dataset build replayed them, under the plugin version
+that built it ({"plugin": ..., "runs": Runs.summaries(sweep)}), which a viewer of that version lists without
+replaying."""
 
 
 class ReplayError(Exception):
@@ -60,6 +69,9 @@ class Runs:
         self.marine_references = {r["task_id"]: r for r in marine.references()}
         self.runs: dict[str, Run] = {}
         self.rollouts: dict[tuple[str, str, str], dict] = {}
+        self.replays: dict[str, tuple[list[dict], list[dict]]] = {}
+        self.locks: dict[object, threading.Lock] = {}
+        self.guard = threading.Lock()
         for name in names or sorted(p.parent.name for p in root.glob("*/sweep.json")):
             path = root / name / "sweep.json"
             if not path.is_file():
@@ -70,6 +82,9 @@ class Runs:
                 run_id = name if sweep.k == 1 else f"{name}.r{rep}"
                 self.runs[run_id] = Run(run_id, sweep, rep, root / name,
                                         {(r["model"], r["task_id"]): r for r in scored if r["rep"] == rep})
+            stored = root / name / SUMMARIES
+            if stored.is_file() and (data := json.loads(stored.read_text()))["plugin"] == version("agentenv-portsim"):
+                self.replays |= {run_id: (r["episodes"], r["failed"]) for run_id, r in data["runs"].items()}
         self.wind_tasks = {t for run in self.runs.values() if run.sweep.wind for t in run.sweep.tasks}
         self.lines_tasks = {t for run in self.runs.values() if run.sweep.lines for t in run.sweep.tasks}
 
@@ -135,9 +150,17 @@ class Runs:
     def episodes(self, run_id: str) -> list[dict]:
         return self.replayed(run_id)[0]
 
+    def summaries(self, name: str) -> dict[str, dict]:
+        """The episodes and failures of each run of the sweep ``name``, as SUMMARIES holds them."""
+        replayed = {run_id: self.replayed(run_id) for run_id, run in self.runs.items() if run.sweep.name == name}
+        return {run_id: {"episodes": episodes, "failed": failed} for run_id, (episodes, failed) in replayed.items()}
+
     def replayed(self, run_id: str) -> tuple[list[dict], list[dict]]:
         """The summaries of the run's episodes that replay, and the error of each that doesn't: a recording made
         before the week changed."""
+        return self.once(self.replays, run_id, lambda: self.replay(run_id))
+
+    def replay(self, run_id: str) -> tuple[list[dict], list[dict]]:
         run, out, failed = self.runs[run_id], [], []
         for model, task_id in sorted(run.rows):
             try:
@@ -178,22 +201,33 @@ class Runs:
         return out
 
     def rollout(self, run_id: str, model: str, task_id: str) -> dict:
-        key = (run_id, model, task_id)
-        if key not in self.rollouts:
-            run = self.runs[run_id]
-            row = run.rows[model, task_id]
-            record = json.loads((run.dir / row["transcript"]).read_text())
-            task = self.pack_of(run).get(task_id)
-            ro = record | {"run": run_id, "task_id": task_id, "episode_id": row["instance"].rsplit("-", 1)[1],
-                           "started": row["started_utc"],
-                           "record": {"sweep": run.sweep.name, "rep": row["rep"], "attempt": row["attempt"],
-                                      "cost_usd": row["cost_usd"], "instance": row["instance"]}}
-            if run.sweep.live:
-                ro |= self.live(task, record["messages"], week_of(run.sweep))
-            elif record["final"]["submitted"]:
-                ro["final"] = record["final"] | {"grade": regrade(task, record["final"]["plan"])}
-            self.rollouts[key] = ro
-        return self.rollouts[key]
+        return self.once(self.rollouts, (run_id, model, task_id), lambda: self.played(run_id, model, task_id))
+
+    def once(self, cache: dict[Any, V], key: object, compute: Callable[[], V]) -> V:
+        """``cache[key]``, computed by the first caller while the others wait for it: the viewer's requests come in
+        parallel, and replaying a lines week takes seconds."""
+        if key not in cache:
+            with self.guard:
+                lock = self.locks.setdefault(key, threading.Lock())
+            with lock:
+                if key not in cache:
+                    cache[key] = compute()
+        return cache[key]
+
+    def played(self, run_id: str, model: str, task_id: str) -> dict:
+        run = self.runs[run_id]
+        row = run.rows[model, task_id]
+        record = json.loads((run.dir / row["transcript"]).read_text())
+        task = self.pack_of(run).get(task_id)
+        ro = record | {"run": run_id, "task_id": task_id, "episode_id": row["instance"].rsplit("-", 1)[1],
+                       "started": row["started_utc"],
+                       "record": {"sweep": run.sweep.name, "rep": row["rep"], "attempt": row["attempt"],
+                                  "cost_usd": row["cost_usd"], "instance": row["instance"]}}
+        if run.sweep.live:
+            ro |= self.live(task, record["messages"], week_of(run.sweep))
+        elif record["final"]["submitted"]:
+            ro["final"] = record["final"] | {"grade": regrade(task, record["final"]["plan"])}
+        return ro
 
     def live(self, task: Task, messages: list[dict], week: type[Week] = Week) -> dict:
         ref = self.references_of(week)[task.task_id]
