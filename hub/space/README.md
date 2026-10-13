@@ -9,7 +9,7 @@ base_path: /viewer/
 pinned: true
 license: other
 license_name: cc-by-sa-4.0-cc-by-4.0-meteocat-apache-2.0
-license_link: https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.5.2/data/LICENSE
+license_link: https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.5.3/data/LICENSE
 short_description: Port of Barcelona weeks on AgentEnv, replayed in 3D
 thumbnail: https://huggingface.co/spaces/earakely-scale/PortSimEnv-AgentEnv/resolve/main/thumbnail.jpg
 tags:
@@ -35,12 +35,14 @@ and live week, once each, and GPT-6.1 Sol and Claude Sonnet 5.5 on ten v1 weeks.
 and Haiku 5.5; GPT-6 Astra, GPT-6.1 Sol and GPT-6 Luna; Kimi K3, GLM-5.3, GLM-5.3-Flash, Qwen3.8-2.4T and DeepSeek
 V4.1 Flash on Fireworks; and Qwen3.8-27B on Groq.
 
-- **v5, the lines port:** the wind week with the shipping lines answering back. Each ship's agent, the firm the
-  port's 2024 record names for its call, is its own A2A agent, which the planner messages: the agents report ETAs that
-  firm up as their ships near, and a ship agrees a requested arrival time when it can make it by slowing down. Ships
-  berth first come, first served, a ship slowed on request keeping its turn, and an hour at anchor costs what an hour
-  late does. As in v4, the week is graded against the lower of the hindsight optimum, which knows every arrival, and
-  the best cost of a re-planner that follows the agents' ETAs and asks for arrival times.
+- **v5, the lines port:** the wind week with the shipping lines answering back. Each ship's agent, the firm the port's
+  2024 record names for its call, is its own A2A agent, which the planner messages: the published schedule is the lines'
+  estimate from three days out, the agents report ETAs that firm up as their ships near, and once a ship has sailed or
+  is within 48 hours its agent agrees a requested arrival time the ship can make, slowing down if need be, or offers the
+  earliest or the latest it can. The port berths a ship that misses its window at its next free slot, ships whose
+  arrival was agreed berth first come, first served, keeping their turn when slowed, and an hour at anchor costs what an
+  hour late does. As in v4, the week is graded against the lower of the hindsight cost, from a plan that knows every
+  arrival, and the best cost of a re-planner that follows the agents' ETAs and asks for arrival times.
 - **v4, the wind port:** the marine week in real Barcelona wind. Each week is moved into a real weather week of 2023
   to 2025, and the wind that blew at Meteocat's XEMA station Y7 (Bocana Sud), standing in for the Dique Sur
   anemometer of the port's traffic ordinance, sets its no-movement windows: above 25 kn ships of 300 m or more may not
@@ -60,13 +62,13 @@ V4.1 Flash on Fireworks; and Qwen3.8-27B on Groq.
   optimal, as in PortSimEnv itself.
 
 The overview's "Start here" opens on GPT-6 Astra's run of
-[`dock-36A-w05x1-busy-0-e09`](https://earakely-scale-portsimenv-agentenv.hf.space/viewer/#/run/lines-astra/openai%2Fgpt-6-astra/dock-36A-w05x1-busy-0-e09),
-a busy week at Terminal Catalunya (BEST) in the storm week of 11 November 2024 (reward 1.0), the one filmed for the
-plugin's README ([full film](https://github.com/earakely-scale/agentenv-portsim-plugin/releases/tag/replays-2026-10-11)).
-Astra agrees an arrival hour for every one of the 27 ships with their 7 shipping agents, 11 of the agreements slowing a
-ship down, and no ship waits at anchor; each message and its replies are steps of the replay. Then comes the model
-board, one table per version, v5 first; click a model to list its weeks, and a week to replay it. The same board is
-the dataset's `results` table.
+[`dock-24B-w07x1-busy-0-e09`](https://earakely-scale-portsimenv-agentenv.hf.space/viewer/#/run/lines-fix6-astra/openai%2Fgpt-6-astra/dock-24B-w07x1-busy-0-e09),
+a busy week at APM Terminals Barcelona in the storm week of 11 November 2024 (reward 1.0), the one filmed for the
+plugin's README ([full film](https://github.com/earakely-scale/agentenv-portsim-plugin/releases/tag/replays-2026-10-13)).
+Astra agrees 15 of the 17 ships' arrival hours with their 7 shipping agents, 7 of the agreements slowing a ship down,
+and the week costs less than the plan in hindsight; each message and its replies are steps of the replay. Then comes
+the model board, one table per version, v5 first; click a model to list its weeks, and a week to replay it. The same
+board is the dataset's `results` table.
 
 The dataset [earakely-scale/PortSimEnv-AgentEnv](https://huggingface.co/datasets/earakely-scale/PortSimEnv-AgentEnv)
 holds the weeks, the references, the runs and their transcripts in two kinds of tables: PortSim's own, one family per
@@ -79,7 +81,7 @@ Kolavi's environment in FineEnvs; this viewer is PortSimEnv's.
 | | PortSimEnv in FineEnvs | PortSimEnv on AgentEnv |
 |---|---|---|
 | Environment and code | [FineEnvs/PortSimEnv](https://huggingface.co/spaces/FineEnvs/PortSimEnv) (OpenEnv Space), [code](https://github.com/adithya-s-k/FineEnvs/tree/main/07-simulation-environments/portsim-v1) | [earakely-scale/agentenv-portsim-plugin](https://github.com/earakely-scale/agentenv-portsim-plugin) |
-| Eval | [FineEnvs/PortSimEnv-Eval](https://huggingface.co/spaces/FineEnvs/PortSimEnv-Eval) | [the `results` table](https://huggingface.co/datasets/earakely-scale/PortSimEnv-AgentEnv#results), [model board](https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.5.2/results/board.md) |
+| Eval | [FineEnvs/PortSimEnv-Eval](https://huggingface.co/spaces/FineEnvs/PortSimEnv-Eval) | [the `results` table](https://huggingface.co/datasets/earakely-scale/PortSimEnv-AgentEnv#results), [model board](https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.5.3/results/board.md) |
 | Dataset | [FineEnvs/PortSimEnv](https://huggingface.co/datasets/FineEnvs/PortSimEnv) | [earakely-scale/PortSimEnv-AgentEnv](https://huggingface.co/datasets/earakely-scale/PortSimEnv-AgentEnv) |
 | Replays | | this Space |
 | Article | [Simulation RL Environments, part 1](https://huggingface.co/spaces/FineEnvs/simulation-rl-environments) | |
@@ -94,19 +96,19 @@ the dataset:
 
 ```bash
 uv tool install agentenv-framework \
-    --with "agentenv-portsim @ git+https://github.com/earakely-scale/agentenv-portsim-plugin@v0.5.2"
+    --with "agentenv-portsim @ git+https://github.com/earakely-scale/agentenv-portsim-plugin@v0.5.3"
 agent-env portsim setup --agent        # build the env and agent images and register them (a few minutes)
 agent-env run portsim --task smoke     # no model: grades a known optimal plan, prints "passed"
 
 export HF_TOKEN=hf_...                  # with "Make calls to Inference Providers", on an account with credits
 export LITELLM_BASE_URL=https://router.huggingface.co/v1 LITELLM_API_KEY=$HF_TOKEN
-agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.5.2 --task dock-36A-w06x1-standard-0-e07 \
+agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.5.3 --task dock-36A-w06x1-standard-0-e07 \
     --model zai-org/GLM-5.3-Flash:baseten          # the default bundle: dock-v1-eval-lines (v5)
 ```
 
 `agent-env hf run` downloads the card and the bundles at that tag, checks that the plugins the card names are
 installed, shows what it will run and asks first (`--yes` skips the question). `dock-36A-w06x1-standard-0-e07` is the
-shortest lines and wind week, 4 watches, and each task stops an episode before it could spend $5. To replay your own
+shortest lines and wind week, 4 watches, and the tasks set no cost cap. To replay your own
 runs on the same viewer, locally, play them as a sweep:
 
 ```bash
@@ -117,12 +119,12 @@ agent-env portsim view mine            # at http://127.0.0.1:8237/viewer/
 
 The [dataset card](https://huggingface.co/datasets/earakely-scale/PortSimEnv-AgentEnv#play-a-week-yourself) has more:
 the v4, v3, v2 and v1 bundles and the other open models. If a step fails, see the plugin README's
-[troubleshooting](https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.5.2/README.md#run-it-yourself).
+[troubleshooting](https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.5.3/README.md#run-it-yourself).
 
 ## How this Space runs
 
-`start.sh` downloads the recorded sweeps (`runs/`) from the dataset at its `v0.5.2` tag (`--revision v0.5.2`), and
-`agent-env portsim view`, installed from the plugin's `v0.5.2` tag, serves them, replaying each v2 to v5 run
+`start.sh` downloads the recorded sweeps (`runs/`) from the dataset at its `v0.5.3` tag (`--revision v0.5.3`), and
+`agent-env portsim view`, installed from the plugin's `v0.5.3` tag, serves them, replaying each v2 to v5 run
 through its week from the recorded tool calls. The 3D twin is downloaded from PortSimEnv's public bucket at start.
 
 ## Licence and attribution
@@ -151,7 +153,7 @@ through its week from the recorded tool calls. The 3D twin is downloaded from Po
 - **The 3D twin:** © OpenStreetMap contributors (ODbL) · terrain: Terrain Tiles (AWS).
 - **Code:** the plugin and PortSimEnv's viewer are under the Apache License 2.0.
 
-The plugin's [NOTICE](https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.5.2/NOTICE) and
-[data/LICENSE](https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.5.2/data/LICENSE) set out each part.
+The plugin's [NOTICE](https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.5.3/NOTICE) and
+[data/LICENSE](https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.5.3/data/LICENSE) set out each part.
 This Space is independent: neither the Port de Barcelona, PortSimEnv's author, ECMWF, Meteocat, the NGA nor any
 shipping line or agent named in it is affiliated with it or endorses it.

@@ -16,10 +16,11 @@ agentenv-hf's check for keys and token shapes before anything is written, and --
 on top of the commit it read, removing what the build no longer writes.
 
     uv run python scripts/hub_dataset.py --out build/hub/dataset
-    uv run python scripts/hub_dataset.py --out build/hub/dataset --repo earakely-scale/PortSimEnv-AgentEnv --tag v0.5.2
+    uv run python scripts/hub_dataset.py --out build/hub/dataset --repo earakely-scale/PortSimEnv-AgentEnv --tag v0.5.3
 """
 
 import argparse
+import datetime
 import io
 import json
 import re
@@ -39,8 +40,16 @@ from huggingface_hub import CommitOperationAdd, CommitOperationDelete, HfApi
 
 from agentenv_portsim import lines as lines_weeks
 from agentenv_portsim import marine, tasks, wind
-from agentenv_portsim.schedule import LINES_ENV, MARINE_ENV, WIND_ENV, WIND_MAX_TURNS, schedule
-from agentenv_portsim.sweep import EVAL_PACK, RUNS, TIERS, ci, results
+from agentenv_portsim.schedule import (
+    LINES_ENV,
+    LINES_MAX_TURNS,
+    MARINE_ENV,
+    MAX_TURNS,
+    WIND_ENV,
+    WIND_MAX_TURNS,
+    schedule,
+)
+from agentenv_portsim.sweep import EVAL_PACK, RUNS, TIERS, ci, priced, results
 
 ROOT = Path(__file__).resolve().parents[1]
 CARD = ROOT / "hub/dataset/README.md"
@@ -48,8 +57,10 @@ VERSION = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["versi
 WEATHER = ROOT / "data/wind/weather.jsonl"
 SPLIT = "eval"
 BOARD = ["gpt", "sonnet", "opus", "haiku", "astra", "luna", "kimi", "glm", "glmflash", "qwen2t", "qwen27b", "dsflash"]
-SWEEPS = [f"{env}-{stage}{model}{replay}" for env in ("lines", "wind", "marine", "live") for model in BOARD
-          for stage in ("pilot-", "") for replay in ("", "-2", "-3")]  # replays of runs left unscored
+SWEEPS = ["lines-fix6-astra"] + [f"lines-r6-{model}{part}" for model in BOARD if model != "astra"
+                                 for part in ("", *(f"-{c}" for c in "bcdefghij"))]  # a model's weeks shared out
+SWEEPS += [f"{env}-{stage}{model}{replay}" for env in ("wind", "marine", "live") for model in BOARD
+           for stage in ("pilot-", "") for replay in ("", "-2", "-3")]  # replays of runs left unscored
 SWEEPS.append("g2")
 BUNDLES = {"v5": f"{EVAL_PACK}-lines", "v4": f"{EVAL_PACK}-wind", "v3": f"{EVAL_PACK}-marine",
            "v2": f"{EVAL_PACK}-live", "v1": EVAL_PACK}
@@ -70,6 +81,62 @@ BOARD_TABLE = re.compile(r"(<!-- board:(v\d|all) -->\n).*?(\n<!-- /board:\2 -->)
 LIVE_VERSIONS = ("v5", "v4", "v3", "v2")
 VERSION_NAMES = {"v5": "the lines port", "v4": "the wind port", "v3": "the marine port", "v2": "the live port"}
 MESSAGES = pa.field("messages", pa.list_(tables.MESSAGE))
+AUTHORS = [{"name": "Edgar Arakelyan", "github": "earakely-scale", "affiliation": "Scale AI"}]
+DATASET_URL = "https://huggingface.co/datasets/earakely-scale/PortSimEnv-AgentEnv"
+SPACE_URL = "https://huggingface.co/spaces/earakely-scale/PortSimEnv-AgentEnv"
+CODE_URL = "https://github.com/adithya-s-k/FineEnvs/tree/main/07-simulation-environments/portsim-live"
+CALLS = ("the Port of Barcelona's 2024 container calls at quays 24B (APM Terminals Barcelona) and 36A (Terminal "
+         "Catalunya, BEST), as PortSimEnv's dock-v1-eval one-week standard and busy weeks")
+WEATHER_SOURCE = ("; the wind that blew at Meteocat's XEMA station Y7 and the ECMWF open-data forecasts as issued, in "
+                  "real Barcelona weather weeks of 2023 to 2025")
+LIVE_SELECTION = ("the weeks where the rolling re-planner, re-planning on the week as known at every watch, reaches "
+                  "the hindsight optimum in at least 3 of its 4 solver configurations")
+REWARD = ("a feasible week scores 0.2 + 0.8 exp(-g/0.5), g = max(0, cost - reference) / (max(0, reference - floor) "
+          "+ 100), the floor being the cost no plan can avoid; a week that breaks a rule scores 0.2 times its share of "
+          "clean ships, below 0.2, and a ship left without a window breaks a rule; graded once, on the windows "
+          "confirmed and the week as it really happened")
+NEWS_EXCUSE = "cost or rule breaks that news brings to a window after its last chance to change (once it froze)"
+WIND_EXCUSE = ("cost or rule breaks that news, or wind the forecast didn't show at that ship's last chance, brings to "
+               "a window after its last chance to change, per ship; wind the forecast showed then is charged")
+EVAL = {
+    "v2": {"source": CALLS, "selection": f"15 of the 18 one-week standard and busy eval weeks: {LIVE_SELECTION}",
+           "tools": ["get_situation", "check_plan", "confirm_berths", "advance"], "max_turns": MAX_TURNS,
+           "reference": "the hindsight optimum: the plan CP-SAT proves optimal on the week as it really happened",
+           "excused": NEWS_EXCUSE, "baselines": {"rolling re-planner": "rolling", "naive policy": "naive"}},
+    "v3": {"source": CALLS + ", with the port's 2024 pilot and tug traffic",
+           "selection": f"the 15 live weeks with the port's pilots and tugs, all qualifying as live weeks do: "
+                        f"{LIVE_SELECTION}",
+           "tools": ["get_situation", "check_plan", "confirm_berths", "advance"], "max_turns": MAX_TURNS,
+           "reference": "the hindsight optimum: the plan CP-SAT proves optimal on the week as it really happened",
+           "excused": NEWS_EXCUSE, "baselines": {"rolling re-planner": "rolling", "naive policy": "naive"}},
+    "v4": {"source": CALLS + ", with the port's 2024 pilot and tug traffic" + WEATHER_SOURCE,
+           "selection": "15 marine weeks moved into real weather weeks, dealt from the 240 pairs of the 15 marine "
+                        "weeks and 16 weather weeks where (a) the forecast-following re-planner costs no more than "
+                        "hindsight in at least 3 of its 4 configurations, (b) the re-planner blind to the wind (in a "
+                        "week whose forecast warned of a gale that never came, the one holding every warned window) "
+                        "scores at most 0.9 in at least 3 of 4, (c) the week has at most 10 watches and (d) no ship "
+                        "alongside at hour 0 is due to leave inside a window above 30 kn",
+           "tools": ["get_situation", "check_plan", "confirm_berths", "advance"], "max_turns": WIND_MAX_TURNS,
+           "reference": "min(the hindsight optimum, the best cost of the forecast-following re-planner over its 4 "
+                        "solver configurations)",
+           "excused": WIND_EXCUSE, "baselines": {"forecast-following re-planner": "rolling",
+                                                 "re-planner blind to the wind": "blind", "naive policy": "naive"}},
+    "v5": {"source": CALLS + ", with the port's 2024 pilot and tug traffic" + WEATHER_SOURCE
+           + "; each ship's agent is the firm the 2024 record names for the call",
+           "selection": "the 15 wind weeks, all qualifying: (a) at least 3 of the follower's 4 configurations finish "
+                        "feasible, (b) the silent follower, which never asks the ships' agents, scores at most 0.9 in "
+                        "at least 3 of 4, so asking matters, and (c) the week has at most 10 watches",
+           "tools": ["get_situation", "check_plan", "confirm_berths", "advance", "message_agent"],
+           "max_turns": LINES_MAX_TURNS,
+           "reference": "min(the hindsight optimum, which knows every arrival and asks each ship at the first watch "
+                        "its agent could commit, the best cost of the follower re-planner, which asks the ships' "
+                        "agents, over its 4 solver configurations)",
+           "excused": WIND_EXCUSE + "; an ETA that proves wrong is not news: a late ship's lateness and an early "
+                                    "one's hours at anchor are charged, and a ship whose arrival was agreed arrives "
+                                    "at that hour",
+           "baselines": {"follower re-planner, asking the ships' agents": "rolling",
+                         "silent follower, never asking": "silent", "naive policy": "naive"}},
+}
 
 
 def version_of(sweep: dict) -> str:
@@ -153,7 +220,7 @@ def episode_rows(sweep_dir: Path, version: str, by_id: dict, episode_ids: dict[s
                "difficulty": task.difficulty, "quay": task.quay, "num_ships": len(task.ships), "reward": r["reward"],
                "feasible": r["feasible"], "cost": r["plan_cost"], "optimal_cost": r["optimal_cost"],
                "turns": r["turns"], "tool_calls": r["tool_calls"], "input_tokens": r["input_tokens"],
-               "output_tokens": r["output_tokens"], "cost_usd": r["cost_usd"], "seconds": record["seconds"],
+               "output_tokens": r["output_tokens"], "cost_usd": priced(r), "seconds": record["seconds"],
                "wall_seconds": r["wall_seconds"], "end_reason": r["end_reason"], "sweep": sweep_dir.name}
         if version == "v1":
             row |= {"submitted": r["submitted"], "checks": r["checks"]}
@@ -240,6 +307,27 @@ def board_json(version: str, rows: list[dict], weeks: int) -> dict:
         "submitted": r["finished"], "feasible": r["feasible"], "optimal": r["optimal"],
         "tokens_out": r["output_tokens"], "tokens_in": r["input_tokens"], "median_s": round(r["median_seconds"]),
         "cost_usd": round(r["cost_usd"], 2)} for r in rows]}
+
+
+def eval_card(version: str, rows: list[dict], refs: list[dict], date: str) -> dict:
+    """The version's eval card, in the shape FineEnvs' simulation catalog renders."""
+    meta = EVAL[version]
+    weeks = [r for r in refs if r["qualifies"]]
+    return {
+        "env": ENVS[version], "version": version, "authors": AUTHORS, "framework": "agentenv",
+        "tasks": {"split": SPLIT, "n": len(weeks), "source": meta["source"], "selection": meta["selection"]},
+        "harness": {"agent": "portsim-llm", "tools": meta["tools"], "max_turns": meta["max_turns"]},
+        "grading": {"reference": meta["reference"], "reward": REWARD, "excused": meta["excused"], "judge": False},
+        "baselines": [{"name": name, "mean": round(statistics.mean(r[key]["reward"] for r in weeks), 4)}
+                      for name, key in meta["baselines"].items()],
+        "models": [{"model": r["model_name"], "provider": r["provider"], "runs": r["runs"],
+                    "mean": round(r["mean_reward"], 4), "ci95": [round(r["ci_low"], 4), round(r["ci_high"], 4)],
+                    "feasible": r["feasible"],
+                    "usd_per_episode": None if r["cost_per_episode"] is None else round(r["cost_per_episode"], 4)}
+                   for r in rows],
+        "links": {"runs": f"{DATASET_URL}/viewer/{version}_episodes", "replay": SPACE_URL, "code": CODE_URL},
+        "date": date,
+    }
 
 
 def board_markdown(version: str, rows: list[dict], weeks: int) -> str:
@@ -330,7 +418,7 @@ def card_text(plugin: str, boards: dict[str, str] | None = None) -> str:
 
 
 def build(sweeps: list[str], runs_dir: Path, out: Path, plugin: str,
-          summary: tuple[str, ...] = LIVE_VERSIONS) -> dict[str, bytes]:
+          summary: tuple[str, ...] = LIVE_VERSIONS, date: str = "") -> dict[str, bytes]:
     pack = tasks.pack_tasks(EVAL_PACK)
     by_version = {"v1": {t.task_id: t for t in pack}, "v2": {t.task_id: t for t in pack},
                   "v3": {t.task_id: t for t in marine.pack().tasks}, "v4": {t.task_id: t for t in wind.pack().tasks},
@@ -368,6 +456,9 @@ def build(sweeps: list[str], runs_dir: Path, out: Path, plugin: str,
             board_rows += rows
             boards[v] = board_markdown(v, rows, weeks)
             files[f"results/{v}.json"] = (json.dumps(board_json(v, rows, weeks), indent=1) + "\n").encode()
+            if v in EVAL:
+                card_json = eval_card(v, rows, refs[v], date)
+                files[f"results/eval-{v}.json"] = (json.dumps(card_json, indent=2, ensure_ascii=False) + "\n").encode()
         if v in REFERENCE_FILES:
             ref_name, source = REFERENCE_FILES[v]
             files[f"references/{ref_name}.jsonl"] = source.read_bytes()
@@ -414,8 +505,9 @@ def main():
     ap.add_argument("--plugin-ref", default=f"v{VERSION}",
                     help="The plugin tag the card's bundles pin, for agent-env hf run.")
     ap.add_argument("--repo", help="Push the folder to this dataset repo after writing it.")
-    ap.add_argument("--tag", help="Tag the pushed commit, e.g. v0.5.2.")
+    ap.add_argument("--tag", help="Tag the pushed commit, e.g. v0.5.3.")
     ap.add_argument("--message", default="Publish PortSimEnv on AgentEnv")
+    ap.add_argument("--date", default=datetime.date.today().isoformat(), help="The eval cards' date.")
     ap.add_argument("--summary-versions", default=",".join(LIVE_VERSIONS),
                     help="The versions the all-weeks summary covers, e.g. v4,v3,v2 while v5 is still being played.")
     args = ap.parse_args()
@@ -423,7 +515,7 @@ def main():
     sweeps = args.sweeps or [s for s in SWEEPS if (args.runs / s / "sweep.json").is_file()]
     print("sweeps:", " ".join(sweeps))
     with namespace_routing():
-        files = build(sweeps, args.runs, args.out, plugin, tuple(args.summary_versions.split(",")))
+        files = build(sweeps, args.runs, args.out, plugin, tuple(args.summary_versions.split(",")), args.date)
     scan(files, known_values())
     write(files, args.out)
     counts = {p: pq.read_metadata(io.BytesIO(c)).num_rows for p, c in files.items() if p.endswith(".parquet")}

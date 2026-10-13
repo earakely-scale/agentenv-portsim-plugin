@@ -6,7 +6,7 @@
     "busy": 12,
     "standard": 3
   },
-  "sha256": "079042827b518264efa6629f07966abbfad8b2b1a7443a911866c2931d368d0f",
+  "sha256": "d3fe06b74a8dff25b0611171d380a06b47b2bc367ba0f06e0360e33a3e09b654",
   "weeks": [
     5,
     6,
@@ -20,7 +20,7 @@
     "24B": 7,
     "36A": 8
   },
-  "source": "dock-v1-wind's tasks with rules.lines added and the arrival news as the agents' ETAs",
+  "source": "dock-v1-wind's tasks with rules.lines added, each arrival off its schedule by its agent's long-range error, and the arrival news as the agents' ETAs",
   "wind": {
     "pack": "dock-v1-wind",
     "sha256": "4362816b3657373063afab2f06c97cf76f941cb4e5b2b593b0a754e4ba9da0c9"
@@ -36,7 +36,7 @@
         "basis": "Directive 2002/59/EC art. 4 and Orden FOM/1194/2011 art. 9 require a notice at least 24 h before arrival; the IMO Just In Time Arrival Guide (2020) puts berth planning at about 48 h; the 2025 berthing ordinance (BOE-A-2025-5157) defines arrival by the call 1 h before buoy S. The 48 h report and the delivery at the next watch are assumptions."
       },
       "eta_error": {
-        "value": "mean absolute error 20% of the hours left, 80% of ships later than their ETA",
+        "value": "mean absolute error 20% of the hours left, as from 72 hours out at most, 80% of ships later than their ETA; the published schedule is the estimate from 72 hours out",
         "basis": "Assumption, inside the published range: Busan New Port 2022-23 (agent ETAs 24-48 h out, MAE 5 h 15 min), Antwerp 2019 (10-15 h), MSC's Barcelona-Valencia loop 2017-18 (80% later than the leg's ETA, 60% of those within 10 h)."
       },
       "speeds": {

@@ -1,11 +1,12 @@
-PortSim lines: a wind week at a Port of Barcelona quay where the shipping lines answer back. Each ship's agent, the firm that deals with the port for its line, is its own A2A agent the planner can message: it reports the ship's ETA as the ship nears, answers when asked, and agrees an arrival time when the ship can make it by slowing down. Ships berth first come, first served, and an hour at anchor costs what an hour late does.
+PortSim lines: a wind week at a Port of Barcelona quay where the shipping lines answer back. Each ship's agent, the firm that deals with the port for its line, is its own A2A agent the planner can message: it reports the ship's ETA as the ship nears and answers when asked, and once the ship has sailed or is within 48 hours it agrees an arrival time the ship can make, slowing down if need be, or offers the earliest or the latest it can. The port berths a ship that misses its window at its next free slot, ships whose arrival was agreed berth first come, first served, and an hour at anchor costs what an hour late does.
 
 Every task deploys the env registered as `portsim-lines` on the gateway provider (run `agent-env portsim setup` once)
 and loads one week of the dock-v1-lines pack through the env's `urn:portsim:live-load/v1` extension. Each week is a
 dock-v1-wind week with each ship's agent (named in the port's 2024 record), its previous port's distance and how far off
-its agent's ETAs run: most ships arrive later than their agent says, by less as they near. The planner sees the ETAs
-as they come; the week is graded on when the ships really arrived. A ship slowed at the planner's request arrives at
-the agreed hour and keeps its turn in the queue.
+its agent's ETAs run: the published schedule is the lines' estimate from three days out, and most ships arrive later
+than their agent says, by less as they near. The planner sees the ETAs as they come; the week is graded on when the
+ships really arrived. A ship slowed at the planner's request arrives at the agreed hour and keeps its turn in the
+queue.
 
 The task hides `port_notice` and the agents' two tools (`ship_status`, `agree_arrival`) from the planner's role and
 gives the `line` role those two tools only. It registers one trigger per watch that delivers the watch's notices,

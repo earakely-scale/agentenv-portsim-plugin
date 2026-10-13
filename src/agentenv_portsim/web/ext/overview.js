@@ -98,8 +98,8 @@ function capsText(caps) {
   return `model spend capped per episode at ${[...caps].map(([m, c]) => `$${c} for ${nameOf(m)}`).join(", ")}`;
 }
 
-/** The run the README and the cards film and link: GPT-6 Astra's lines week, every ship's arrival agreed. */
-const FEATURED = { run: "lines-astra", model: "openai/gpt-6-astra", task_id: "dock-36A-w05x1-busy-0-e09" };
+/** The run the README and the cards film and link: GPT-6 Astra's lines week, below hindsight's cost. */
+const FEATURED = { run: "lines-fix6-astra", model: "openai/gpt-6-astra", task_id: "dock-24B-w07x1-busy-0-e09" };
 
 function showcase(groups) {
   const first = groups[0];

@@ -7,9 +7,9 @@
 [![Dataset on Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97%20Dataset-tasks%20and%20runs-yellow)](https://huggingface.co/datasets/earakely-scale/PortSimEnv-AgentEnv)
 
 <p align="center">
-  <a href="https://github.com/earakely-scale/agentenv-portsim-plugin/releases/tag/replays-2026-10-11"><img src="assets/lines-port.webp" width="100%" alt="GPT-6 Astra plays a lines week at the Port of Barcelona on AgentEnv: the watch panel lists each arrival time it requests from the ships' agents and their answers, agreed or refused, while the shipping agents' ETAs and arrival calls arrive as bulletins and ships slowed on request berth as they get in"></a>
+  <a href="https://github.com/earakely-scale/agentenv-portsim-plugin/releases/tag/replays-2026-10-13"><img src="assets/lines-port.webp" width="100%" alt="GPT-6 Astra plays a lines week at the Port of Barcelona on AgentEnv: the watch panel lists each arrival time it requests from the ships' agents and their answers, agreed or refused, while the shipping agents' ETAs and arrival calls arrive as bulletins and ships slowed on request berth as they get in"></a>
 </p>
-<p align="center"><sub><b>The lines port (v5):</b> GPT-6 Astra plans <code>dock-36A-w05x1-busy-0-e09</code>, Terminal Catalunya (BEST)'s busy week of 29 January 2024 in the wind of the storm week of 11 November 2024, watch by watch on AgentEnv's virtual clock. Its 27 ships belong to 7 shipping agents, each its own A2A agent that reports its ships' ETAs as they near and answers the planner's <code>message_agent</code>. Astra requests an arrival hour for every ship, 54 requests in 28 messages: 23 come back "can't arrive that early" and it asks again, until all 27 ships have an agreed arrival, 11 of the agreements slowing a ship down. No ship waits at anchor, and the week costs 413, what the plan in hindsight, which knows every arrival, costs: reward 1.0. The follower re-planner, which also asks, costs 539 (0.339); the same re-planner never asking, and v2's naive policy, break rules (0.119 and 0.163). Replayed on PortSimEnv's 3D viewer; <a href="https://github.com/earakely-scale/agentenv-portsim-plugin/releases/tag/replays-2026-10-11">full film</a>. Twin © OpenStreetMap contributors (ODbL); forecasts ECMWF open data (CC BY 4.0, modified); wind windows derived from Meteocat XEMA Y7.</sub></p>
+<p align="center"><sub><b>The lines port (v5):</b> GPT-6 Astra plans <code>dock-24B-w07x1-busy-0-e09</code>, APM Terminals Barcelona's busy week of 12 February 2024 in the wind of the storm week of 11 November 2024, watch by watch on AgentEnv's virtual clock. Its 17 ships belong to 7 shipping agents, each its own A2A agent that reports its ships' ETAs as they near and answers the planner's <code>message_agent</code>. Astra requests 29 arrival hours in 25 messages and agrees 15 of the 17 arrivals, 7 of them slowing a ship down. Two of its 9 confirms come back with rule breaks, which it fixes with the next. The week costs 758, below the 772 of the plan in hindsight, which knows every arrival: reward 1.0. The follower re-planner, which also asks, scores 0.816; the same re-planner never asking 0.204, and v2's naive policy 0.200. Replayed on PortSimEnv's 3D viewer; <a href="https://github.com/earakely-scale/agentenv-portsim-plugin/releases/tag/replays-2026-10-13">full film</a>. Twin © OpenStreetMap contributors (ODbL); forecasts ECMWF open data (CC BY 4.0, modified); wind windows derived from Meteocat XEMA Y7.</sub></p>
 
 <details open>
 <summary><b>How a live, marine, wind or lines task is built</b>: the task's steps, and the watch loop inside <code>play</code> (details in <a href="#the-live-port">The live port</a>, <a href="#the-marine-port">The marine port</a>, <a href="#the-wind-port">The wind port</a> and <a href="#the-lines-port">The lines port</a>)</summary>
@@ -35,11 +35,13 @@ flowchart TD
 
 In the newest version, the lines port (v5), the agent runs one container quay at the Port of Barcelona in real wind
 and deals with the shipping lines as a terminal does: each ship's agent, the firm the port's 2024 record names for the
-call, is its own A2A agent on AgentEnv. The agents report ETAs that firm up as their ships near, most of them
-optimistic; the planner can ask them for the latest and request arrival times, which a ship agrees when it can make
-them by slowing down. Ships berth first come, first served, a ship slowed on request keeping its turn, and an hour at
-anchor costs what an hour late does. The weeks are the wind port's (v4): each of its 15 weeks is moved into a real
-Barcelona weather week of 2023 to 2025, with the ECMWF forecasts as they were issued at every watch.
+call, is its own A2A agent on AgentEnv. The published schedule is the lines' estimate from three days out, and the
+agents report ETAs that firm up as their ships near, most of them optimistic. The planner can ask them for the latest
+and request arrival times: once a ship has sailed or is within 48 hours, its agent agrees an hour the ship can make,
+slowing down if need be, or offers the earliest or the latest it can. The port berths a ship that misses its window at
+its next free slot, ships whose arrival was agreed berth first come, first served, keeping their turn when slowed, and
+an hour at anchor costs what an hour late does. The weeks are the wind port's (v4): each of its 15 weeks is moved into
+a real Barcelona weather week of 2023 to 2025, with the ECMWF forecasts as they were issued at every watch.
 
 In every version the ships and their week come from 2024, and the week has just gone wrong: late and bunched ships,
 closed quay sections, crane breakdowns, gales, emergencies. The agent decides when, where along the quay and with how
@@ -62,14 +64,16 @@ port (v5), the wind port (v4), the marine port (v3) and the live week (v2) are n
 - **Watch:** a point in the week where the agent re-plans: watch 0 at hour 0, then one at each bulletin.
 - **Bulletin:** the news a watch brings, from ships and the port's services; in v4 also Port Control's forecast.
 - **Freeze:** from watch 1 on, a window starting less than 6 hours after the current hour is frozen and can't change.
-- **Excuse:** a rule break or cost that news (in v4, unforecast wind too) brought to a window after its last chance
-  to change; not charged.
+- **Excuse:** a rule break or cost that news (in v4 and v5, unforecast wind too) brought to a window after its last
+  chance to change; not charged.
 - **Re-planner (rolling):** CP-SAT re-planning at each watch on the week as known; in v4 forecast-following, or blind
-  to the wind; in v5 the follower, which also requests arrival times through the agents.
-- **Anchor:** what a wind or lines week scores 1.0 at: the lower of the hindsight optimum and the best cost of the
+  to the wind; in v5 the follower, which also requests arrival times through the agents and takes their counter-offers.
+- **Anchor:** what a wind or lines week scores 1.0 at: the lower of the hindsight cost and the best cost of the
   re-planner that follows the forecasts (v4) or the agents' ETAs and requests arrival times (v5).
-- **Ship's agent:** in v5, the firm that deals with the port for a ship's line, deployed as its own A2A agent.
-- **Turn:** in v5, a ship's place in the first-come queue: when it would arrive at cruising speed.
+- **Ship's agent:** in v5, the firm that deals with the port for a ship's line, deployed as its own A2A agent: it
+  reports the ship's ETAs and agrees arrival times with the planner.
+- **Turn:** in v5, a ship's place in the first-come queue, which holds for the ships whose arrival was agreed: when it
+  would arrive at cruising speed, so a ship slowed on request keeps it.
 - **Bundle:** what `agent-env run` plays: a folder of tasks and their verifiers, or one a plugin ships (`portsim`).
 - **CP-SAT:** Google OR-Tools' constraint solver; it proves the hindsight optimum, the best plan knowing the whole week.
 
@@ -85,8 +89,9 @@ port (v5), the wind port (v4), the marine port (v3) and the live week (v2) are n
 
 - **Five environments, in one image.**
   - **v5, the lines port,** `portsim-lines`, plays v4's wind week with the shipping lines answering back: each ship's
-    agent is its own A2A agent (`portsim-line`) the planner messages for ETAs and arrival times, ships berth first
-    come, first served, and an hour at anchor costs as an hour late does ([The lines port](#the-lines-port)).
+    agent is its own A2A agent (`portsim-line`) the planner messages for ETAs and arrival times, the port berths a
+    ship that misses its window at its next free slot, ships whose arrival was agreed berth first come, first served,
+    and an hour at anchor costs as an hour late does ([The lines port](#the-lines-port)).
   - **v4, the wind port,** `portsim-wind`, plays v3's marine week in a real Barcelona weather week of 2023 to 2025: the
     wind that blew at the port's anemometer sets the rules, and at every watch the forecast arrives in a Barcelona Port
     Control bulletin, standing in for the port's own forecasts: the ECMWF run published by then, adjusted to that
@@ -117,14 +122,14 @@ port (v5), the wind port (v4), the marine port (v3) and the live week (v2) are n
   - `view` and `record` replay runs on a 3D twin of the quay and film them ([Watch a run](#watch-a-run)).
 - **On the Hugging Face Hub.** The dataset
   [earakely-scale/PortSimEnv-AgentEnv](https://huggingface.co/datasets/earakely-scale/PortSimEnv-AgentEnv) holds the
-  weeks of every version, the wind, marine and live references and every recorded run; its default table is the wind
-  weeks. It has PortSim's own tables for each version and agentenv-hf's standard tables for each runnable bundle (the
-  15 wind weeks, the 15 marine weeks, the 15 live weeks and the 50 eval weeks). The plugin installs
-  [agentenv-hf](https://github.com/earakely-scale/agentenv-hf-plugin), so `agent-env hf run` plays a week straight
-  from the dataset and `agent-env hf publish` publishes your own runs. The
+  weeks of every version, the lines, wind, marine and live references and every recorded run; its default table is
+  the lines weeks. It has PortSim's own tables for each version and agentenv-hf's standard tables for each runnable
+  bundle (the 15 lines weeks, the 15 wind weeks, the 15 marine weeks, the 15 live weeks and the 50 eval weeks). The
+  plugin installs [agentenv-hf](https://github.com/earakely-scale/agentenv-hf-plugin), so `agent-env hf run` plays a
+  week straight from the dataset and `agent-env hf publish` publishes your own runs. The
   [Space](https://huggingface.co/spaces/earakely-scale/PortSimEnv-AgentEnv) replays the runs in 3D
   ([On the Hugging Face Hub](#on-the-hugging-face-hub)).
-- **Results.** Twelve models on the 15 live, 15 marine and 15 wind weeks ([the model board](#the-model-board)), and
+- **Results.** Twelve models on the 15 lines, wind, marine and live weeks ([the model board](#the-model-board)), and
   GPT-6.1 Sol and Claude Sonnet 5.5 first on the 15 wind weeks ([wind results](#wind-results)), on the 15 marine weeks
   ([marine results](#marine-results)), on all 15 live weeks
   ([the first live results](#the-first-live-results)) and on ten weeks planned in one go
@@ -133,53 +138,49 @@ port (v5), the wind port (v4), the marine port (v3) and the live week (v2) are n
 ## The model board
 
 **The lines port (v5).** Twelve models play every lines week once, 180 runs, on the same harness as the earlier
-ports with `message_agent` and 72 turns a week (the providers are below). Mean reward against the anchor, the plan in
-hindsight on every week:
+ports with `message_agent` and 72 turns a week (the providers are below). Mean reward against the anchor, the lower of
+hindsight's cost and the follower's best:
 
 | Model | Provider | Weeks | Mean reward (95% CI) | Feasible | At the anchor | Ships agreed | Hours at anchor a week | Cost per episode |
 |---|---|---:|---|---:|---:|---:|---:|---:|
-| GPT-6 Astra | Azure OpenAI | 15 of 15 | **0.691** (0.553 to 0.810) | 13 | 3 | 95% | 31 | $1.77 |
-| GPT-6.1 Sol | Azure OpenAI | 15 of 15 | **0.394** (0.279 to 0.533) | 8 | 1 | 92% | 40 | $0.29 |
-| Claude Opus 5.5 | Anthropic | 15 of 15 | **0.315** (0.180 to 0.471) | 5 | 1 | 53% | 35 | $2.03 |
-| Claude Sonnet 5.5 | Anthropic | 15 of 15 | **0.228** (0.159 to 0.328) | 3 | 0 | 50% | 40 | $1.60 |
-| GPT-6 Luna | Azure OpenAI | 15 of 15 | **0.144** (0.132 to 0.156) | 0 | 0 | 11% | 323 | $0.06 |
-| Claude Haiku 5.5 | Anthropic | 15 of 15 | **0.142** (0.129 to 0.152) | 0 | 0 | 14% | 71 | $0.09 |
-| Kimi K3 | Fireworks | 15 of 15 | **0.133** (0.083 to 0.215) | 2 | 0 | 49% | 51 | $1.66 |
-| Qwen3.8-2.4T | Fireworks | 15 of 15 | **0.106** (0.072 to 0.135) | 0 | 0 | 43% | 42 | $2.73 |
-| GLM-5.3-Flash | Fireworks | 15 of 15 | **0.096** (0.070 to 0.119) | 0 | 0 | 43% | 21 | $0.14 |
-| GLM-5.3 | Fireworks | 15 of 15 | **0.085** (0.017 to 0.199) | 1 | 0 | 13% | 4 | $0.78 |
-| DeepSeek V4.1 Flash | Fireworks | 15 of 15 | **0.072** (0.037 to 0.108) | 0 | 0 | 6% | 18 | $0.30 |
-| Qwen3.8-27B | Groq | 15 of 15 | **0.037** (0.020 to 0.057) | 0 | 0 | 0% | 151 | $0.97 |
+| Claude Opus 5.5 | Anthropic | 15 of 15 | **0.593** (0.453 to 0.725) | 14 | 1 | 86% | 27 | $2.42 |
+| GPT-6 Astra | Azure OpenAI | 15 of 15 | **0.568** (0.420 to 0.722) | 14 | 3 | 90% | 25 | $2.16 |
+| GPT-6.1 Sol | Azure OpenAI | 15 of 15 | **0.536** (0.392 to 0.693) | 14 | 3 | 90% | 30 | $0.32 |
+| Claude Sonnet 5.5 | Anthropic | 15 of 15 | **0.387** (0.269 to 0.517) | 15 | 0 | 40% | 51 | $1.55 |
+| Qwen3.8-2.4T | Fireworks | 15 of 15 | **0.291** (0.171 to 0.423) | 8 | 0 | 42% | 46 | $2.26 |
+| GLM-5.3-Flash | Fireworks | 15 of 15 | **0.261** (0.171 to 0.367) | 6 | 0 | 43% | 81 | $0.18 |
+| Claude Haiku 5.5 | Anthropic | 15 of 15 | **0.258** (0.203 to 0.322) | 13 | 0 | 12% | 101 | $0.10 |
+| GPT-6 Luna | Azure OpenAI | 15 of 15 | **0.234** (0.199 to 0.284) | 13 | 0 | 18% | 186 | $0.06 |
+| Kimi K3 | Fireworks | 15 of 15 | **0.231** (0.172 to 0.308) | 5 | 0 | 43% | 122 | $2.02 |
+| DeepSeek V4.1 Flash | Fireworks | 15 of 15 | **0.168** (0.089 to 0.269) | 6 | 0 | 16% | 53 | $0.30 |
+| GLM-5.3 | Fireworks | 15 of 15 | **0.153** (0.029 to 0.307) | 3 | 0 | 29% | 2 | $0.75 |
+| Qwen3.8-27B | Groq | 15 of 15 | **0.143** (0.118 to 0.164) | 1 | 0 | 0% | 171 | $1.63 |
 
 *Ships agreed*: the share of a week's ships whose arrival the planner agreed with their agent. *At the anchor*: weeks
-at or below hindsight's cost.
+at or below the anchor's cost.
 
-- **Agreeing arrivals is what scores.** GPT-6 Astra and GPT-6.1 Sol agree an arrival for 95% and 92% of a week's ships,
-  Claude Opus and Sonnet 5.5 for about half, Claude Haiku 5.5 and GPT-6 Luna for 14% and 11%, and Qwen3.8-27B for none.
-  A ship left unagreed arrives late more often than not, and its window slides into another's: most rule breaks land
-  on such ships (83% of Sonnet's, 69% of Opus's, 87% of Haiku's). GPT-6.1 Sol's breaks are mostly its own clashes
-  among ships it had agreed (62%).
-- **GPT-6 Astra leads clearly:** feasible in 13 of 15 weeks, at hindsight's cost in 3, and at or below the follower's,
-  the re-planner that also asks the agents, in 10.
-- **The ranking moves.** Claude Opus 5.5 and Claude Sonnet 5.5, level with GPT-6 Astra on the wind port (0.906 and
-  0.888), score 0.315 and 0.228: they lock about half the arrivals and plan the rest on ETAs that most often prove
-  too early. Kimi K3, the lowest of the Fireworks models on the wind port, is the best open model here.
-- **Agreeing isn't enough for the open models.** Kimi K3 agrees about half a week's ships, as Opus and Sonnet do, but
-  keeps 2 weeks feasible, with about half of its rule breaks on ships it had agreed; Qwen3.8-2.4T and GLM-5.3-Flash
-  agree 43% and keep none. GLM-5.3 and DeepSeek V4.1 Flash mostly run out of reply: in 11 and 9 of their weeks the
-  model reasoned past the 32,000-token reply limit twice in a row, which ends the episode, and the week ran on the
-  windows it had confirmed (none, in 10 of GLM-5.3's 11).
-- **The small closed models barely use the agents:** Claude Haiku 5.5 and GPT-6 Luna keep no week feasible, and
-  Luna's ships wait 323 hours a week at anchor.
-- **A late ship is a rule break, not a delay.** A ship that gets in after its window starts berths when it arrives, and
-  the clash, crane shortage or queue break that follows is charged unless its arrival was agreed, so a few late ships
-  cap a week below 0.2. On `dock-36A-w05x1-busy-0-e09` Claude Sonnet 5.5 agreed 21 of 27 arrivals and its windows
-  cost 451 against hindsight's 413, but the four ships it hadn't agreed clash at the end of the week, and it scores
-  0.170. Even a re-planner that pads every unagreed ETA by 2.5 times its mean error is infeasible on all 15 weeks, so
-  the lines port rewards locking arrivals far more than buffering them.
+- **Three models lead, within noise of each other.** Claude Opus 5.5, GPT-6 Astra and GPT-6.1 Sol agree an arrival for
+  86% to 90% of a week's ships and keep 14 of their 15 weeks feasible. Opus and Astra score above the follower, the
+  re-planner that also asks the agents (0.548), and cost no more than it in 9 weeks each; Sol in 6.
+- **Not asking costs hours at anchor, not rule breaks.** The port berths a ship that misses its window at the first
+  free stretch of quay, so a planner that rarely asks stays feasible and pays in waiting. Claude Sonnet 5.5 agrees 40%
+  of a week's ships and keeps all 15 weeks feasible, at 0.387. Claude Haiku 5.5 and GPT-6 Luna agree 12% and 18% and
+  keep 13 feasible, but their ships wait 101 and 186 hours a week at anchor, against 25 to 30 for the top three, and
+  they score about what the follower that never asks does (0.242).
+- **The open models agree less and break more rules.** Qwen3.8-2.4T, GLM-5.3-Flash and Kimi K3 agree about 43% of a
+  week's ships but keep only 5 to 8 weeks feasible. Most of Qwen3.8-2.4T's and GLM-5.3-Flash's rule breaks land on
+  ships they hadn't agreed; most of Kimi K3's are clashes and crane shortages among ships it had. Qwen3.8-2.4T and
+  GLM-5.3-Flash score 0.607 and 0.517 on the three standard weeks and about 0.2 on the busy ones.
+- **Two open models mostly run out of reply.** In 10 of GLM-5.3's weeks and 9 of DeepSeek V4.1 Flash's, the model
+  reasoned past the 32,000-token reply limit twice in a row, which ends the episode, and the week ran on the windows
+  it had confirmed: none, in all 10 of GLM-5.3's, which stopped at 2 to 4 turns. These weeks are scored as played,
+  as on the earlier ports.
+- **Qwen3.8-27B never asks:** no arrival agreed in any week, and 1 week feasible.
+- **The lines port is the hardest:** 11 of the 12 models score lower than on the wind port, whose weeks these are;
+  Claude Opus 5.5 and GPT-6 Astra fall from about 0.9 to under 0.6.
 
-On the same weeks the follower scores 0.485 in its first solver configuration, the follower that never asks 0.116 and
-v2's naive policy 0.137. Every run is in the dataset's `v5_episodes`, and replays in the
+On the same weeks the follower scores 0.548 in its first solver configuration, the follower that never asks 0.242 and
+v2's naive policy 0.184. Every run is in the dataset's `v5_episodes`, and replays in the
 [Space](https://huggingface.co/spaces/earakely-scale/PortSimEnv-AgentEnv) with each message to the ships' agents
 among its steps; [results/board.md](results/board.md) has the week-by-week detail.
 
@@ -220,8 +221,8 @@ weeks:
   reported problems runs from at most 5% of the time (Claude Opus 5.5) to 94% or more (Qwen3.8-27B).
 - **Qwen3.8-27B,** the one model small enough to fine-tune cheaply, never found a valid plan.
 
-With the lines port, over all 60 weeks, GPT-6 Astra leads at 0.882, ahead of Claude Opus 5.5 (0.787), GPT-6.1 Sol
-(0.750) and Claude Sonnet 5.5 (0.738); [results/board.md](results/board.md#summary) has that table.
+With the lines port, over all 60 weeks, Claude Opus 5.5 (0.857) and GPT-6 Astra (0.851) lead, ahead of GPT-6.1 Sol
+(0.786) and Claude Sonnet 5.5 (0.778); [results/board.md](results/board.md#summary) has that table.
 
 [results/board.md](results/board.md) has each version's table, what breaks, checking and heeding, cost, how it was run
 and the caveats. One run per model and week, so the CIs, a bootstrap over the weeks, are wide. The board is on the Hub
@@ -244,7 +245,7 @@ You need [Docker](https://docs.docker.com/get-docker/), running and usable witho
 
 ```bash
 uv tool install agentenv-framework \
-    --with "agentenv-portsim @ git+https://github.com/earakely-scale/agentenv-portsim-plugin@v0.5.2"
+    --with "agentenv-portsim @ git+https://github.com/earakely-scale/agentenv-portsim-plugin@v0.5.3"
 agent-env portsim setup              # build the env image for this machine; register the envs "portsim", "portsim-live", "portsim-marine" and "portsim-wind"
 agent-env run portsim --task smoke   # load a task, submit its optimal plan, grade it
 ```
@@ -261,12 +262,12 @@ runs on the Hugging Face router, with a token that can make calls to Inference P
 agent-env portsim setup --agent        # also builds and registers portsim-llm, the agent that plays the model
 export HF_TOKEN=hf_...                  # with "Make calls to Inference Providers", on an account with credits
 export LITELLM_BASE_URL=https://router.huggingface.co/v1 LITELLM_API_KEY=$HF_TOKEN
-agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.5.2 --task dock-36A-w06x1-standard-0-e07 \
+agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.5.3 --task dock-36A-w06x1-standard-0-e07 \
     --model zai-org/GLM-5.3-Flash:baseten   # the shortest wind week, 4 watches
 ```
 
-It downloads the dataset's bundles at that tag, shows what it will run and asks before it runs; the task stops the
-episode before it could spend $5. It prints the reward and the instance id, as `agent-env run` does; to replay a week
+It downloads the dataset's bundles at that tag, shows what it will run and asks before it runs; the tasks set no
+cost cap. It prints the reward and the instance id, as `agent-env run` does; to replay a week
 in 3D, play it as a sweep ([Publish your own runs](#publish-your-own-runs) has the sweep and the `view`).
 [On the Hugging Face Hub](#on-the-hugging-face-hub) has the other bundles and `agent-env hf publish`.
 
@@ -390,8 +391,9 @@ What differs from upstream's harness:
   `openai/gpt-6-astra`, `fireworks_ai/kimi-k3`, `groq/qwen/qwen3.8-27b` and so on) and the four open models on the
   Hugging Face router; any other model fails before its first request. A request whose usage never arrives (it failed,
   or the harness cut its stream) is charged the most it could have cost, except one the provider refused (401, 402 or
-  403: the key or the account), which costs nothing and ends the run as `provider_refused`. The episode stops before a
-  request that could take its spend past `PORTSIM_MAX_COST_USD` ($5 in the generated tasks).
+  403: the key or the account), which costs nothing and ends the run as `provider_refused`. When the agent's
+  `PORTSIM_MAX_COST_USD` is set, the episode stops before a request that could take its spend past it; the generated
+  tasks set none, and a sweep sets its `--episode-cap-usd`.
 - **Failures.** A model error after the SDK's retries, an env error, a turn that would start after the task's two
   hours, or the cost cap fails the run as an infrastructure error, with the episode so far, instead of scoring it.
   Chat completions retry eight times, about 40 seconds, because a provider's tokens-per-minute limit (Groq's) answers
@@ -909,7 +911,7 @@ the 15 weeks.
 ## The lines port
 
 The lines port is v5: the wind week with the shipping lines answering back. The env `portsim-lines`
-(`src/agentenv_portsim/lines.py`) plays a wind week from the same image, with the same tools, freeze, wind, pilots
+(`src/agentenv_portsim/lines.py`) plays v4's 15 wind weeks from the same image, with the same freeze, wind, pilots
 and tugs. What changes is who the planner deals with. Each ship in the week has its agent, the firm that deals with
 the port for its line, named in the port's 2024 record, and each firm with a ship in the week is its own A2A agent,
 `portsim-line`, deployed beside the planner and peered with it. The other ports, their envs and their tasks are
@@ -917,42 +919,58 @@ unchanged.
 
 What is new, in one week:
 
-- **Arrivals are uncertain.** The planner sees the published schedule at hour 0, then each ship's ETA as its agent
-  reports it, 48 and 24 hours out, and the ship's call an hour before it arrives. ETAs are optimistic and firm up as
-  the ship nears: most ships arrive later than their agent says.
+- **The schedule is an estimate.** The published schedule is the line's estimate from 72 hours out: each ship really
+  arrives at its scheduled hour plus its agent's long-range error, mostly later, so the schedule doesn't give the
+  truth away.
+- **ETAs firm up.** Each ship's agent reports its ETA 48 and 24 hours out, and the ship calls in an hour before it
+  arrives. The ETAs are optimistic: most ships arrive later than their agent says, by less as they near, and the call
+  is exact.
 - **The planner can ask.** `message_agent` sends one agent requests for its ships: the latest ETA, or an arrival
-  hour. An agent agrees an hour when the ship can make it at cruising speed, or by slowing once it has left its
-  previous port, and the ship then arrives at that hour; a refusal says only which way it can't go.
-- **Berthing is first come, first served.** No ship may start berthing while a ship earlier in the queue waits at
-  anchor, unless the wind holds that ship. A ship's turn is when it would arrive at cruising speed, so a ship slowed
-  at the planner's request keeps its turn.
-- **A ship can't berth before it arrives.** A window that starts earlier begins when the ship gets in, or once the
-  wind lets it move; the berth waits, and the lateness, clashes and queue breaks that follow are the planner's.
+  hour. An agent commits to an hour once its ship has sailed from its previous port or its own estimate is within 48
+  hours; before that it says it can't commit yet and gives its ETA. Then it agrees an hour the ship can make at
+  cruising speed, or by slowing once it has sailed, and the ship arrives at that hour; otherwise it offers the earliest
+  or the latest hour the ship can make, and an offered hour can be agreed at once.
+- **News can undo an agreement.** Until the port's news about a delayed or bunched ship, its agent works from the plan
+  as it stood. At the news, an earlier agreement stands if the ship can still make that hour; otherwise it lapses and
+  the ship cruises in from where it is.
+- **The port berths late ships.** A ship that gets in after its window starts is berthed by the port at the first hour
+  a free stretch of quay fits it, and nobody else moves. A ship that gets in before its window waits at anchor for it.
+- **First come, first served, for agreed ships.** No ship may start berthing while an earlier ship whose arrival was
+  agreed waits at anchor, unless the wind holds that ship or the closures leave no stretch of quay long enough for its
+  stay. A ship's turn is when it would arrive at cruising speed, so a ship slowed at the planner's request keeps its
+  turn.
 - **Waiting at anchor costs.** Each hour a ship waits between its arrival and its berthing costs its sections, as an
   hour late does.
 
 The planner's levers are the sections, the cranes, when to commit, and arrival times: asking a ship to slow turns
-waiting at anchor into slower sailing, and fixes its arrival, which an ETA doesn't. The planner no longer reorders
-ships: the queue does.
+waiting at anchor into slower sailing and fixes its arrival, which an ETA doesn't. An agreement binds the planner too:
+the queue holds only for the ships whose arrival it agreed, and an unagreed ship that arrives off its ETA costs its
+hours at anchor instead.
 
 ### The lines rules and their sources
 
-Each number comes from a public source or is labelled an assumption. `data/dock-v1-lines/manifest.json` carries
-these rules in brief under `lines.grounding`.
+Each number comes from a public source or is labelled an assumption. `data/dock-v1-lines/manifest.json` carries the
+sources in brief under `lines.grounding`.
 
 | Rule | Value | Source |
 |---|---|---|
-| Agents | the shipping agent the port's 2024 record names for the call (CONSIGNATARI); a week has 6 to 9 | Port de Barcelona open data, the 2024 calls of every ship type (CC BY-SA 4.0), pinned by sha256 as for the marine port. An unscheduled call takes its ship's nearest 2024 call |
-| Reports | ETAs 48 and 24 hours out, and an arrival call 1 hour out; a report made between watches arrives with the next one | The EU and Spain require a notice at least 24 hours before arrival ([Directive 2002/59/EC](https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=CELEX%3A32002L0059) art. 4; [Orden FOM/1194/2011](https://www.boe.es/buscar/act.php?id=BOE-A-2011-8339) art. 9); the [IMO Just In Time Arrival Guide](https://wwwcdn.imo.org/localresources/en/OurWork/PartnershipsProjects/Documents/GIA-just-in-time-lores.pdf) puts berth planning at about 48 hours; the 2025 berthing ordinance ([BOE-A-2025-5157](https://www.boe.es/diario_boe/txt.php?id=BOE-A-2025-5157)) defines arrival by the call made 1 hour before buoy S. The 48-hour report and delivery at the next watch are **assumptions** |
-| ETA error | mean absolute error 20% of the hours left (about 10 hours at 48, 5 at 24), 80% of ships later than their ETA, exact from the call; drawn once per ship | **Assumption**, inside the published range: Busan New Port 2022–23 (agent ETAs 24–48 hours out, mean error 5 h 15 min, [JMSE](https://doi.org/10.3390/jmse11061234)), Antwerp 2019 (10–15 hours, [Veenstra and Harmelink](https://pure.eur.nl/ws/files/58012351/Veenstra_Harmelink2021_Article_OnTheQualityOfShipArrivalPredi.pdf)), MSC's Barcelona–Valencia loop 2017–18 (80% later than the leg's ETA, 60% of those within 10 hours, [STM](https://stm-stmvalidation.s3.eu-west-1.amazonaws.com/uploads/20200225092917/STM_ID_5.3.4_STM-VALIDATION-USE-CASES-ANALYISIS-1.pdf)) |
+| Agents | the shipping agent the port's 2024 record names for the call (CONSIGNATARI); a week has 7 to 9, for its 14 to 28 ships | Port de Barcelona open data, the 2024 calls of every ship type (CC BY-SA 4.0), pinned by sha256 as for the marine port. An unscheduled call takes its ship's nearest 2024 call |
+| Schedule | the line's estimate from 72 hours out: each ship arrives at its scheduled hour plus round(20% × its bias × 72) hours, mostly later, a delayed or bunched ship with its delay on top; the scheduled hour is never later than the ship could still make by slowing from hour 0. An unscheduled call keeps v4's arrival, which its notice announces | **Assumption**: the ETA error below, from 72 hours out |
+| Reports | ETAs 48 and 24 hours out, and an arrival call 1 hour out; a report made between watches arrives with the next one, and the latest made before hour 0 opens the week | The EU and Spain require a notice at least 24 hours before arrival ([Directive 2002/59/EC](https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=CELEX%3A32002L0059) art. 4; [Orden FOM/1194/2011](https://www.boe.es/buscar/act.php?id=BOE-A-2011-8339) art. 9); the [IMO Just In Time Arrival Guide](https://wwwcdn.imo.org/localresources/en/OurWork/PartnershipsProjects/Documents/GIA-just-in-time-lores.pdf) puts berth planning at about 48 hours; the 2025 berthing ordinance ([BOE-A-2025-5157](https://www.boe.es/diario_boe/txt.php?id=BOE-A-2025-5157)) defines arrival by the call made 1 hour before buoy S. The 48-hour report and delivery at the next watch are **assumptions** |
+| ETA error | 20% of the hours left, counted to 72 at most, times the ship's bias: positive (the ship later than its ETA) in 80% of ships, its size half-normal with mean 1, capped at 4, drawn once per ship. So the mean absolute error is about 10 hours at 48 hours out and 5 at 24; no ETA is later than the slowest the ship can arrive, and the call is exact | **Assumption**, inside the published range: Busan New Port 2022–23 (agent ETAs 24–48 hours out, mean error 5 h 15 min, [JMSE](https://doi.org/10.3390/jmse11061234)), Antwerp 2019 (10–15 hours, [Veenstra and Harmelink](https://pure.eur.nl/ws/files/58012351/Veenstra_Harmelink2021_Article_OnTheQualityOfShipArrivalPredi.pdf)), MSC's Barcelona–Valencia loop 2017–18 (80% later than the leg's ETA, 60% of those within 10 hours, [STM](https://stm-stmvalidation.s3.eu-west-1.amazonaws.com/uploads/20200225092917/STM_ID_5.3.4_STM-VALIDATION-USE-CASES-ANALYISIS-1.pdf)) |
+| Commitment | an agent commits to an arrival hour once its ship has sailed from its previous port or its own estimate is within 48 hours; before that it refuses and gives its ETA | The IMO Just In Time Arrival Guide's berth-planning horizon, about 48 hours |
+| Requests | once it can commit, an agent agrees an hour the ship can make at cruising speed, or by slowing once it has sailed, and the ship arrives at that hour; otherwise it offers the earliest or the latest hour the ship can make, and an offered hour can be agreed at once | The requested time of arrival of the IMO Just In Time Arrival Guide: the port requests an arrival time and the ship adjusts its speed to make it, or answers with what it can make |
 | Speeds | cruise 17 kn, slowest 10 kn: a ship h hours out can arrive up to 0.7 h hours later, and only once it has left its previous port | **Assumption**: two-stroke engines run continuously down to 10% load (Wärtsilä); cruising speeds of 12–20 kn on MSC's loop; the IMO JIT container study's economical speed is 10 kn |
-| Previous port | its distance from Barcelona, so a ship from Valencia (165 nm, a quarter of the calls) can absorb at most about 7 hours | [NGA Pub. 151](https://maritimesafetyinnovationlab.org/wp-content/uploads/2015/01/pub151-distances-btw-ports.pdf), Distances Between Ports (2001; no copyright claimed); a port it doesn't list takes its nearest listed neighbour |
-| Queue | first come, first served by arrival, a slowed ship keeping its turn; the wind's hold is the only exception | Barcelona's container terminals berthed first come, first served in 2024 ([El Mercantil](https://elmercantil.com/2024/11/05/barcelona-ultima-su-ordenanza-de-prioridad-de-escalas-para-pertrecharse-contra-la-congestion/), [Transporte XXI](https://www.transportexxi.com/preferencia-para-atracar-en-barcelona/)), and the 2025 ordinance made it the general rule (art. 3). Keeping a slowed ship's turn is the virtual-arrival arrangement; the ordinance's other exceptions (technical incompatibility, occupancy thresholds, BEST's local-cargo priority) are left out |
+| Previous port | its distance from Barcelona, so a ship from Valencia (165 nm, more than a quarter of the ships in these weeks) can absorb at most about 7 hours | [NGA Pub. 151](https://maritimesafetyinnovationlab.org/wp-content/uploads/2015/01/pub151-distances-btw-ports.pdf), Distances Between Ports (2001; no copyright claimed); a port it doesn't list takes its nearest listed neighbour |
+| News | until the port's news about a delayed or bunched ship, its agent works from the plan as it stood; at the news an earlier agreement stands if the ship can still make that hour, and lapses otherwise | **Assumption** |
+| Late ships | the port berths a ship that gets in after its window starts at the first hour a free stretch of quay fits it, breaking no rule and moving nobody else; a ship that gets in early waits at anchor for its window | **Assumption** |
+| Queue | first come, first served for the ships whose arrival was agreed, a slowed ship keeping its turn; the exceptions are an earlier ship the wind holds, or one for whose stay the closures leave no stretch of quay long enough | Barcelona's container terminals berthed first come, first served in 2024 ([El Mercantil](https://elmercantil.com/2024/11/05/barcelona-ultima-su-ordenanza-de-prioridad-de-escalas-para-pertrecharse-contra-la-congestion/), [Transporte XXI](https://www.transportexxi.com/preferencia-para-atracar-en-barcelona/)), and the 2025 ordinance made it the general rule (art. 3), exempting a ship the quay can't take. Keeping a slowed ship's turn is the virtual-arrival arrangement. Holding the queue only for agreed ships is an **assumption**: the planner can't foresee an unagreed ship arriving off its ETA. The ordinance's other exceptions (occupancy thresholds, BEST's local-cargo priority) are left out |
 | Anchor | an hour at anchor costs the ship's sections, as an hour late does | The main-engine fuel a ship saves by slowing instead of waiting is worth 1.3–1.8 hours of its charter (Third IMO GHG Study table 14; VLSFO $626/t, Ship & Bunker's 2024 average; Alphaliner charter rates, June 2024), and an hour late costs more than charter alone, so 1 is the round value inside the evidence |
 
 `scripts/lines_references.py pack` builds the pack from the wind pack and the pinned 2024 calls: each ship's agent,
-its previous port's distance and its ETA bias, and v4's delay, bunching and unscheduled-call notices rewritten as the
-agents' ETAs at the watch they arrive (a delay notice never gives an ETA at or before the slot the ship is late for).
+its previous port's distance and its ETA bias; each arrival moved off its schedule by its agent's error from 72 hours
+out, a delayed or bunched ship's whole story with it; and v4's delay, bunching and unscheduled-call notices rewritten
+to give the agents' ETAs at the watch they arrive.
 
 ### How a lines week runs on AgentEnv
 
@@ -973,45 +991,94 @@ apply_server_config     end-week: the rest of the week, the grade and the audit
 env_outcome_verifier    portsim-live-verifier
 ```
 
+The planner keeps the wind port's tools, with `message_agent` added and these changes:
+
+- `get_situation` ends with a section on arrivals and the ships' agents: their rules, which agent handles which ship,
+  and each ship's arrival as known now, agreed, called in, its latest ETA or the published schedule. A window row adds
+  `port_berth_hour` and `port_section` when the port would berth its ship elsewhere, on the ship's latest ETA until it
+  is in. `check_plan` rows add each ship's hours at anchor (`anchor_h`).
+- `confirm_berths` also returns the confirmed plan's problems and cost, as `check_plan` does, in the same planning
+  call. The other ports' `confirm_berths` is unchanged.
+- `advance` returns only the watch, the hour and the freeze line. Which ships berthed or left is news the bulletin
+  brings, and `get_situation` shows where the ships are once it has arrived.
+- `message_agent(agent, requests)` comes from the peering: up to 20 requests a message, each
+  `{"ship": 7, "ask": "eta", "request_arrival": null}` for the latest ETA or
+  `{"ship": 9, "ask": null, "request_arrival": 130}` for an arrival hour. The gateway's `get_time` stays visible.
+
+How the agents and the port answer:
+
 - A firm agent has no model. It answers each request from the env, through the gateway's `/step` route under its
-  role: `ship_status` for an ETA, `agree_arrival` for an hour, which the env accepts only if the ship can make it. The
-  same requests therefore always get the same answers, and a week replays the same way.
+  role: `ship_status` for an ETA, `agree_arrival` for an hour. The same requests therefore always get the same answers,
+  and a week replays the same way. At watch 0 of `dock-24B-w06x1-busy-0-e15`, for instance:
+
+  ```
+  SEASPAN OCEANIA (ship 4): ETA hour 49.
+  CAPE CITIUS (ship 8) can't commit to hour 100 yet: it hasn't sailed from Genoa and is more than 48 hours out; ETA hour 97.
+  STEEN (ship 3) can't make hour 40: can't arrive that early; it can arrive at hour 47 at the earliest.
+  STEEN (ship 3) will arrive at hour 50, reducing speed; it keeps its turn, hour 47.
+  STEEN (ship 3) can't make hour 60: can't slow down that much; it can arrive at hour 53 at the latest; it still arrives at hour 50, as agreed.
+  ```
+
 - The agents' routine reports reach the planner the way all news does, through the watch triggers, as a terminal gets
-  them through the port's single window.
+  them through the port's single window: a report made between watches arrives with the next bulletin, and an agreed
+  ship's reports restate its agreement. An agent's later ETAs for a ship never fall below the earliest hour it has
+  offered for it.
+- **News.** v4's notices of a delayed ship and of ships bunched by the Red Sea diversions keep their watches, and now
+  give the agents' ETAs. Until a ship's news, its agent works from the plan as it stood. At the news, an earlier
+  agreement stands if the ship, on its true track at the paces its agreements have set since the first, can still make
+  that hour, and the notice gives the agreed hour; otherwise it lapses (`ONE FREEDOM (ship 6) can no longer arrive at
+  hour 60: the earlier agreement no longer holds.`), the ship cruises in from where it is, and the notice gives its
+  agent's estimate of that arrival. Without an agreement, the notice's ETA is what the agent last said, its ETA or the
+  earliest hour it had offered, moved later by the delay. Later ETAs never fall below the notice's ETA or the real
+  arrival, whichever is earlier.
+- **The port's dispatch.** A ship that gets in after its window starts is berthed by the port at the first hour from
+  its arrival when a free stretch of quay fits it, nearest its planned sections first, with the same cranes, around
+  every other ship's window without breaking a rule, and never ahead of an earlier ship whose arrival was agreed and
+  which still waits; nobody else moves. Late ships are placed hour by hour, in queue order; after 168 hours without a
+  slot, a window just starts when its ship gets in, or once the wind lets it move.
 - The firm agents call `/step` rather than opening an MCP session: AgentEnv's gateway (0.9.1306) runs its MCP
   lifespan per session, so a second client's short session would replace, then close, the env sessions and trigger
   driver the planner relies on. The `/step` route keeps its own sessions.
 
+The env was validated in six rounds of GPT-6 Astra runs, each followed by an independent recomputation of every agent
+reply, notice, report, window row, confirm result and port placement. The last round found no mismatch in about
+299,000 env answers.
+
 ### The lines grade and the references
 
-The grade is the wind port's, on the windows as the port runs them: a window starts when its ship gets in if that is
-later, and the cost adds each ship's hours at anchor. ETAs are not news, so nothing an ETA got wrong is excused;
-closures, outages, cuts and unforecast wind keep their excuses. The score is reward v3's against each week's
-**anchor**, as in the wind port the lower of the hindsight optimum's cost and the follower's best:
+The grade is the wind port's, on the windows as the port runs them: a late ship where the port berths it, and each hour
+a ship waits at anchor charged its sections, as an hour late is. The cost is lateness, plus hours at anchor, plus move
+penalties. Rule breaks are what the confirmed windows, as run, break among themselves, and a ship that starts berthing
+while an earlier agreed ship waits; any rule break makes the week infeasible, under 0.2. The excuse is v4's: cost or a
+rule break that news, or wind the forecast didn't show, brings to a window after its last chance to change is not
+charged. An ETA that proves wrong is not news: the excuse weighs every window against the ships' real arrivals, so what
+a ship arriving off its ETA brings is charged. The score is reward v3's against each week's **anchor**, as in the wind
+port the lower of hindsight's cost and the follower's best:
 
-- **Hindsight:** CP-SAT with every arrival known, slowing ships from the first watch it could ask. It is the anchor
-  on all 15 weeks. Planners that learn arrivals as they come and lock them through the agents play close to it, and
-  can beat it: it keeps the references' stricter queue, without the wind's exception, and isn't proven optimal. A
-  week at or below its cost scores 1.0.
+- **Hindsight:** CP-SAT knowing every arrival. It asks each ship at the first watch its agent could commit, and not
+  before its news, and protects in the queue only the ships it slows, as the port protects only agreed ones. It is
+  the anchor in 13 of the 15 weeks.
 - **Follower:** re-plans at every watch with CP-SAT on the arrivals as known, the queue and the cost of waiting, and
-  requests arrival times through the same agents: for each ship whose window would freeze before the next watch,
-  each ship it plans to slow, and each ship due soon after the next watch. A refusal is a fact it keeps. Its best
-  cost over its four solver configurations is 1.05 to 5.75 times hindsight's, and it scores 0.485 in its first
-  configuration (0.21 to 0.89 by week).
-- **Silent:** the follower that never asks: 0.116.
-- **Naive:** v2's online policy: 0.137.
+  requests arrival times through the same agents: for each ship whose window would freeze before the next watch, each
+  ship it plans to slow, and each ship due within 12 hours of the next watch. It takes each counter-offer, and a
+  refusal is a fact it keeps. Its best cost over its four solver configurations is 0.78 to 2.25 times hindsight's,
+  below it in 2 weeks, where it is the anchor, and it scores 0.548 in its first configuration (0.20 to 1.0 by week).
+- **Silent:** the follower that never asks: 0.242. It keeps every week feasible, since the port berths a ship that
+  misses its window and only agreed ships hold the queue, but its ships wait 2,386 hours at anchor over the 15 weeks,
+  against the follower's 550.
+- **Naive:** v2's online policy: 0.184, feasible in 7 of the 15 weeks.
+
+The references keep the queue stricter than the grade, with no wind or closure exception, so hindsight isn't proven
+optimal: a planner that uses an exception can beat the anchor, and scores 1.0.
 
 A week qualifies when at least 3 of the follower's configurations finish feasible, the silent follower scores at most
-0.9 in at least 3 of 4, so asking the agents matters, and it has at most 10 watches. All 15 wind weeks qualify.
-
-Neither the silent follower nor the naive policy keeps any week feasible, and neither does a silent follower that
-pads every unagreed ETA by once or 2.5 times its mean error. A late ship that slides into another ship's window breaks
-a rule (a clash, the crane pool, pilots and tugs, or the queue), and a rule break caps the week below 0.2. So in
-practice a feasible lines week needs the planner to agree the arrivals of the ships it can't leave room for.
+0.9 in at least 3 of 4, so asking the agents matters, and it has at most 10 watches. All 15 wind weeks qualify, each
+with all 4 of the follower's configurations feasible and the silent follower at most 0.9 in all 4. A lines week gets
+72 turns, 7 for each of 10 watches and 2 more, so the turns don't give the watch count away.
 
 ```bash
 uv run --with ortools==9.15.6755 python scripts/lines_references.py pack         # the pack from dock-v1-wind
-uv run --with ortools==9.15.6755 python scripts/lines_references.py screen       # the four players, about 4 minutes
+uv run --with ortools==9.15.6755 python scripts/lines_references.py screen       # the four players, up to 23 min a week
 uv run --with ortools==9.15.6755 python scripts/lines_references.py references   # anchors, replay, references
 ```
 
@@ -1027,28 +1094,34 @@ agent-env portsim sweep report lines-sonnet --lines   # results/lines.md
 PYTHONPATH=tests python scripts/live_e2e.py --env portsim-lines --policy rolling   # zero-spend e2e
 ```
 
-A local run deploys the env stack and 7 to 10 agents. The e2e plays the follower's messages and windows through the
-real task with a stand-in model: every agent reply and every watch's messages must come out as in process, and the
-week must score the follower's reward.
+A local run deploys the env stack and 8 to 10 agents: the planner and one for each of the week's 7 to 9 firms. The
+e2e plays the follower's messages and windows through the real task with a stand-in model: every agent reply and every
+watch's messages must come out as in process, and the week must score the follower's reward.
 
 ### Lines results
 
-Twelve models played the 15 lines weeks once each on local Docker, in sweeps `lines-<model>`, for $195.41 recorded
-([the model board](#the-model-board), [`results/lines.md`](results/lines.md)). A `-2` or `-3` sweep replays a week
-whose attempts all failed on the infrastructure (a deploy, an agent that stopped answering, a Docker outage) or
-that stopped at its cost cap (one of Kimi K3's). Every one of the 180 runs passed the validity audit, and replaying it,
-its messages to the ships' agents included, gives its recorded reward; 149 reached `done`, and in 31 the model stopped
-calling tools and the week ran on its confirmed windows, 28 of them because a Fireworks model reasoned past the reply
-limit twice in a row.
+Twelve models played the 15 lines weeks once each on local Docker on 12 and 13 October 2026
+([the model board](#the-model-board), [`results/lines.md`](results/lines.md), which counts every attempt). GPT-6
+Astra's row is the env's last validation round, `lines-fix6-astra`; the other models' weeks were shared out over sweeps
+`lines-r6-<model>` and `-b` to `-j`, so a slow model played several weeks at once. The 216 attempts cost $214.30 in
+tokens. A failed attempt (a deploy, an agent that stopped answering, a Rancher Desktop outage, a restart of the
+machine) was played again from the start, so every week ended on its model's play. Every one of the 180 runs passed
+the validity audit, and replaying it, its messages to the ships' agents included, gives its recorded reward. 153
+reached `done`; in the other 27 a Fireworks model reasoned past the reply limit twice in a row, and the week ran on
+its confirmed windows. No run reached the time limit: a turn that would start within 20 minutes of the episode's 2
+hours isn't started, and the week is graded as played.
 
-- 1.0 is hard to reach online: hindsight knows every ETA error in advance, and the follower re-planner scores
-  0.485. GPT-6 Astra reaches hindsight's cost in 3 weeks. On `dock-24B-w37x1-standard-0-e01` GPT-6 Astra, GPT-6.1
-  Sol and Claude Opus 5.5 all cost less than the hindsight plan (316 to 341 against 376), which keeps the references'
-  stricter queue and isn't proven optimal.
-- The board ran three times. The first two starts were stopped and their runs set aside: GPT models couldn't send a
-  request (OpenAI's Responses API fills every field of a tool's schema, and the request's `ask` field allowed only
-  `"eta"`), a ship's agent failed on an ETA query for a ship it had agreed, and the anchor was first the follower's
-  best cost, which the stronger models beat by as much as half. Every run on the board played the fixed build.
+- 1.0 is hard to reach online: hindsight knows every ETA error in advance, and the follower re-planner scores 0.548.
+  GPT-6 Astra and GPT-6.1 Sol reach the anchor in 3 weeks each, Claude Opus 5.5 in 1.
+- Hindsight isn't proven optimal: it keeps the references' stricter queue, and 9 runs on 3 weeks cost less. On
+  `dock-24B-w07x1-busy-0-e08` the follower does too (680 against 874) and is the anchor, which GPT-6 Astra (612) and
+  GPT-6.1 Sol (635) beat in turn. On `dock-24B-w07x1-busy-0-e09` GPT-6 Astra, GPT-6.1 Sol and Claude Opus 5.5 cost
+  756 to 762 against 772, inside the 20 the grade excuses each of them, and on `dock-24B-w35x1-busy-0-e00` GPT-6.1 Sol
+  costs 2,544 against 2,582.
+- This board replaces v0.5.2's, which played the lines port before the six rounds of fixes that reviewing GPT-6
+  Astra's runs brought: the published schedule gave the true arrivals away, the agents answered from the truth before
+  the port's news, and a ship that missed its window was a rule break rather than a ship the port berths late. Its
+  180 runs are in the dataset at tag `v0.5.2`; they don't replay on this build.
 
 ## The wind port
 
@@ -1395,7 +1468,7 @@ PortSimEnv's 3D viewer; both are in one
 plugin depends on [agentenv-hf](https://github.com/earakely-scale/agentenv-hf-plugin), an agent-env plugin that
 publishes bundles and their runs as Hub datasets and runs bundles from them, so installing this plugin adds
 `agent-env hf run` and `agent-env hf publish`. Each release tags the dataset with the plugin's version; the commands
-below pin `v0.5.2`.
+below pin `v0.5.3`.
 
 ### The dataset
 
@@ -1444,12 +1517,12 @@ string, GPT-6.1 Sol a list). PortSim's other columns that hold JSON (`watches`, 
 import json
 from datasets import load_dataset
 
-weeks = load_dataset("earakely-scale/PortSimEnv-AgentEnv", "v5_tasks", split="eval", revision="v0.5.2")
+weeks = load_dataset("earakely-scale/PortSimEnv-AgentEnv", "v5_tasks", split="eval", revision="v0.5.3")
 print(weeks[0]["situation"])                        # what the agent gets at hour 0
 for watch in json.loads(weeks[0]["watches"]):       # what arrives later, the agents' ETAs and the forecast included
     print(watch["hour"], [n["from"] for n in watch["notices"]])
 
-runs = load_dataset("earakely-scale/PortSimEnv-AgentEnv", "v5_episodes", split="eval", revision="v0.5.2")
+runs = load_dataset("earakely-scale/PortSimEnv-AgentEnv", "v5_episodes", split="eval", revision="v0.5.3")
 print(runs[0]["reward"], len(runs[0]["messages"]))  # the grade, and the transcript as chat messages
 ```
 
@@ -1463,18 +1536,18 @@ which part carries which terms, as does this README's [Licence and credits](#lic
 
 ### The Space
 
-The Space serves `agent-env portsim view` ([Watch a run](#watch-a-run)) from the plugin's `v0.5.2` tag over the
+The Space serves `agent-env portsim view` ([Watch a run](#watch-a-run)) from the plugin's `v0.5.3` tag over the
 dataset's `runs/`, which it downloads when it starts: every recorded run of the five versions, replayed from its
 records, with no model called. A link opens one run, such as
-[GPT-6 Astra's lines film week](https://earakely-scale-portsimenv-agentenv.hf.space/viewer/#/run/lines-astra/openai%2Fgpt-6-astra/dock-36A-w05x1-busy-0-e09)
+[GPT-6 Astra's lines film week](https://earakely-scale-portsimenv-agentenv.hf.space/viewer/#/run/lines-fix6-astra/openai%2Fgpt-6-astra/dock-24B-w07x1-busy-0-e09)
 or [GPT-6.1 Sol's wind film week](https://earakely-scale-portsimenv-agentenv.hf.space/viewer/#/run/wind-pilot-gpt/openai%2Fgpt-6.1-sol/dock-24B-w37x1-standard-0-e01).
 
 ### Run a bundle from the Hub
 
 ```bash
-agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.5.2 --task dock-36A-w06x1-standard-0-e07 \
+agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.5.3 --task dock-36A-w06x1-standard-0-e07 \
     --model zai-org/GLM-5.3-Flash:baseten          # the default bundle: dock-v1-eval-lines (v5)
-agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.5.2 --bundle dock-v1-eval-marine \
+agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.5.3 --bundle dock-v1-eval-marine \
     --task dock-24B-w07x1-busy-0 --model zai-org/GLM-5.3-Flash:baseten   # v3; -wind is v4, -live v2, dock-v1-eval v1
 ```
 
@@ -1482,15 +1555,15 @@ agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.5.2 --bundle dock-v1-eval
   `~/.cache/agentenv-hf/earakely-scale/PortSimEnv-AgentEnv/<commit>`. Without `--bundle` it runs the card's default,
   `dock-v1-eval-lines`, which also deploys a `portsim-line` agent for each ship's agent in the week.
 - The card's `agentenv` table names what each bundle needs: the plugin,
-  `agentenv-portsim @ git+https://github.com/earakely-scale/agentenv-portsim-plugin@v0.5.2`, and the setup command,
+  `agentenv-portsim @ git+https://github.com/earakely-scale/agentenv-portsim-plugin@v0.5.3`, and the setup command,
   `agent-env portsim setup --agent`. `hf run` checks that the plugin is installed and, if it isn't, stops with the
   `agent-env plugin add` command; it never installs or runs anything the card names. It checks the plugin by name,
   not by version, so an older install passes and has to be upgraded to this release first. If an env or the agent
   isn't registered yet, it prints the setup command.
 - It makes the checks `agent-env run` makes, shows what it would build and run, and asks before it runs: `--yes`
   skips the question, and `--dry-run` stops there. `--task`, `--eval`, `--model` and `--sandbox` work as in
-  `agent-env run`, the model endpoint is set as for any run ([Play a model](#play-a-model)), and each task stops an
-  episode before it could spend $5.
+  `agent-env run`, and the model endpoint is set as for any run ([Play a model](#play-a-model)); the tasks set no
+  cost cap.
 - Its runs are stored under ids rooted at `@local/hf/earakely-scale/PortSimEnv-AgentEnv/<bundle>`, wherever the
   download lands, so a run of the same commit reuses what an earlier run wrote.
 

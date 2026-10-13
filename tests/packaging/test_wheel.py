@@ -6,6 +6,7 @@ import configparser
 import os
 import subprocess
 import sys
+import tomllib
 import zipfile
 from pathlib import Path
 
@@ -61,6 +62,15 @@ def test_the_wheel_and_the_image_pin_berth_core_to_the_same_fineenvs_commit(whee
              if line.startswith("Requires-Dist: berth-core")]
     assert f"/archive/{UPSTREAM}.tar.gz#" in pin
     assert f'"{pin}"' in (ROOT / "Dockerfile").read_text()
+
+
+def test_the_images_pin_the_protocol_release_the_package_needs_at_least():
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]
+    [floor] = [d.split(">=")[1] for d in project["dependencies"] if d.startswith("agentenv-framework-protocol>=")]
+    assert (floor, project["requires-python"]) == ("0.1.328", ">=3.11.4")
+    assert f'"agentenv-framework-protocol=={floor}"' in (ROOT / "Dockerfile").read_text()
+    for agent in ("portsim-line", "portsim-llm"):
+        assert f'"agentenv-framework-protocol[agent]=={floor}"' in (ROOT / f"agents/{agent}/Dockerfile").read_text()
 
 
 def served(path: Path) -> list[str]:

@@ -46,7 +46,7 @@ function virtualTime(task, t) {
 function statuses(step, t) {
   const out = new Map();
   const confirmed = new Map(step.windows.map((w) => [w.ship, w]));
-  for (const w of step.windows) out.set(w.ship, w.status === "open" && !step.last ? "open" : w.departure <= t ? "departed" : w.berth_hour <= t ? "berthed" : "frozen");
+  for (const w of step.windows) out.set(w.ship, w.status === "open" && !step.last ? "open" : w.departure <= t ? "departed" : (w.port_berth_hour ?? w.berth_hour) <= t ? "berthed" : "frozen");
   for (const p of step.plan) {
     const w = confirmed.get(p.ship);
     if (!w || w.berth_hour !== p.berth_hour || w.section !== p.section || w.cranes !== p.cranes) out.set(p.ship, "draft");
@@ -143,7 +143,10 @@ function answerText(reply, asked) {
   if (reply.arrived != null) return `arrived h${reply.arrived}`;
   if (asked == null) return `ETA h${reply.eta}${reply.agreed ? ", as agreed" : ""}`;
   if (reply.agreed) return `agreed h${reply.arrival}${reply.slowing ? ", slowing" : ""}`;
-  return `refused: ${reply.reason}${reply.eta != null ? ` (ETA h${reply.eta})` : ""}`;
+  const offer = reply.earliest != null ? ` (earliest h${reply.earliest})` : reply.latest != null ? ` (latest h${reply.latest})`
+    : reply.eta != null ? ` (ETA h${reply.eta})` : "";
+  const kept = reply.agreed_arrival != null ? `; still agreed h${reply.agreed_arrival}` : "";
+  return `refused: ${reply.reason}${offer}${kept}`;
 }
 
 const answerDot = (reply) => `<i class="dot ${reply.error || reply.agreed === false ? "bad" : "ok"}"></i>`;
@@ -183,7 +186,7 @@ function resultHtml(task, step) {
   if (step.tool === "check_plan") return checkSummary(task, r) + (refused && `<div class="muted small">confirm_berths would refuse:</div>${refused}`) + problems;
   if (step.tool === "confirm_berths") return `<div class="res-line"><i class="dot ${r.refused.length ? "bad" : "ok"}"></i>Confirmed ${r.confirmed.length} · unchanged ${r.unchanged.length} · refused ${r.refused.length}</div>${refused}${problems}`;
   if (r.done) return `<div class="res-line"><i class="dot ${r.feasible ? "ok" : "bad"}"></i>Week done · ${r.feasible ? `feasible · cost ${r.cost}` : "infeasible"} · reward ${fmtNum(r.reward, 3)}</div>`;
-  return `<div class="res-line">Watch ${r.watch} · ${escapeHtml(r.time)} · freeze line h ${r.frozen_before}</div><div class="muted small">berthed ${names(task, r.berthed)} · departed ${names(task, r.departed)}${r.unconfirmed.length ? ` · unconfirmed ${names(task, r.unconfirmed)}` : ""}</div>`;
+  return `<div class="res-line">Watch ${r.watch} · ${escapeHtml(r.time)} · freeze line h ${r.frozen_before}</div><div class="muted small">${[r.berthed && `berthed ${names(task, r.berthed)}`, r.departed && `departed ${names(task, r.departed)}`, r.unconfirmed?.length && `unconfirmed ${names(task, r.unconfirmed)}`].filter(Boolean).join(" · ")}</div>`;
 }
 
 function otherHtml(tc, out) {

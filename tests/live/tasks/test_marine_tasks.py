@@ -43,7 +43,7 @@ def v2_week(task_id: str):
     return next(t for t in tasks.pack_tasks("dock-v1-eval") if t.task_id == task_id)
 
 
-def marine_steps(task_id: str, episode_cap_usd: float = 5.0) -> list[dict]:
+def marine_steps(task_id: str, episode_cap_usd: float | None = None) -> list[dict]:
     return tasks.live_steps(marine_week(task_id), episode_cap_usd, env="portsim-marine", week=MarineWeek)
 
 
@@ -62,7 +62,7 @@ def snapshot(root: Path) -> dict[str, bytes]:
 
 def test_a_marine_week_is_the_live_week_on_portsim_marine_with_the_marine_news_and_the_pilots_and_tugs():
     task, steps = marine_week(TASK_ID), marine_steps(TASK_ID)
-    live = on_marine(tasks.live_steps(v2_week(TASK_ID), 5.0))
+    live = on_marine(tasks.live_steps(v2_week(TASK_ID)))
     assert [s["id"] for s in steps] == [s["id"] for s in live]
     assert [s for s in steps if s["id"] not in ("watches", "play")] == [
         s for s in live if s["id"] not in ("watches", "play")]

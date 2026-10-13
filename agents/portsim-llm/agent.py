@@ -1,8 +1,10 @@
 """PortSimEnv's harness loop (FineEnvs portsim-v1 b0f4c2f, berth_openenv/agent.py) as an A2A agent: one episode on the
 env's MCP tools through agent-env's model endpoint, on the API upstream calls for the model's provider. Cost is usage
-times PRICES, or the most a request could cost when its usage is lost (it failed, or the harness cut its stream); an
-episode stops before a request that could take it past PORTSIM_MAX_COST_USD. An env that lists advance is a live week
-in watches: the episode ends on advance's done, with no tool-call cap, and Anthropic requests carry one rolling cache
+times PRICES, or the most a request could cost when its usage is lost (it failed, or the harness cut its stream); when
+PORTSIM_MAX_COST_USD is set, an episode stops before a request that could take it past that. The summary also gives the
+cost without the failed requests, which may not have been billed, and how many failed. An env that lists advance
+is a live week in watches: the episode ends on advance's done, with no tool-call cap, or once a turn would start within
+TIME_MARGIN of the time limit, the week then graded on the windows confirmed; Anthropic requests carry one rolling cache
 breakpoint."""
 
 import json
@@ -39,6 +41,7 @@ log = logging.getLogger("portsim-llm")
 REQUEST_TIMEOUT = 900.0
 NOTES_CHARS = 8000
 MAX_TOOL_CALLS = 24
+TIME_MARGIN = 1200
 HARNESS_CAP = "length (harness cap)"
 PRICES = {  # USD per 1M tokens: input, output, cache read. LiteLLM public price map, 2026-10-06 and 2026-10-09.
     "anthropic/claude-opus-5-5": (4.00, 20.00, 0.40),
@@ -477,7 +480,8 @@ class Episode:
     def __init__(self, config: PortSimConfig, environ: dict[str, str]):
         self.config, self.model = config, config.model
         self.base, self.key = environ.get("LITELLM_BASE_URL", ""), environ.get("LITELLM_API_KEY", "")
-        self.max_cost = float(environ.get("PORTSIM_MAX_COST_USD", "5"))
+        cap = environ.get("PORTSIM_MAX_COST_USD")
+        self.max_cost = None if cap is None else float(cap)
         self.bill_to = environ.get("HF_BILL_TO")
         self.started = time.time()
         self.record: dict[str, Any] = {"model": self.model, "messages": [], "steps": [],
@@ -487,7 +491,8 @@ class Episode:
         self.reward: float | None = None
         self.live = False
         self.tool_calls = self.checks = self.cached = self.written = 0
-        self.spent = 0.0
+        self.spent = self.unbilled = 0.0
+        self.failed_requests = 0
         self.failure: tuple[str, str] | None = None
         self.error: str | None = None
 
@@ -538,7 +543,11 @@ class Episode:
         max_turns = config.max_turns
         empty = 0
         for turn in range(max_turns):
-            if time.time() - self.started > config.timeout_seconds:
+            elapsed = time.time() - self.started
+            if self.live and elapsed > config.timeout_seconds - TIME_MARGIN:
+                record["end_reason"] = "time_limit"
+                break
+            if elapsed > config.timeout_seconds:
                 return self.fail("wall_clock",
                                  f"turn {turn + 1} would start after the {config.timeout_seconds} s limit")
             last = turn == max_turns - 1
@@ -547,7 +556,7 @@ class Episode:
                 record["messages"].append({"role": "user", "content": mode.last_turn})
             request = agent.request()
             most = bound(agent, request, price)
-            if self.spent + most > self.max_cost:
+            if self.max_cost is not None and self.spent + most > self.max_cost:
                 return self.fail("cost_cap", f"the next request could cost ${most:.4f}, past the ${self.max_cost:g} "
                                              f"cap with ${self.spent:.4f} spent")
             for resend in range(STREAM_RETRIES + 1):
@@ -558,7 +567,10 @@ class Episode:
                     if getattr(e, "status_code", None) in REFUSED:
                         return self.fail("provider_refused", error=e)
                     self.spent += most
-                    if resend == STREAM_RETRIES or not mid_stream(e) or self.spent + most > self.max_cost:
+                    self.unbilled += most
+                    self.failed_requests += 1
+                    if resend == STREAM_RETRIES or not mid_stream(e) or (
+                            self.max_cost is not None and self.spent + most > self.max_cost):
                         return self.fail("provider_error", error=e)
                     self.record["errors"].append(f"{self.describe(e)} (turn {turn + 1} sent again)")
                     log.warning("turn %d: the reply failed mid-stream, sending it again", turn + 1)
@@ -635,6 +647,7 @@ class Episode:
                    "checks": self.checks, "input_tokens": usage["input_tokens"],
                    "output_tokens": usage["output_tokens"], "cached_tokens": self.cached,
                    "cache_write_tokens": self.written, "cost_usd": round(self.spent, 6), "max_cost_usd": self.max_cost,
+                   "priced_cost_usd": round(self.spent - self.unbilled, 6), "failed_requests": self.failed_requests,
                    "seconds": record["seconds"], "error": self.error}
         text = (f"{record['end_reason']}: reward {json.dumps(self.reward)}, {record['turns']} turns, "
                 f"{self.tool_calls} tool calls, ${self.spent:.4f} ({self.model})")
@@ -654,7 +667,7 @@ class Episode:
         name="portsim-llm",
         description="PortSimEnv's harness loop: a model re-plans a disrupted week of berthing at a Port of Barcelona "
                     "quay through the env's tools, with upstream's prompts and limits, on agent-env's model endpoint.",
-        version="0.5.2",
+        version="0.5.3",
     ),
     config=PortSimConfig,
     extensions=(MCP_CONFIG_V1, TRAJECTORY_V1, PEER_AGENTS_V1),

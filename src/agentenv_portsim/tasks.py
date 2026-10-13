@@ -97,23 +97,39 @@ LINES_RULES = WIND_RULES.replace(
     "each ship's agent reports its ETA and calls in before it arrives, the line desk reports unscheduled calls, the "
     "harbour master").replace(
     "Cost or rule breaks that news, or wind the forecast didn't show,",
-    "An ETA that proves wrong is not news: a ship that arrives later than its agent said berths when it gets in, and "
-    "the lateness, clashes and queue breaks that follow are charged unless you agreed that ship's arrival. Cost or "
-    "rule breaks that news, or wind the forecast didn't show,") + """
+    "An ETA that proves wrong is not news: a ship that arrives later than its agent said is berthed by the port at "
+    "its next free slot, one that arrives earlier waits at anchor for its window, and the lateness and hours at anchor "
+    "that follow are charged; a ship whose arrival you agreed arrives at that hour. Cost or "
+    "rule breaks that news, or wind the forecast didn't show,").replace(
+    "your confirmed windows (departed, berthed, frozen or open),",
+    "your confirmed windows (departed, berthed, frozen or open, and where the port berths a ship that gets in after "
+    "its window, on its latest ETA until it is in),").replace(
+    "- confirm_berths(plan): confirms windows with the ships; ships you leave out keep their windows.",
+    "- confirm_berths(plan): confirms windows with the ships; ships you leave out keep their windows. It returns the "
+    "confirmed plan's problems and cost, as check_plan does."
+) + """
 
 The ships' agents:
 - Each ship's agent, the firm that deals with the port for its line, reports the ship's ETA 48 and 24 hours out and \
-calls in an hour before the ship arrives. ETAs are optimistic: most ships arrive later than their agent says, by less \
-as they near.
-- message_agent(agent, requests) sends one agent requests for its ships: {"ship": 7, "ask": "eta"} for the latest ETA, \
-{"ship": 9, "request_arrival": 130} to ask the ship to arrive at that hour. The agent agrees when the ship can make it \
-at cruising speed, or by slowing once it has left its previous port; the ship then arrives at that hour. A refusal \
-says whether the ship can't arrive that early or can't slow down that much.
-- A ship can't berth before it arrives: a window that starts earlier begins when the ship gets in, or once the \
-wind lets it move, and the berth waits for it.
-- Ships berth first come, first served: no ship may start berthing while a ship earlier in the queue waits at \
-anchor, unless the wind holds that ship. A ship's turn is when it would arrive at cruising speed, so a ship slowed at \
-your request keeps its turn.
+calls in an hour before the ship arrives. The published schedule is the lines' estimate from about three days out. \
+Both are optimistic: most ships arrive later than they say, by less as they near.
+- message_agent(agent, requests) sends one agent requests for its ships: {"ship": 7, "ask": "eta", \
+"request_arrival": null} for the latest ETA, {"ship": 9, "ask": null, "request_arrival": 130} to ask the ship to \
+arrive at that hour. Once the ship has sailed from its previous port or its agent's estimate is within 48 hours, the \
+agent agrees \
+when it can make the hour at cruising speed or by slowing once it has sailed, and the ship then arrives at that hour; \
+otherwise it answers with the earliest or the latest hour the ship can make. Before that, the agent can't commit to \
+an hour and gives its ETA.
+- Until the port's news about a delayed ship, its agent works from the plan as it stood. The news keeps an earlier \
+agreement only if the ship can still make that hour; otherwise the agreement lapses.
+- A ship can't berth before it arrives. If it gets in after its window starts, the port berths it at the first hour \
+a free stretch of quay fits it, with the same cranes, around every other ship's window and the rules, never ahead of \
+an earlier ship whose arrival you agreed still waiting; nothing else moves. A ship that gets in before its window \
+waits at anchor for it.
+- Ships berth first come, first served: no ship may start berthing while a ship earlier in the queue whose arrival \
+you agreed waits at anchor, unless the wind holds that ship or the closures leave no stretch of quay long enough for \
+it. A ship's turn is when it would arrive at cruising speed, \
+so a ship slowed at your request keeps its turn.
 - Each hour a ship waits at anchor between its arrival and its berthing costs its sections, as an hour late does."""
 HF_BILL_TO_HELP = ("Bill the agent's Hugging Face router calls to this organization (X-HF-Bill-To) instead of the "
                    "token's own account.")
@@ -123,17 +139,24 @@ def pack_tasks(name: str) -> list[Task]:
     return TaskPack(PACKS / name).tasks
 
 
-def agent_env_vars(episode_cap_usd: float, hf_bill_to: str | None) -> dict[str, str]:
-    return {"PORTSIM_MAX_COST_USD": format(episode_cap_usd, "g"), **({"HF_BILL_TO": hf_bill_to} if hf_bill_to else {})}
+def agent_env_vars(episode_cap_usd: float | None, hf_bill_to: str | None) -> dict[str, str]:
+    """The agent's environment: a cost cap only when one is asked for (a sweep's), so a published task carries none."""
+    return ({"PORTSIM_MAX_COST_USD": format(episode_cap_usd, "g")} if episode_cap_usd is not None else {}) | (
+        {"HF_BILL_TO": hf_bill_to} if hf_bill_to else {})
 
 
-def steps(task: Task, episode_cap_usd: float, hf_bill_to: str | None = None) -> list[dict]:
+def agent_env(episode_cap_usd: float | None, hf_bill_to: str | None) -> dict[str, dict[str, str]]:
+    env = agent_env_vars(episode_cap_usd, hf_bill_to)
+    return {"env_vars": env} if env else {}
+
+
+def steps(task: Task, episode_cap_usd: float | None = None, hf_bill_to: str | None = None) -> list[dict]:
     return [
         {"id": "deploy", "type": "deploy_env", "env_id": "portsim"},
         {"id": "load-task", "type": "apply_server_config", "env_id": "portsim",
          "directives": [{"service": "portsim", "uri": "urn:portsim:load-task/v1", "args": {"task_id": task.task_id}}]},
         {"id": "deploy-agent", "type": "deploy_agent", "a2a_agent_id": "portsim-llm", "env_ids": ["portsim"],
-         "env_vars": agent_env_vars(episode_cap_usd, hf_bill_to)},
+         **agent_env(episode_cap_usd, hf_bill_to)},
         {"id": "play", "type": "prompt_agent", "prompt_id": task.task_id,
          "system_prompt": berth_rules(task, MAX_CHECKS), "prompt": OPENING.format(situation=situation(task)),
          "max_turns": 12, "model_params": {"max_tokens": 32000}, "timeout_seconds": 7200},
@@ -146,7 +169,7 @@ def live_rules(task: Task, rules: str = LIVE_RULES) -> str:
     return berth_rules(task, PLANNING_CALLS).split("\n\nTools:\n")[0] + "\n\n" + rules
 
 
-def live_steps(task: Task, episode_cap_usd: float, hf_bill_to: str | None = None, *, env: str = LIVE_ENV,
+def live_steps(task: Task, episode_cap_usd: float | None = None, hf_bill_to: str | None = None, *, env: str = LIVE_ENV,
                week: type[Week] = Week, rules: str = LIVE_RULES, max_turns: int = MAX_TURNS) -> list[dict]:
     watches = schedule(task)
     return [
@@ -158,7 +181,7 @@ def live_steps(task: Task, episode_cap_usd: float, hf_bill_to: str | None = None
         {"id": "watches", "type": "register_env_triggers", "env_id": env, "watch_roles": ["default"],
          "triggers": triggers(watches)},
         {"id": "deploy-agent", "type": "deploy_agent", "a2a_agent_id": "portsim-llm", "env_ids": [env],
-         "env_vars": agent_env_vars(episode_cap_usd, hf_bill_to)},
+         **agent_env(episode_cap_usd, hf_bill_to)},
         {"id": "clock", "type": "sync_env_clock", "env_id": env, "virtual_time": task.week_start_utc,
          "virtual_seconds_per_real_second": 0, "tolerate_missing_sync_time": False},
         {"id": "play", "type": "prompt_agent", "prompt_id": task.task_id, "system_prompt": live_rules(task, rules),
@@ -171,7 +194,7 @@ def live_steps(task: Task, episode_cap_usd: float, hf_bill_to: str | None = None
     ]
 
 
-def lines_steps(task: Task, episode_cap_usd: float, hf_bill_to: str | None = None) -> list[dict]:
+def lines_steps(task: Task, episode_cap_usd: float | None = None, hf_bill_to: str | None = None) -> list[dict]:
     """The wind week's steps on portsim-lines, with each firm that has a ship in the week deployed as its own
     portsim-line agent under the line role, which sees only the agents' two tools, and peered with the planner."""
     env, firms = LINES_ENV, sorted(task.rules["lines"]["firms"])
@@ -212,7 +235,7 @@ def _write(path: Path, data: bytes) -> None:
     path.write_bytes(data)
 
 
-def generate(pack: str, out: Path, *, task_ids: list[str] | None = None, episode_cap_usd: float = 5.0,
+def generate(pack: str, out: Path, *, task_ids: list[str] | None = None, episode_cap_usd: float | None = None,
              live: bool = False, marine: bool = False, hf_bill_to: str | None = None, wind: bool = False,
              lines: bool = False) -> list[str]:
     """Writes the bundle into ``out``: README.md, the verifier and tasks/<task_id>.json, for ``task_ids`` or the whole

@@ -57,8 +57,7 @@ def test_a_task_deploys_loads_plays_with_upstreams_prompts_and_limits_and_grades
         {"id": "load-task", "type": "apply_server_config", "env_id": "portsim",
          "directives": [{"service": "portsim", "uri": "urn:portsim:load-task/v1",
                          "args": {"task_id": "dock-24B-w06x1-busy-0"}}]},
-        {"id": "deploy-agent", "type": "deploy_agent", "a2a_agent_id": "portsim-llm", "env_ids": ["portsim"],
-         "env_vars": {"PORTSIM_MAX_COST_USD": "5"}},
+        {"id": "deploy-agent", "type": "deploy_agent", "a2a_agent_id": "portsim-llm", "env_ids": ["portsim"]},
         {"id": "play", "type": "prompt_agent", "prompt_id": "dock-24B-w06x1-busy-0",
          "system_prompt": rules(task, 10),
          "prompt": situation(task) + "\n\nMake the new berth plan. Use check_plan to test drafts, then call "
@@ -83,18 +82,19 @@ def test_every_task_builds_and_the_folder_passes_the_checks_run_makes_before_a_s
     assert sum(kind is BundleKind.TASK for kind, _ in kinds) == 50
 
 
-@pytest.mark.parametrize(("cap", "env_value"), [(5.0, "5"), (0.75, "0.75")])
-def test_the_episode_cap_reaches_the_agent(tmp_path, cap, env_value):
+@pytest.mark.parametrize(("cap", "env_vars"), [(None, None), (5.0, {"PORTSIM_MAX_COST_USD": "5"}),
+                                               (0.75, {"PORTSIM_MAX_COST_USD": "0.75"})])
+def test_the_episode_cap_reaches_the_agent_only_when_one_is_given(tmp_path, cap, env_vars):
     tasks.generate("dock-v1-eval", tmp_path, task_ids=["dock-36A-w35x1-standard-0"], episode_cap_usd=cap)
     assert [p.name for p in (tmp_path / "tasks").iterdir()] == ["dock-36A-w35x1-standard-0.json"]
     deploy_agent = json.loads((tmp_path / "tasks/dock-36A-w35x1-standard-0.json").read_text())[2]
-    assert deploy_agent["env_vars"] == {"PORTSIM_MAX_COST_USD": env_value}
+    assert deploy_agent.get("env_vars") == env_vars
 
 
 def test_hf_bill_to_reaches_the_agent(tmp_path):
     tasks.generate("dock-v1-eval", tmp_path, task_ids=["dock-36A-w35x1-standard-0"], hf_bill_to="ScaleAI")
     deploy_agent = json.loads((tmp_path / "tasks/dock-36A-w35x1-standard-0.json").read_text())[2]
-    assert deploy_agent["env_vars"] == {"PORTSIM_MAX_COST_USD": "5", "HF_BILL_TO": "ScaleAI"}
+    assert deploy_agent["env_vars"] == {"HF_BILL_TO": "ScaleAI"}
 
 
 @pytest.mark.parametrize(("args", "out"), [([], "results/bundles/dock-v1-eval"), (["--out", "elsewhere"], "elsewhere")])

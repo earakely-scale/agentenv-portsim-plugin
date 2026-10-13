@@ -137,8 +137,10 @@ def test_the_bundle_installs_week_and_wiring_noplay_and_the_live_verifier(local_
     assert bundle.description.startswith("PortSim live: one week at a Port of Barcelona quay played in watches")
     assert sorted(name for kind, name in entries if kind is BundleKind.TASK) == ["week", "wiring-noplay"]
     assert entries[BundleKind.ARTIFACT, "portsim-live-verifier"].type == "file"
-    week = tasks.live_steps(pack_task(TASK_ID), 5.0)
+    week = tasks.live_steps(pack_task(TASK_ID))
     assert bundled("week") == week
+    assert next(s for s in week if s["id"] == "deploy-agent") == {
+        "id": "deploy-agent", "type": "deploy_agent", "a2a_agent_id": "portsim-llm", "env_ids": ["portsim-live"]}
     assert bundled("wiring-noplay") == [s for s in week if s["id"] not in ("deploy-agent", "play")]
     registry = get_task_step_registry()
     for name in ("week", "wiring-noplay"):
@@ -163,7 +165,7 @@ def test_generate_live_writes_the_qualifying_weeks_the_live_verifier_and_the_rea
         "graded by portsim-live-verifier.\n\nThe prompts are derived from PortSimEnv's dock-v1 task packs (CC BY-SA "
         "4.0). Contains data from the Port de Barcelona open data portal.\n")
     for name in names:
-        assert json.loads(written[f"tasks/{name}.json"]) == tasks.live_steps(pack_task(name), 5.0)
+        assert json.loads(written[f"tasks/{name}.json"]) == tasks.live_steps(pack_task(name))
     parsed = parse_bundle(out)
     check_bundle(resolve_bundle(parsed))
     assert sum(e.kind is BundleKind.TASK for e in parsed.entries) == 15
