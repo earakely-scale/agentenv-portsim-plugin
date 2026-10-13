@@ -80,7 +80,8 @@ def test_a_sweep_takes_the_version_of_its_env_and_the_lines_sweeps_are_built_by_
     assert [hub.version_of(s) for s in ({"live": True, "lines": True}, {"live": True, "wind": True},
                                         {"live": True, "marine": True}, {"live": True}, {})] == [
         "v5", "v4", "v3", "v2", "v1"]
-    assert {"lines-opus", "lines-pilot-sonnet", "lines-gpt-2"} <= set(hub.SWEEPS)
+    assert {"lines-fix6-astra", "lines-r6-opus", "lines-r6-glm-j", "wind-gpt-2"} <= set(hub.SWEEPS)
+    assert not {"lines-opus", "lines-r6-astra"} & set(hub.SWEEPS)
     assert (hub.BUNDLES["v5"], hub.ENVS["v5"], hub.LIVE_VERSIONS[0]) == ("dock-v1-eval-lines", "portsim-lines", "v5")
 
 
@@ -237,9 +238,9 @@ def test_a_dry_build_without_a_lines_sweep_has_the_lines_weeks_and_references_an
 
 def test_a_dry_build_with_a_lines_sweep_publishes_its_run_in_both_kinds_of_table_and_on_the_board(
         local_stores, tmp_path, monkeypatch):
-    sweep = tmp_path / "runs/lines-opus"
+    sweep = tmp_path / "runs/lines-r6-opus"
     sweep.mkdir(parents=True)
-    (sweep / "sweep.json").write_text(json.dumps({"name": "lines-opus", "models": [OPUS], "tasks": [FILM], "k": 1,
+    (sweep / "sweep.json").write_text(json.dumps({"name": "lines-r6-opus", "models": [OPUS], "tasks": [FILM], "k": 1,
                                                   "episode_cap_usd": 5.0, "live": True, "lines": True}))
     tasks.generate(hub.EVAL_PACK, sweep / "bundle", task_ids=[FILM], lines=True)
     task_id = f"{parse_bundle(sweep / 'bundle').id_root}/{FILM}"
@@ -257,7 +258,7 @@ def test_a_dry_build_with_a_lines_sweep_publishes_its_run_in_both_kinds_of_table
     _lines_run(sweep, instance)
     out = _dry_build(tmp_path, monkeypatch)
     [run] = _rows(out, "episodes/v5.parquet")
-    assert run["episode_id"].startswith("dock-v1-eval-lines/") and run["sweep"] == "lines-opus"
+    assert run["episode_id"].startswith("dock-v1-eval-lines/") and run["sweep"] == "lines-r6-opus"
     assert (run["anchor_hours"], run["agent_messages"], json.loads(run["exchanges"])) == (12, 2, EXCHANGES)
     [published] = _rows(out, "episodes/dock-v1-eval-lines.parquet")
     assert (published["episode_id"], published["reward"]) == (run["episode_id"], 0.5)
@@ -265,9 +266,9 @@ def test_a_dry_build_with_a_lines_sweep_publishes_its_run_in_both_kinds_of_table
     board = json.loads((out / "results/v5.json").read_text())
     assert (board["env"], board["tasks"], board["board"][0]["model"]) == ("portsim-lines", 1, "Claude Opus 5.5")
     assert not (out / "results/v4.json").exists() and _rows(out, "episodes/v4.parquet") == []
-    assert {"runs/lines-opus/sweep.json", "runs/lines-opus/results.jsonl"} <= {
+    assert {"runs/lines-r6-opus/sweep.json", "runs/lines-r6-opus/results.jsonl"} <= {
         p.relative_to(out).as_posix() for p in out.rglob("*")}
-    assert not (out / "runs/lines-opus/bundle").exists()
+    assert not (out / "runs/lines-r6-opus/bundle").exists()
     card = (out / "README.md").read_text()
     v5 = card.split("<!-- board:v5 -->")[1].split("<!-- /board:v5 -->")[0]
     assert "At the anchor" in v5 and "| Claude Opus 5.5 | Anthropic | 1 of 1 | **0.500**" in v5

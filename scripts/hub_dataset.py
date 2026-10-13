@@ -16,7 +16,7 @@ agentenv-hf's check for keys and token shapes before anything is written, and --
 on top of the commit it read, removing what the build no longer writes.
 
     uv run python scripts/hub_dataset.py --out build/hub/dataset
-    uv run python scripts/hub_dataset.py --out build/hub/dataset --repo earakely-scale/PortSimEnv-AgentEnv --tag v0.5.2
+    uv run python scripts/hub_dataset.py --out build/hub/dataset --repo earakely-scale/PortSimEnv-AgentEnv --tag v0.5.3
 """
 
 import argparse
@@ -57,8 +57,10 @@ VERSION = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["versi
 WEATHER = ROOT / "data/wind/weather.jsonl"
 SPLIT = "eval"
 BOARD = ["gpt", "sonnet", "opus", "haiku", "astra", "luna", "kimi", "glm", "glmflash", "qwen2t", "qwen27b", "dsflash"]
-SWEEPS = [f"{env}-{stage}{model}{replay}" for env in ("lines", "wind", "marine", "live") for model in BOARD
-          for stage in ("pilot-", "") for replay in ("", "-2", "-3")]  # replays of runs left unscored
+SWEEPS = ["lines-fix6-astra"] + [f"lines-r6-{model}{part}" for model in BOARD if model != "astra"
+                                 for part in ("", *(f"-{c}" for c in "bcdefghij"))]  # a model's weeks shared out
+SWEEPS += [f"{env}-{stage}{model}{replay}" for env in ("wind", "marine", "live") for model in BOARD
+           for stage in ("pilot-", "") for replay in ("", "-2", "-3")]  # replays of runs left unscored
 SWEEPS.append("g2")
 BUNDLES = {"v5": f"{EVAL_PACK}-lines", "v4": f"{EVAL_PACK}-wind", "v3": f"{EVAL_PACK}-marine",
            "v2": f"{EVAL_PACK}-live", "v1": EVAL_PACK}
@@ -503,7 +505,7 @@ def main():
     ap.add_argument("--plugin-ref", default=f"v{VERSION}",
                     help="The plugin tag the card's bundles pin, for agent-env hf run.")
     ap.add_argument("--repo", help="Push the folder to this dataset repo after writing it.")
-    ap.add_argument("--tag", help="Tag the pushed commit, e.g. v0.5.2.")
+    ap.add_argument("--tag", help="Tag the pushed commit, e.g. v0.5.3.")
     ap.add_argument("--message", default="Publish PortSimEnv on AgentEnv")
     ap.add_argument("--date", default=datetime.date.today().isoformat(), help="The eval cards' date.")
     ap.add_argument("--summary-versions", default=",".join(LIVE_VERSIONS),
