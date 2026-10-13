@@ -3,7 +3,10 @@ through its Week, each output as recorded, and the summaries upstream's eval wri
 
 import json
 import shutil
+import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import fields
+from importlib.metadata import version
 
 import click
 import pytest
@@ -11,7 +14,7 @@ from berth_core import Grade
 from recorded import GPT, LIVE, ROOT, SONNET, scored, transcript
 
 from agentenv_portsim import tasks
-from agentenv_portsim.episodes import ReplayError, Runs
+from agentenv_portsim.episodes import SUMMARIES, ReplayError, Runs
 from agentenv_portsim.schedule import TOOLS, virtual_time
 from agentenv_portsim.world import known
 
@@ -174,3 +177,36 @@ def test_a_sweep_of_several_reps_is_a_run_per_rep(tmp_path):
 def test_an_unknown_sweep_is_a_usage_error():
     with pytest.raises(click.UsageError, match="no sweep 'nope'"):
         Runs(ROOT, ["nope"])
+
+
+def test_a_sweeps_stored_summaries_of_this_version_are_listed_without_replaying(tmp_path, monkeypatch):
+    shutil.copytree(ROOT / "live-sonnet", tmp_path / "live-sonnet")
+    stored = Runs(tmp_path).summaries("live-sonnet")
+    (tmp_path / "live-sonnet" / SUMMARIES).write_text(json.dumps({"plugin": version("agentenv-portsim"),
+                                                                  "runs": stored}))
+    monkeypatch.setattr(Runs, "replay", lambda self, run_id: pytest.fail(f"replayed {run_id}"))
+    runs = Runs(tmp_path)
+    assert runs.episodes("live-sonnet") == stored["live-sonnet"]["episodes"] != []
+    assert [r["episodes"] for r in runs.index()] == [len(stored["live-sonnet"]["episodes"])]
+
+
+def test_another_versions_stored_summaries_are_replayed(tmp_path):
+    shutil.copytree(ROOT / "live-sonnet", tmp_path / "live-sonnet")
+    stored = Runs(tmp_path).summaries("live-sonnet")
+    (tmp_path / "live-sonnet" / SUMMARIES).write_text(json.dumps(
+        {"plugin": "0.0.0", "runs": {"live-sonnet": {"episodes": [], "failed": []}}}))
+    assert Runs(tmp_path).episodes("live-sonnet") == stored["live-sonnet"]["episodes"]
+
+
+def test_parallel_requests_for_a_run_replay_it_once(monkeypatch):
+    runs, calls, replay = Runs(ROOT, ["live-sonnet"]), [], Runs.replay
+
+    def counted(self, run_id):
+        calls.append(run_id)
+        time.sleep(0.2)
+        return replay(self, run_id)
+
+    monkeypatch.setattr(Runs, "replay", counted)
+    with ThreadPoolExecutor(8) as pool:
+        listed = list(pool.map(lambda _: runs.episodes("live-sonnet"), range(8)))
+    assert calls == ["live-sonnet"] and all(episodes == listed[0] for episodes in listed)

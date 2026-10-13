@@ -16,7 +16,7 @@ agentenv-hf's check for keys and token shapes before anything is written, and --
 on top of the commit it read, removing what the build no longer writes.
 
     uv run python scripts/hub_dataset.py --out build/hub/dataset
-    uv run python scripts/hub_dataset.py --out build/hub/dataset --repo earakely-scale/PortSimEnv-AgentEnv --tag v0.5.3
+    uv run python scripts/hub_dataset.py --out build/hub/dataset --repo earakely-scale/PortSimEnv-AgentEnv --tag v0.5.4
 """
 
 import argparse
@@ -40,6 +40,7 @@ from huggingface_hub import CommitOperationAdd, CommitOperationDelete, HfApi
 
 from agentenv_portsim import lines as lines_weeks
 from agentenv_portsim import marine, tasks, wind
+from agentenv_portsim.episodes import SUMMARIES, Runs
 from agentenv_portsim.schedule import (
     LINES_ENV,
     LINES_MAX_TURNS,
@@ -436,6 +437,7 @@ def build(sweeps: list[str], runs_dir: Path, out: Path, plugin: str,
     board_rows: list[dict] = []
     for name in sweeps:
         played[version_of(json.loads((runs_dir / name / "sweep.json").read_text()))].append(runs_dir / name)
+    viewer = Runs(runs_dir, sweeps)
     files: dict[str, bytes] = {}
     for v, bundle_name in BUNDLES.items():
         bundle = out / "bundles" / bundle_name
@@ -468,6 +470,8 @@ def build(sweeps: list[str], runs_dir: Path, out: Path, plugin: str,
                 rel = path.relative_to(d)
                 if path.is_file() and rel.parts[0] not in ("logs", "bundle"):
                     files[f"runs/{d.name}/{rel.as_posix()}"] = path.read_bytes()
+            stored = {"plugin": VERSION, "runs": viewer.summaries(d.name)}
+            files[f"runs/{d.name}/{SUMMARIES}"] = json.dumps(stored, ensure_ascii=False).encode()
     files["results/board.parquet"] = table_bytes(board_rows)
     if board_rows:
         boards["all"] = summary_markdown([r for r in board_rows if r["version"] in summary])
@@ -505,7 +509,7 @@ def main():
     ap.add_argument("--plugin-ref", default=f"v{VERSION}",
                     help="The plugin tag the card's bundles pin, for agent-env hf run.")
     ap.add_argument("--repo", help="Push the folder to this dataset repo after writing it.")
-    ap.add_argument("--tag", help="Tag the pushed commit, e.g. v0.5.3.")
+    ap.add_argument("--tag", help="Tag the pushed commit, e.g. v0.5.4.")
     ap.add_argument("--message", default="Publish PortSimEnv on AgentEnv")
     ap.add_argument("--date", default=datetime.date.today().isoformat(), help="The eval cards' date.")
     ap.add_argument("--summary-versions", default=",".join(LIVE_VERSIONS),
