@@ -293,8 +293,8 @@ or `hf_jobs` profile ([Play a live week](#play-a-live-week) says why). In an exi
 `agent-env plugin add ./agentenv-portsim-plugin` adds a clone of the plugin.
 
 On [Hugging Face Jobs](https://huggingface.co/docs/huggingface_hub/guides/jobs), each container of a run is a job
-billed to your Hugging Face account, and only agent-env runs on this machine. Jobs need a PRO account or a Team or
-Enterprise organization. Put the `hf_jobs` profile from [`.agentenv/config.example.toml`](.agentenv/config.example.toml)
+billed to your Hugging Face account, and only agent-env runs on this machine. Jobs need a positive credit balance on
+the account they bill; a `cpu-basic` job costs $0.01 an hour. Put the `hf_jobs` profile from [`.agentenv/config.example.toml`](.agentenv/config.example.toml)
 in `.agentenv/config.toml` with your GHCR namespace, log in with `hf auth login` (or set `HF_TOKEN`), and push the
 amd64 images of the env, the gateway it runs behind and the gateway's Postgres store:
 
