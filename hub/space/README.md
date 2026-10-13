@@ -9,7 +9,7 @@ base_path: /viewer/
 pinned: true
 license: other
 license_name: cc-by-sa-4.0-cc-by-4.0-meteocat-apache-2.0
-license_link: https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.5.2/data/LICENSE
+license_link: https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.5.3/data/LICENSE
 short_description: Port of Barcelona weeks on AgentEnv, replayed in 3D
 thumbnail: https://huggingface.co/spaces/earakely-scale/PortSimEnv-AgentEnv/resolve/main/thumbnail.jpg
 tags:
@@ -62,13 +62,13 @@ V4.1 Flash on Fireworks; and Qwen3.8-27B on Groq.
   optimal, as in PortSimEnv itself.
 
 The overview's "Start here" opens on GPT-6 Astra's run of
-[`dock-36A-w05x1-busy-0-e09`](https://earakely-scale-portsimenv-agentenv.hf.space/viewer/#/run/lines-astra/openai%2Fgpt-6-astra/dock-36A-w05x1-busy-0-e09),
-a busy week at Terminal Catalunya (BEST) in the storm week of 11 November 2024 (reward 1.0), the one filmed for the
-plugin's README ([full film](https://github.com/earakely-scale/agentenv-portsim-plugin/releases/tag/replays-2026-10-11)).
-Astra agrees an arrival hour for every one of the 27 ships with their 7 shipping agents, 11 of the agreements slowing a
-ship down, and no ship waits at anchor; each message and its replies are steps of the replay. Then comes the model
-board, one table per version, v5 first; click a model to list its weeks, and a week to replay it. The same board is
-the dataset's `results` table.
+[`dock-24B-w07x1-busy-0-e09`](https://earakely-scale-portsimenv-agentenv.hf.space/viewer/#/run/lines-fix6-astra/openai%2Fgpt-6-astra/dock-24B-w07x1-busy-0-e09),
+a busy week at APM Terminals Barcelona in the storm week of 11 November 2024 (reward 1.0), the one filmed for the
+plugin's README ([full film](https://github.com/earakely-scale/agentenv-portsim-plugin/releases/tag/replays-2026-10-13)).
+Astra agrees 15 of the 17 ships' arrival hours with their 7 shipping agents, 7 of the agreements slowing a ship down,
+and the week costs less than the plan in hindsight; each message and its replies are steps of the replay. Then comes
+the model board, one table per version, v5 first; click a model to list its weeks, and a week to replay it. The same
+board is the dataset's `results` table.
 
 The dataset [earakely-scale/PortSimEnv-AgentEnv](https://huggingface.co/datasets/earakely-scale/PortSimEnv-AgentEnv)
 holds the weeks, the references, the runs and their transcripts in two kinds of tables: PortSim's own, one family per
@@ -81,7 +81,7 @@ Kolavi's environment in FineEnvs; this viewer is PortSimEnv's.
 | | PortSimEnv in FineEnvs | PortSimEnv on AgentEnv |
 |---|---|---|
 | Environment and code | [FineEnvs/PortSimEnv](https://huggingface.co/spaces/FineEnvs/PortSimEnv) (OpenEnv Space), [code](https://github.com/adithya-s-k/FineEnvs/tree/main/07-simulation-environments/portsim-v1) | [earakely-scale/agentenv-portsim-plugin](https://github.com/earakely-scale/agentenv-portsim-plugin) |
-| Eval | [FineEnvs/PortSimEnv-Eval](https://huggingface.co/spaces/FineEnvs/PortSimEnv-Eval) | [the `results` table](https://huggingface.co/datasets/earakely-scale/PortSimEnv-AgentEnv#results), [model board](https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.5.2/results/board.md) |
+| Eval | [FineEnvs/PortSimEnv-Eval](https://huggingface.co/spaces/FineEnvs/PortSimEnv-Eval) | [the `results` table](https://huggingface.co/datasets/earakely-scale/PortSimEnv-AgentEnv#results), [model board](https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.5.3/results/board.md) |
 | Dataset | [FineEnvs/PortSimEnv](https://huggingface.co/datasets/FineEnvs/PortSimEnv) | [earakely-scale/PortSimEnv-AgentEnv](https://huggingface.co/datasets/earakely-scale/PortSimEnv-AgentEnv) |
 | Replays | | this Space |
 | Article | [Simulation RL Environments, part 1](https://huggingface.co/spaces/FineEnvs/simulation-rl-environments) | |
@@ -96,13 +96,13 @@ the dataset:
 
 ```bash
 uv tool install agentenv-framework \
-    --with "agentenv-portsim @ git+https://github.com/earakely-scale/agentenv-portsim-plugin@v0.5.2"
+    --with "agentenv-portsim @ git+https://github.com/earakely-scale/agentenv-portsim-plugin@v0.5.3"
 agent-env portsim setup --agent        # build the env and agent images and register them (a few minutes)
 agent-env run portsim --task smoke     # no model: grades a known optimal plan, prints "passed"
 
 export HF_TOKEN=hf_...                  # with "Make calls to Inference Providers", on an account with credits
 export LITELLM_BASE_URL=https://router.huggingface.co/v1 LITELLM_API_KEY=$HF_TOKEN
-agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.5.2 --task dock-36A-w06x1-standard-0-e07 \
+agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.5.3 --task dock-36A-w06x1-standard-0-e07 \
     --model zai-org/GLM-5.3-Flash:baseten          # the default bundle: dock-v1-eval-lines (v5)
 ```
 
@@ -119,12 +119,12 @@ agent-env portsim view mine            # at http://127.0.0.1:8237/viewer/
 
 The [dataset card](https://huggingface.co/datasets/earakely-scale/PortSimEnv-AgentEnv#play-a-week-yourself) has more:
 the v4, v3, v2 and v1 bundles and the other open models. If a step fails, see the plugin README's
-[troubleshooting](https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.5.2/README.md#run-it-yourself).
+[troubleshooting](https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.5.3/README.md#run-it-yourself).
 
 ## How this Space runs
 
-`start.sh` downloads the recorded sweeps (`runs/`) from the dataset at its `v0.5.2` tag (`--revision v0.5.2`), and
-`agent-env portsim view`, installed from the plugin's `v0.5.2` tag, serves them, replaying each v2 to v5 run
+`start.sh` downloads the recorded sweeps (`runs/`) from the dataset at its `v0.5.3` tag (`--revision v0.5.3`), and
+`agent-env portsim view`, installed from the plugin's `v0.5.3` tag, serves them, replaying each v2 to v5 run
 through its week from the recorded tool calls. The 3D twin is downloaded from PortSimEnv's public bucket at start.
 
 ## Licence and attribution
@@ -153,7 +153,7 @@ through its week from the recorded tool calls. The 3D twin is downloaded from Po
 - **The 3D twin:** © OpenStreetMap contributors (ODbL) · terrain: Terrain Tiles (AWS).
 - **Code:** the plugin and PortSimEnv's viewer are under the Apache License 2.0.
 
-The plugin's [NOTICE](https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.5.2/NOTICE) and
-[data/LICENSE](https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.5.2/data/LICENSE) set out each part.
+The plugin's [NOTICE](https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.5.3/NOTICE) and
+[data/LICENSE](https://github.com/earakely-scale/agentenv-portsim-plugin/blob/v0.5.3/data/LICENSE) set out each part.
 This Space is independent: neither the Port de Barcelona, PortSimEnv's author, ECMWF, Meteocat, the NGA nor any
 shipping line or agent named in it is affiliated with it or endorses it.

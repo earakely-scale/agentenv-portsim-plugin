@@ -7,9 +7,9 @@
 [![Dataset on Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97%20Dataset-tasks%20and%20runs-yellow)](https://huggingface.co/datasets/earakely-scale/PortSimEnv-AgentEnv)
 
 <p align="center">
-  <a href="https://github.com/earakely-scale/agentenv-portsim-plugin/releases/tag/replays-2026-10-11"><img src="assets/lines-port.webp" width="100%" alt="GPT-6 Astra plays a lines week at the Port of Barcelona on AgentEnv: the watch panel lists each arrival time it requests from the ships' agents and their answers, agreed or refused, while the shipping agents' ETAs and arrival calls arrive as bulletins and ships slowed on request berth as they get in"></a>
+  <a href="https://github.com/earakely-scale/agentenv-portsim-plugin/releases/tag/replays-2026-10-13"><img src="assets/lines-port.webp" width="100%" alt="GPT-6 Astra plays a lines week at the Port of Barcelona on AgentEnv: the watch panel lists each arrival time it requests from the ships' agents and their answers, agreed or refused, while the shipping agents' ETAs and arrival calls arrive as bulletins and ships slowed on request berth as they get in"></a>
 </p>
-<p align="center"><sub><b>The lines port (v5):</b> GPT-6 Astra plans <code>dock-36A-w05x1-busy-0-e09</code>, Terminal Catalunya (BEST)'s busy week of 29 January 2024 in the wind of the storm week of 11 November 2024, watch by watch on AgentEnv's virtual clock. Its 27 ships belong to 7 shipping agents, each its own A2A agent that reports its ships' ETAs as they near and answers the planner's <code>message_agent</code>. Astra requests an arrival hour for every ship, 54 requests in 28 messages: 23 come back "can't arrive that early" and it asks again, until all 27 ships have an agreed arrival, 11 of the agreements slowing a ship down. No ship waits at anchor, and the week costs 413, what the plan in hindsight, which knows every arrival, costs: reward 1.0. The follower re-planner, which also asks, costs 539 (0.339); the same re-planner never asking, and v2's naive policy, break rules (0.119 and 0.163). Replayed on PortSimEnv's 3D viewer; <a href="https://github.com/earakely-scale/agentenv-portsim-plugin/releases/tag/replays-2026-10-11">full film</a>. Twin © OpenStreetMap contributors (ODbL); forecasts ECMWF open data (CC BY 4.0, modified); wind windows derived from Meteocat XEMA Y7.</sub></p>
+<p align="center"><sub><b>The lines port (v5):</b> GPT-6 Astra plans <code>dock-24B-w07x1-busy-0-e09</code>, APM Terminals Barcelona's busy week of 12 February 2024 in the wind of the storm week of 11 November 2024, watch by watch on AgentEnv's virtual clock. Its 17 ships belong to 7 shipping agents, each its own A2A agent that reports its ships' ETAs as they near and answers the planner's <code>message_agent</code>. Astra requests 29 arrival hours in 25 messages and agrees 15 of the 17 arrivals, 7 of them slowing a ship down. Two of its 9 confirms come back with rule breaks, which it fixes with the next. The week costs 758, below the 772 of the plan in hindsight, which knows every arrival: reward 1.0. The follower re-planner, which also asks, scores 0.816; the same re-planner never asking 0.204, and v2's naive policy 0.200. Replayed on PortSimEnv's 3D viewer; <a href="https://github.com/earakely-scale/agentenv-portsim-plugin/releases/tag/replays-2026-10-13">full film</a>. Twin © OpenStreetMap contributors (ODbL); forecasts ECMWF open data (CC BY 4.0, modified); wind windows derived from Meteocat XEMA Y7.</sub></p>
 
 <details open>
 <summary><b>How a live, marine, wind or lines task is built</b>: the task's steps, and the watch loop inside <code>play</code> (details in <a href="#the-live-port">The live port</a>, <a href="#the-marine-port">The marine port</a>, <a href="#the-wind-port">The wind port</a> and <a href="#the-lines-port">The lines port</a>)</summary>
@@ -122,14 +122,14 @@ port (v5), the wind port (v4), the marine port (v3) and the live week (v2) are n
   - `view` and `record` replay runs on a 3D twin of the quay and film them ([Watch a run](#watch-a-run)).
 - **On the Hugging Face Hub.** The dataset
   [earakely-scale/PortSimEnv-AgentEnv](https://huggingface.co/datasets/earakely-scale/PortSimEnv-AgentEnv) holds the
-  weeks of every version, the wind, marine and live references and every recorded run; its default table is the wind
-  weeks. It has PortSim's own tables for each version and agentenv-hf's standard tables for each runnable bundle (the
-  15 wind weeks, the 15 marine weeks, the 15 live weeks and the 50 eval weeks). The plugin installs
-  [agentenv-hf](https://github.com/earakely-scale/agentenv-hf-plugin), so `agent-env hf run` plays a week straight
-  from the dataset and `agent-env hf publish` publishes your own runs. The
+  weeks of every version, the lines, wind, marine and live references and every recorded run; its default table is
+  the lines weeks. It has PortSim's own tables for each version and agentenv-hf's standard tables for each runnable
+  bundle (the 15 lines weeks, the 15 wind weeks, the 15 marine weeks, the 15 live weeks and the 50 eval weeks). The
+  plugin installs [agentenv-hf](https://github.com/earakely-scale/agentenv-hf-plugin), so `agent-env hf run` plays a
+  week straight from the dataset and `agent-env hf publish` publishes your own runs. The
   [Space](https://huggingface.co/spaces/earakely-scale/PortSimEnv-AgentEnv) replays the runs in 3D
   ([On the Hugging Face Hub](#on-the-hugging-face-hub)).
-- **Results.** Twelve models on the 15 live, 15 marine and 15 wind weeks ([the model board](#the-model-board)), and
+- **Results.** Twelve models on the 15 lines, wind, marine and live weeks ([the model board](#the-model-board)), and
   GPT-6.1 Sol and Claude Sonnet 5.5 first on the 15 wind weeks ([wind results](#wind-results)), on the 15 marine weeks
   ([marine results](#marine-results)), on all 15 live weeks
   ([the first live results](#the-first-live-results)) and on ten weeks planned in one go
@@ -138,53 +138,49 @@ port (v5), the wind port (v4), the marine port (v3) and the live week (v2) are n
 ## The model board
 
 **The lines port (v5).** Twelve models play every lines week once, 180 runs, on the same harness as the earlier
-ports with `message_agent` and 72 turns a week (the providers are below). Mean reward against the anchor, the plan in
-hindsight on every week:
+ports with `message_agent` and 72 turns a week (the providers are below). Mean reward against the anchor, the lower of
+hindsight's cost and the follower's best:
 
 | Model | Provider | Weeks | Mean reward (95% CI) | Feasible | At the anchor | Ships agreed | Hours at anchor a week | Cost per episode |
 |---|---|---:|---|---:|---:|---:|---:|---:|
-| GPT-6 Astra | Azure OpenAI | 15 of 15 | **0.691** (0.553 to 0.810) | 13 | 3 | 95% | 31 | $1.77 |
-| GPT-6.1 Sol | Azure OpenAI | 15 of 15 | **0.394** (0.279 to 0.533) | 8 | 1 | 92% | 40 | $0.29 |
-| Claude Opus 5.5 | Anthropic | 15 of 15 | **0.315** (0.180 to 0.471) | 5 | 1 | 53% | 35 | $2.03 |
-| Claude Sonnet 5.5 | Anthropic | 15 of 15 | **0.228** (0.159 to 0.328) | 3 | 0 | 50% | 40 | $1.60 |
-| GPT-6 Luna | Azure OpenAI | 15 of 15 | **0.144** (0.132 to 0.156) | 0 | 0 | 11% | 323 | $0.06 |
-| Claude Haiku 5.5 | Anthropic | 15 of 15 | **0.142** (0.129 to 0.152) | 0 | 0 | 14% | 71 | $0.09 |
-| Kimi K3 | Fireworks | 15 of 15 | **0.133** (0.083 to 0.215) | 2 | 0 | 49% | 51 | $1.66 |
-| Qwen3.8-2.4T | Fireworks | 15 of 15 | **0.106** (0.072 to 0.135) | 0 | 0 | 43% | 42 | $2.73 |
-| GLM-5.3-Flash | Fireworks | 15 of 15 | **0.096** (0.070 to 0.119) | 0 | 0 | 43% | 21 | $0.14 |
-| GLM-5.3 | Fireworks | 15 of 15 | **0.085** (0.017 to 0.199) | 1 | 0 | 13% | 4 | $0.78 |
-| DeepSeek V4.1 Flash | Fireworks | 15 of 15 | **0.072** (0.037 to 0.108) | 0 | 0 | 6% | 18 | $0.30 |
-| Qwen3.8-27B | Groq | 15 of 15 | **0.037** (0.020 to 0.057) | 0 | 0 | 0% | 151 | $0.97 |
+| Claude Opus 5.5 | Anthropic | 15 of 15 | **0.593** (0.453 to 0.725) | 14 | 1 | 86% | 27 | $2.42 |
+| GPT-6 Astra | Azure OpenAI | 15 of 15 | **0.568** (0.420 to 0.722) | 14 | 3 | 90% | 25 | $2.16 |
+| GPT-6.1 Sol | Azure OpenAI | 15 of 15 | **0.536** (0.392 to 0.693) | 14 | 3 | 90% | 30 | $0.32 |
+| Claude Sonnet 5.5 | Anthropic | 15 of 15 | **0.387** (0.269 to 0.517) | 15 | 0 | 40% | 51 | $1.55 |
+| Qwen3.8-2.4T | Fireworks | 15 of 15 | **0.291** (0.171 to 0.423) | 8 | 0 | 42% | 46 | $2.26 |
+| GLM-5.3-Flash | Fireworks | 15 of 15 | **0.261** (0.171 to 0.367) | 6 | 0 | 43% | 81 | $0.18 |
+| Claude Haiku 5.5 | Anthropic | 15 of 15 | **0.258** (0.203 to 0.322) | 13 | 0 | 12% | 101 | $0.10 |
+| GPT-6 Luna | Azure OpenAI | 15 of 15 | **0.234** (0.199 to 0.284) | 13 | 0 | 18% | 186 | $0.06 |
+| Kimi K3 | Fireworks | 15 of 15 | **0.231** (0.172 to 0.308) | 5 | 0 | 43% | 122 | $2.02 |
+| DeepSeek V4.1 Flash | Fireworks | 15 of 15 | **0.168** (0.089 to 0.269) | 6 | 0 | 16% | 53 | $0.30 |
+| GLM-5.3 | Fireworks | 15 of 15 | **0.153** (0.029 to 0.307) | 3 | 0 | 29% | 2 | $0.75 |
+| Qwen3.8-27B | Groq | 15 of 15 | **0.143** (0.118 to 0.164) | 1 | 0 | 0% | 171 | $1.63 |
 
 *Ships agreed*: the share of a week's ships whose arrival the planner agreed with their agent. *At the anchor*: weeks
-at or below hindsight's cost.
+at or below the anchor's cost.
 
-- **Agreeing arrivals is what scores.** GPT-6 Astra and GPT-6.1 Sol agree an arrival for 95% and 92% of a week's ships,
-  Claude Opus and Sonnet 5.5 for about half, Claude Haiku 5.5 and GPT-6 Luna for 14% and 11%, and Qwen3.8-27B for none.
-  A ship left unagreed arrives late more often than not, and its window slides into another's: most rule breaks land
-  on such ships (83% of Sonnet's, 69% of Opus's, 87% of Haiku's). GPT-6.1 Sol's breaks are mostly its own clashes
-  among ships it had agreed (62%).
-- **GPT-6 Astra leads clearly:** feasible in 13 of 15 weeks, at hindsight's cost in 3, and at or below the follower's,
-  the re-planner that also asks the agents, in 10.
-- **The ranking moves.** Claude Opus 5.5 and Claude Sonnet 5.5, level with GPT-6 Astra on the wind port (0.906 and
-  0.888), score 0.315 and 0.228: they lock about half the arrivals and plan the rest on ETAs that most often prove
-  too early. Kimi K3, the lowest of the Fireworks models on the wind port, is the best open model here.
-- **Agreeing isn't enough for the open models.** Kimi K3 agrees about half a week's ships, as Opus and Sonnet do, but
-  keeps 2 weeks feasible, with about half of its rule breaks on ships it had agreed; Qwen3.8-2.4T and GLM-5.3-Flash
-  agree 43% and keep none. GLM-5.3 and DeepSeek V4.1 Flash mostly run out of reply: in 11 and 9 of their weeks the
-  model reasoned past the 32,000-token reply limit twice in a row, which ends the episode, and the week ran on the
-  windows it had confirmed (none, in 10 of GLM-5.3's 11).
-- **The small closed models barely use the agents:** Claude Haiku 5.5 and GPT-6 Luna keep no week feasible, and
-  Luna's ships wait 323 hours a week at anchor.
-- **A late ship is a rule break, not a delay.** A ship that gets in after its window starts berths when it arrives, and
-  the clash, crane shortage or queue break that follows is charged unless its arrival was agreed, so a few late ships
-  cap a week below 0.2. On `dock-36A-w05x1-busy-0-e09` Claude Sonnet 5.5 agreed 21 of 27 arrivals and its windows
-  cost 451 against hindsight's 413, but the four ships it hadn't agreed clash at the end of the week, and it scores
-  0.170. Even a re-planner that pads every unagreed ETA by 2.5 times its mean error is infeasible on all 15 weeks, so
-  the lines port rewards locking arrivals far more than buffering them.
+- **Three models lead, within noise of each other.** Claude Opus 5.5, GPT-6 Astra and GPT-6.1 Sol agree an arrival for
+  86% to 90% of a week's ships and keep 14 of their 15 weeks feasible. Opus and Astra score above the follower, the
+  re-planner that also asks the agents (0.548), and cost no more than it in 9 weeks each; Sol in 6.
+- **Not asking costs hours at anchor, not rule breaks.** The port berths a ship that misses its window at the first
+  free stretch of quay, so a planner that rarely asks stays feasible and pays in waiting. Claude Sonnet 5.5 agrees 40%
+  of a week's ships and keeps all 15 weeks feasible, at 0.387. Claude Haiku 5.5 and GPT-6 Luna agree 12% and 18% and
+  keep 13 feasible, but their ships wait 101 and 186 hours a week at anchor, against 25 to 30 for the top three, and
+  they score about what the follower that never asks does (0.242).
+- **The open models agree less and break more rules.** Qwen3.8-2.4T, GLM-5.3-Flash and Kimi K3 agree about 43% of a
+  week's ships but keep only 5 to 8 weeks feasible. Most of Qwen3.8-2.4T's and GLM-5.3-Flash's rule breaks land on
+  ships they hadn't agreed; most of Kimi K3's are clashes and crane shortages among ships it had. Qwen3.8-2.4T and
+  GLM-5.3-Flash score 0.607 and 0.517 on the three standard weeks and about 0.2 on the busy ones.
+- **Two open models mostly run out of reply.** In 10 of GLM-5.3's weeks and 9 of DeepSeek V4.1 Flash's, the model
+  reasoned past the 32,000-token reply limit twice in a row, which ends the episode, and the week ran on the windows
+  it had confirmed: none, in all 10 of GLM-5.3's, which stopped at 2 to 4 turns. These weeks are scored as played,
+  as on the earlier ports.
+- **Qwen3.8-27B never asks:** no arrival agreed in any week, and 1 week feasible.
+- **The lines port is the hardest:** 11 of the 12 models score lower than on the wind port, whose weeks these are;
+  Claude Opus 5.5 and GPT-6 Astra fall from about 0.9 to under 0.6.
 
-On the same weeks the follower scores 0.485 in its first solver configuration, the follower that never asks 0.116 and
-v2's naive policy 0.137. Every run is in the dataset's `v5_episodes`, and replays in the
+On the same weeks the follower scores 0.548 in its first solver configuration, the follower that never asks 0.242 and
+v2's naive policy 0.184. Every run is in the dataset's `v5_episodes`, and replays in the
 [Space](https://huggingface.co/spaces/earakely-scale/PortSimEnv-AgentEnv) with each message to the ships' agents
 among its steps; [results/board.md](results/board.md) has the week-by-week detail.
 
@@ -225,8 +221,8 @@ weeks:
   reported problems runs from at most 5% of the time (Claude Opus 5.5) to 94% or more (Qwen3.8-27B).
 - **Qwen3.8-27B,** the one model small enough to fine-tune cheaply, never found a valid plan.
 
-With the lines port, over all 60 weeks, GPT-6 Astra leads at 0.882, ahead of Claude Opus 5.5 (0.787), GPT-6.1 Sol
-(0.750) and Claude Sonnet 5.5 (0.738); [results/board.md](results/board.md#summary) has that table.
+With the lines port, over all 60 weeks, Claude Opus 5.5 (0.857) and GPT-6 Astra (0.851) lead, ahead of GPT-6.1 Sol
+(0.786) and Claude Sonnet 5.5 (0.778); [results/board.md](results/board.md#summary) has that table.
 
 [results/board.md](results/board.md) has each version's table, what breaks, checking and heeding, cost, how it was run
 and the caveats. One run per model and week, so the CIs, a bootstrap over the weeks, are wide. The board is on the Hub
@@ -249,7 +245,7 @@ You need [Docker](https://docs.docker.com/get-docker/), running and usable witho
 
 ```bash
 uv tool install agentenv-framework \
-    --with "agentenv-portsim @ git+https://github.com/earakely-scale/agentenv-portsim-plugin@v0.5.2"
+    --with "agentenv-portsim @ git+https://github.com/earakely-scale/agentenv-portsim-plugin@v0.5.3"
 agent-env portsim setup              # build the env image for this machine; register the envs "portsim", "portsim-live", "portsim-marine" and "portsim-wind"
 agent-env run portsim --task smoke   # load a task, submit its optimal plan, grade it
 ```
@@ -266,7 +262,7 @@ runs on the Hugging Face router, with a token that can make calls to Inference P
 agent-env portsim setup --agent        # also builds and registers portsim-llm, the agent that plays the model
 export HF_TOKEN=hf_...                  # with "Make calls to Inference Providers", on an account with credits
 export LITELLM_BASE_URL=https://router.huggingface.co/v1 LITELLM_API_KEY=$HF_TOKEN
-agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.5.2 --task dock-36A-w06x1-standard-0-e07 \
+agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.5.3 --task dock-36A-w06x1-standard-0-e07 \
     --model zai-org/GLM-5.3-Flash:baseten   # the shortest wind week, 4 watches
 ```
 
@@ -1104,22 +1100,28 @@ watch's messages must come out as in process, and the week must score the follow
 
 ### Lines results
 
-Twelve models played the 15 lines weeks once each on local Docker, in sweeps `lines-<model>`, for $195.41 recorded
-([the model board](#the-model-board), [`results/lines.md`](results/lines.md)). A `-2` or `-3` sweep replays a week
-whose attempts all failed on the infrastructure (a deploy, an agent that stopped answering, a Docker outage) or
-that stopped at its cost cap (one of Kimi K3's). Every one of the 180 runs passed the validity audit, and replaying it,
-its messages to the ships' agents included, gives its recorded reward; 149 reached `done`, and in 31 the model stopped
-calling tools and the week ran on its confirmed windows, 28 of them because a Fireworks model reasoned past the reply
-limit twice in a row.
+Twelve models played the 15 lines weeks once each on local Docker on 12 and 13 October 2026
+([the model board](#the-model-board), [`results/lines.md`](results/lines.md), which counts every attempt). GPT-6
+Astra's row is the env's last validation round, `lines-fix6-astra`; the other models' weeks were shared out over sweeps
+`lines-r6-<model>` and `-b` to `-j`, so a slow model played several weeks at once. The 216 attempts cost $214.30 in
+tokens. A failed attempt (a deploy, an agent that stopped answering, a Rancher Desktop outage, a restart of the
+machine) was played again from the start, so every week ended on its model's play. Every one of the 180 runs passed
+the validity audit, and replaying it, its messages to the ships' agents included, gives its recorded reward. 153
+reached `done`; in the other 27 a Fireworks model reasoned past the reply limit twice in a row, and the week ran on
+its confirmed windows. No run reached the time limit: a turn that would start within 20 minutes of the episode's 2
+hours isn't started, and the week is graded as played.
 
-- 1.0 is hard to reach online: hindsight knows every ETA error in advance, and the follower re-planner scores
-  0.485. GPT-6 Astra reaches hindsight's cost in 3 weeks. On `dock-24B-w37x1-standard-0-e01` GPT-6 Astra, GPT-6.1
-  Sol and Claude Opus 5.5 all cost less than the hindsight plan (316 to 341 against 376), which keeps the references'
-  stricter queue and isn't proven optimal.
-- The board ran three times. The first two starts were stopped and their runs set aside: GPT models couldn't send a
-  request (OpenAI's Responses API fills every field of a tool's schema, and the request's `ask` field allowed only
-  `"eta"`), a ship's agent failed on an ETA query for a ship it had agreed, and the anchor was first the follower's
-  best cost, which the stronger models beat by as much as half. Every run on the board played the fixed build.
+- 1.0 is hard to reach online: hindsight knows every ETA error in advance, and the follower re-planner scores 0.548.
+  GPT-6 Astra and GPT-6.1 Sol reach the anchor in 3 weeks each, Claude Opus 5.5 in 1.
+- Hindsight isn't proven optimal: it keeps the references' stricter queue, and 9 runs on 3 weeks cost less. On
+  `dock-24B-w07x1-busy-0-e08` the follower does too (680 against 874) and is the anchor, which GPT-6 Astra (612) and
+  GPT-6.1 Sol (635) beat in turn. On `dock-24B-w07x1-busy-0-e09` GPT-6 Astra, GPT-6.1 Sol and Claude Opus 5.5 cost
+  756 to 762 against 772, inside the 20 the grade excuses each of them, and on `dock-24B-w35x1-busy-0-e00` GPT-6.1 Sol
+  costs 2,544 against 2,582.
+- This board replaces v0.5.2's, which played the lines port before the six rounds of fixes that reviewing GPT-6
+  Astra's runs brought: the published schedule gave the true arrivals away, the agents answered from the truth before
+  the port's news, and a ship that missed its window was a rule break rather than a ship the port berths late. Its
+  180 runs are in the dataset at tag `v0.5.2`; they don't replay on this build.
 
 ## The wind port
 
@@ -1466,7 +1468,7 @@ PortSimEnv's 3D viewer; both are in one
 plugin depends on [agentenv-hf](https://github.com/earakely-scale/agentenv-hf-plugin), an agent-env plugin that
 publishes bundles and their runs as Hub datasets and runs bundles from them, so installing this plugin adds
 `agent-env hf run` and `agent-env hf publish`. Each release tags the dataset with the plugin's version; the commands
-below pin `v0.5.2`.
+below pin `v0.5.3`.
 
 ### The dataset
 
@@ -1515,12 +1517,12 @@ string, GPT-6.1 Sol a list). PortSim's other columns that hold JSON (`watches`, 
 import json
 from datasets import load_dataset
 
-weeks = load_dataset("earakely-scale/PortSimEnv-AgentEnv", "v5_tasks", split="eval", revision="v0.5.2")
+weeks = load_dataset("earakely-scale/PortSimEnv-AgentEnv", "v5_tasks", split="eval", revision="v0.5.3")
 print(weeks[0]["situation"])                        # what the agent gets at hour 0
 for watch in json.loads(weeks[0]["watches"]):       # what arrives later, the agents' ETAs and the forecast included
     print(watch["hour"], [n["from"] for n in watch["notices"]])
 
-runs = load_dataset("earakely-scale/PortSimEnv-AgentEnv", "v5_episodes", split="eval", revision="v0.5.2")
+runs = load_dataset("earakely-scale/PortSimEnv-AgentEnv", "v5_episodes", split="eval", revision="v0.5.3")
 print(runs[0]["reward"], len(runs[0]["messages"]))  # the grade, and the transcript as chat messages
 ```
 
@@ -1534,18 +1536,18 @@ which part carries which terms, as does this README's [Licence and credits](#lic
 
 ### The Space
 
-The Space serves `agent-env portsim view` ([Watch a run](#watch-a-run)) from the plugin's `v0.5.2` tag over the
+The Space serves `agent-env portsim view` ([Watch a run](#watch-a-run)) from the plugin's `v0.5.3` tag over the
 dataset's `runs/`, which it downloads when it starts: every recorded run of the five versions, replayed from its
 records, with no model called. A link opens one run, such as
-[GPT-6 Astra's lines film week](https://earakely-scale-portsimenv-agentenv.hf.space/viewer/#/run/lines-astra/openai%2Fgpt-6-astra/dock-36A-w05x1-busy-0-e09)
+[GPT-6 Astra's lines film week](https://earakely-scale-portsimenv-agentenv.hf.space/viewer/#/run/lines-fix6-astra/openai%2Fgpt-6-astra/dock-24B-w07x1-busy-0-e09)
 or [GPT-6.1 Sol's wind film week](https://earakely-scale-portsimenv-agentenv.hf.space/viewer/#/run/wind-pilot-gpt/openai%2Fgpt-6.1-sol/dock-24B-w37x1-standard-0-e01).
 
 ### Run a bundle from the Hub
 
 ```bash
-agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.5.2 --task dock-36A-w06x1-standard-0-e07 \
+agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.5.3 --task dock-36A-w06x1-standard-0-e07 \
     --model zai-org/GLM-5.3-Flash:baseten          # the default bundle: dock-v1-eval-lines (v5)
-agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.5.2 --bundle dock-v1-eval-marine \
+agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.5.3 --bundle dock-v1-eval-marine \
     --task dock-24B-w07x1-busy-0 --model zai-org/GLM-5.3-Flash:baseten   # v3; -wind is v4, -live v2, dock-v1-eval v1
 ```
 
@@ -1553,7 +1555,7 @@ agent-env hf run earakely-scale/PortSimEnv-AgentEnv@v0.5.2 --bundle dock-v1-eval
   `~/.cache/agentenv-hf/earakely-scale/PortSimEnv-AgentEnv/<commit>`. Without `--bundle` it runs the card's default,
   `dock-v1-eval-lines`, which also deploys a `portsim-line` agent for each ship's agent in the week.
 - The card's `agentenv` table names what each bundle needs: the plugin,
-  `agentenv-portsim @ git+https://github.com/earakely-scale/agentenv-portsim-plugin@v0.5.2`, and the setup command,
+  `agentenv-portsim @ git+https://github.com/earakely-scale/agentenv-portsim-plugin@v0.5.3`, and the setup command,
   `agent-env portsim setup --agent`. `hf run` checks that the plugin is installed and, if it isn't, stops with the
   `agent-env plugin add` command; it never installs or runs anything the card names. It checks the plugin by name,
   not by version, so an older install passes and has to be upgraded to this release first. If an env or the agent

@@ -108,7 +108,7 @@ def step_url(mcp_url: str) -> str:
         description="A ship's agent at the Port of Barcelona: reports and answers for its line's ships, agrees an "
                     "arrival time when a ship can make it, and otherwise offers the earliest or latest it can. Message "
                     "it with structured requests.",
-        version="0.5.2",
+        version="0.5.3",
     ),
     config=AgentConfig,
     extensions=(MCP_CONFIG_V1,),
