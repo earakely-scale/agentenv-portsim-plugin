@@ -308,17 +308,19 @@ profile ([Play a live week](#play-a-live-week) says why). In an existing agent-e
 
 ## Tasks
 
-The bundle `portsim` holds three wiring tasks. Each deploys the env, loads a task with `urn:portsim:load-task/v1`
-and is graded by `portsim-verifier`:
+The bundle `portsim` holds five wiring tasks. Each deploys the env, loads a task with `urn:portsim:load-task/v1`
+and is graded by `portsim-verifier`. The first three load the eval task `dock-24B-w07x1-busy-0`, and the two `-train`
+ones the standard train task `dock-24B-w04x1-standard-2`:
 
 | Task | What it does | Score |
 |---|---|---|
-| `smoke` | submits the task's optimal plan through `urn:portsim:submit-plan/v1` | 1, so it prints `passed` |
+| `smoke`, `smoke-train` | submits the task's optimal plan through `urn:portsim:submit-plan/v1` | 1, so it prints `passed` |
 | `wiring-infeasible` | submits a plan that breaks the rules | at most 0.2 |
-| `wiring-nosubmit` | submits nothing | 0 |
+| `wiring-nosubmit`, `wiring-nosubmit-train` | submits nothing | 0 |
 
 ```bash
 agent-env run portsim --task smoke --task wiring-infeasible --task wiring-nosubmit
+agent-env run portsim --task smoke-train --task wiring-nosubmit-train
 ```
 
 The env holds both of upstream's dock-v1 packs, built from the port's 2024 container calls at quays 24B (APM
@@ -379,6 +381,11 @@ agent-env run results/bundles/dock-v1-eval --task dock-24B-w06x1-busy-0 --model 
 
 Each task deploys the env, loads its PortSim task, deploys `portsim-llm`, plays one episode and grades the plan with
 `portsim-verifier`. A task names no model; `--model` picks it.
+
+`--tier` keeps the pack's tasks of one tier, and can be repeated:
+`agent-env portsim tasks generate --pack dock-v1-train --tier standard` writes the 266 standard train tasks into
+`results/bundles/dock-v1-train-standard`, the set the training runs use. Every generated task also runs as an episode
+(agent-env's `EpisodeSpec`), with your own loop playing `portsim-llm`'s part.
 
 What differs from upstream's harness:
 
@@ -495,7 +502,8 @@ The env grades a submitted plan once, with `berth_core`'s reward v3, which every
 
 Rewards are rounded to six decimals, and the same plan always gets the same reward. `portsim-verifier` reads
 `data/get` and reports one row whose score is the reward, so with `weighted_average` the task's score is the reward
-itself. If the env can't answer `data/get`, the verifier raises and the run fails rather than scoring 0.
+itself. If the env can't answer `data/get`, or has no task loaded because it was reset or restarted since the load, the
+verifier raises and the run fails rather than scoring 0.
 `agent-env run` prints `passed` only for a score of 1; any other reward prints `scored below 1` with the score.
 
 ## The live port
@@ -1621,7 +1629,7 @@ heavy lifting; this repository adds PortSimEnv. Each piece maps to a framework c
 | [Triggers](https://www.agentenvframework.com/docs/environments/triggers) | one action trigger per watch delivers that watch's notices through `port_notice`, under a barrier |
 | [RBAC](https://www.agentenvframework.com/docs/environments/rbac): which roles see which tools | `port_notice` is disabled for the agent's role |
 | [Plugin](https://www.agentenvframework.com/docs/plugins/environment-plugins): a pip package with entry points | `pyproject.toml`: the bundles `portsim`, `portsim-live`, `portsim-marine` and `portsim-wind` (`agent_env.bundles`) and the `agent-env portsim` commands (`agent_env.cli_plugins`); its dependency [agentenv-hf](https://github.com/earakely-scale/agentenv-hf-plugin), a plugin too, adds `agent-env hf publish` and `hf run` ([On the Hugging Face Hub](#on-the-hugging-face-hub)) |
-| [Tasks](https://www.agentenvframework.com/docs/tasks/creating) and verifiers | `src/agentenv_portsim/bundles/portsim/`: the wiring tasks and `portsim-verifier`, run with `agent-env run portsim --task <task>`; `bundles/portsim-live/`: the live tasks and `portsim-live-verifier`; `bundles/portsim-marine/`: the marine tasks; `bundles/portsim-wind/`: the wind tasks; `agent-env portsim tasks generate [--live \| --marine \| --wind]` writes a pack's tasks as a folder bundle |
+| [Tasks](https://www.agentenvframework.com/docs/tasks/creating) and verifiers | `src/agentenv_portsim/bundles/portsim/`: the wiring tasks and `portsim-verifier`, run with `agent-env run portsim --task <task>`; `bundles/portsim-live/`: the live tasks and `portsim-live-verifier`; `bundles/portsim-marine/`: the marine tasks; `bundles/portsim-wind/`: the wind tasks; `agent-env portsim tasks generate [--tier <tier> \| --live \| --marine \| --wind]` writes a pack's tasks as a folder bundle |
 | [A2A agent](https://www.agentenvframework.com/docs/agents/creating): an agent in a container, on agent-env's model endpoint | `agents/portsim-llm/`, an `AgentEnvAgent` that reads the env's MCP server from the task and returns its episode as the trajectory |
 | [Registry](https://www.agentenvframework.com/docs/registry): versioned images, envs, agents and runs | `agent-env portsim setup` builds the image `agentenv-portsim-env` and registers the envs `portsim`, `portsim-live`, `portsim-marine` and `portsim-wind` on it, and with `--agent` the agent `portsim-llm`; every run and grade is stored |
 

@@ -9,6 +9,7 @@ import pytest
 from agent_env.bundle.parse import BundleKind, parse_bundle
 from agent_env.bundle.plan import check_bundle
 from agent_env.bundle.resolve import resolve_bundle
+from agent_env.task import EpisodeSpec, Task
 from agent_env.task_step.registry import get_task_step_registry
 from berth_core import rules, situation
 from click.testing import CliRunner
@@ -104,3 +105,35 @@ def test_generate_writes_to_out_or_results_bundles(tmp_path, monkeypatch, args, 
     assert result.exit_code == 0, result.output
     assert result.output.startswith(f"Wrote 50 tasks into {out}; play one with: agent-env run {out} --task ")
     assert len(list((tmp_path / out / "tasks").iterdir())) == 50
+
+
+@pytest.mark.parametrize(("pack", "count"), [("dock-v1-train", 266), ("dock-v1-eval", 9)])
+def test_a_tier_keeps_the_packs_tasks_of_that_tier(tmp_path, pack, count):
+    names = tasks.generate(pack, tmp_path, tiers=["standard"])
+    assert names == [t.task_id for t in tasks.pack_tasks(pack) if t.difficulty == "standard"]
+    assert len(names) == count
+    assert sorted(p.stem for p in (tmp_path / "tasks").iterdir()) == sorted(names)
+    assert (tmp_path / "README.md").read_text().startswith(f"PortSim {pack} (standard): {count} tasks, each played")
+
+
+def test_generate_writes_the_tiers_into_their_own_bundle(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    result = CliRunner().invoke(portsim, ["tasks", "generate", "--pack", "dock-v1-eval", "--tier", "standard",
+                                          "--tier", "busy"])
+    assert result.exit_code == 0, result.output
+    assert result.output.startswith("Wrote 24 tasks into results/bundles/dock-v1-eval-standard-busy; ")
+
+
+def test_a_tier_is_refused_with_the_week_flags(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    result = CliRunner().invoke(portsim, ["tasks", "generate", "--pack", "dock-v1-eval", "--live",
+                                          "--tier", "standard"])
+    assert result.exit_code == 2
+    assert "--tier picks the pack's tasks; --live plays its weeks" in result.output
+
+
+@pytest.mark.parametrize("pack", tasks.PACK_NAMES)
+def test_every_task_of_the_pack_runs_as_an_episode_played_by_ones_own_loop(pack):
+    for task in tasks.pack_tasks(pack):
+        spec = EpisodeSpec.from_task(Task.from_dict({"id": task.task_id, "steps": tasks.steps(task)}))
+        assert spec.trainer_agents == ("default-agent",)

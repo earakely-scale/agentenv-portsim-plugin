@@ -39,6 +39,7 @@ from .world import Week
 
 PACKS = files("agentenv_portsim") / "data"
 PACK_NAMES = ["dock-v1-eval", "dock-v1-train"]
+TIERS = ["busy", "extreme", "standard", "storm"]
 LIVE_PACK = "dock-v1-eval"
 VERIFIER = files("agentenv_portsim.bundles") / "portsim/artifacts/portsim-verifier/verify.py"
 LIVE_VERIFIER = files("agentenv_portsim.bundles") / "portsim-live/artifacts/portsim-live-verifier/verify.py"
@@ -237,17 +238,18 @@ def _write(path: Path, data: bytes) -> None:
 
 def generate(pack: str, out: Path, *, task_ids: list[str] | None = None, episode_cap_usd: float | None = None,
              live: bool = False, marine: bool = False, hf_bill_to: str | None = None, wind: bool = False,
-             lines: bool = False) -> list[str]:
+             lines: bool = False, tiers: list[str] | None = None) -> list[str]:
     """Writes the bundle into ``out``: README.md, the verifier and tasks/<task_id>.json, for ``task_ids`` or the whole
     pack (live: the qualifying weeks; marine or wind: the qualifying marine or wind weeks, played live), in the pack's
-    order."""
+    order; with ``tiers``, only the pack's tasks of those tiers."""
     live = live or marine or wind or lines
     if live and task_ids is None:
         task_ids = (lines_weeks.task_ids() if lines else wind_weeks.task_ids() if wind
                     else marine_weeks.task_ids() if marine else live_task_ids())
     weeks = (lines_weeks.pack().tasks if lines else wind_weeks.pack().tasks if wind
              else marine_weeks.pack().tasks if marine else pack_tasks(pack))
-    chosen = [t for t in weeks if task_ids is None or t.task_id in task_ids]
+    chosen = [t for t in weeks
+              if (task_ids is None or t.task_id in task_ids) and (tiers is None or t.difficulty in tiers)]
     if lines:
         _write(out / "README.md", f"PortSim lines {pack}: {len(chosen)} weeks, each played in watches by the "
                                   f"portsim-llm agent on portsim-lines, with the wind weeks' pilots, tugs and real "
@@ -267,8 +269,9 @@ def generate(pack: str, out: Path, *, task_ids: list[str] | None = None, episode
                                   f"portsim-llm agent on portsim-live and graded by portsim-live-verifier.\n\n"
                                   f"{LICENCE}\n".encode())
     else:
-        _write(out / "README.md", f"PortSim {pack}: {len(chosen)} tasks, each played by the portsim-llm agent and "
-                                  f"graded by portsim-verifier.\n\n{LICENCE}\n".encode())
+        tiered = f" ({', '.join(tiers)})" if tiers else ""
+        _write(out / "README.md", f"PortSim {pack}{tiered}: {len(chosen)} tasks, each played by the portsim-llm agent "
+                                  f"and graded by portsim-verifier.\n\n{LICENCE}\n".encode())
     if live:
         _write(out / "artifacts/portsim-live-verifier/verify.py", LIVE_VERIFIER.read_bytes())
     else:
@@ -305,12 +308,15 @@ def tasks_group():
 @click.option("--lines", is_flag=True,
               help="Lines weeks on portsim-lines: the wind weeks with each ship's agent deployed as its own A2A agent, "
                    "ETAs that firm up, requested arrival times and a first-come queue.")
+@click.option("--tier", "tiers", multiple=True, type=click.Choice(TIERS),
+              help="Only the pack's tasks of this tier; repeat it for several. The training runs use standard.")
 @click.option("--out", type=click.Path(file_okay=False, path_type=Path),
-              help="The bundle folder to write. Default: results/bundles/<pack>, or <pack>-live with --live, "
-                   "<pack>-marine with --marine, <pack>-wind with --wind, or <pack>-lines with --lines.")
+              help="The bundle folder to write. Default: results/bundles/<pack>, or <pack>-<tier> with --tier, "
+                   "<pack>-live with --live, <pack>-marine with --marine, <pack>-wind with --wind, or <pack>-lines "
+                   "with --lines.")
 @click.option("--hf-bill-to", metavar="ORG", help=HF_BILL_TO_HELP)
-def generate_command(pack: str, live: bool, marine: bool, wind: bool, lines: bool, out: Path | None,
-                     hf_bill_to: str | None):
+def generate_command(pack: str, live: bool, marine: bool, wind: bool, lines: bool, tiers: tuple[str, ...],
+                     out: Path | None, hf_bill_to: str | None):
     """Write a bundle with one task per task in the pack: deploy the env, load the task, play it with portsim-llm on
     upstream's prompts and limits, and grade it with portsim-verifier. With --live, one task per qualifying week: load
     it into portsim-live, play it in watches, end the week and grade it with portsim-live-verifier. With --marine, the
@@ -322,8 +328,12 @@ def generate_command(pack: str, live: bool, marine: bool, wind: bool, lines: boo
     flag = "--lines" if lines else "--wind" if wind else "--marine" if marine else "--live"
     if (live or marine or wind or lines) and pack != LIVE_PACK:
         raise click.UsageError(f"{flag} plays the one-week {LIVE_PACK} weeks, not {pack}")
+    if tiers and (live or marine or wind or lines):
+        raise click.UsageError(f"--tier picks the pack's tasks; {flag} plays its weeks")
     out = out or Path("results/bundles") / (f"{pack}-lines" if lines else f"{pack}-wind" if wind
-                                             else f"{pack}-marine" if marine else f"{pack}-live" if live else pack)
-    names = generate(pack, out, live=live, marine=marine, hf_bill_to=hf_bill_to, wind=wind, lines=lines)
+                                             else f"{pack}-marine" if marine else f"{pack}-live" if live
+                                             else "-".join([pack, *tiers]))
+    names = generate(pack, out, live=live, marine=marine, hf_bill_to=hf_bill_to, wind=wind, lines=lines,
+                     tiers=list(tiers) or None)
     click.echo(f"Wrote {len(names)} tasks into {out}; play one with: agent-env run {out} --task {names[0]} "
                "--model <litellm model id>")
