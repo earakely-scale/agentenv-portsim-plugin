@@ -164,8 +164,8 @@ A release goes in this order:
 
    ```bash
    uv run python scripts/hub_dataset.py --out build/hub/dataset
-   uv run python scripts/hub_dataset.py --out build/hub/dataset --repo earakely-scale/PortSimEnv-AgentEnv --tag v0.5.4 \
-       --message "v0.5.4: ..."
+   uv run python scripts/hub_dataset.py --out build/hub/dataset --repo earakely-scale/PortSimEnv-AgentEnv --tag v0.5.5 \
+       --message "v0.5.5: ..."
    ```
 
    The first writes the folder and prints each table's row count, and replays every run once for each sweep's
