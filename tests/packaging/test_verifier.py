@@ -74,6 +74,12 @@ async def test_the_score_is_the_reward_of_the_submitted_plan(fields, score):
     assert rows[0]["episode"] == episode(**fields)
 
 
+async def test_an_env_with_no_task_loaded_leaves_the_run_unscored():
+    async with served(Episode(episode(task_id=None))) as mcp_url:
+        with pytest.raises(RuntimeError, match="the env has no task loaded: it was reset or restarted since the load"):
+            await verifier.verify(mcp_url)
+
+
 async def test_an_env_that_cannot_report_fails_the_step():
     async with served(Episode(RuntimeError("down"))) as mcp_url:
         with pytest.raises(RuntimeError, match="data/get failed"):
