@@ -43,3 +43,11 @@ agent_default = "local"
 # [model]
 # base_url = "https://your-litellm-proxy"
 # api_key  = "secret:PORTSIM_MODEL_KEY"
+
+# The hf_jobs profile: the modal_vm profile above with "hf_jobs" in place of "modal_vm" in [sandbox]. It runs each
+# container as a Hugging Face Job billed to the account you're logged in to (`hf auth login`, or HF_TOKEN), and needs no
+# Modal token. The README's "Run it yourself" lists the images to push and make public. Optionally:
+#
+# [sandbox.providers.hf_jobs.config]
+# namespace = "your-hf-org"   # bill an organization rather than your own account
+# flavor    = "cpu-basic"     # the hardware every job runs on

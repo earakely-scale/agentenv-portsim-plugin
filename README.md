@@ -289,8 +289,26 @@ profile in `.agentenv/config.toml`, set its `repository_prefix` to your own GHCR
 `agent-env portsim setup --platform linux/amd64`, which pushes the image to `ghcr.io/<namespace>/agentenv-portsim-env`.
 Pushing needs `docker login ghcr.io` with a token that can write packages; Modal's VMs pull the image without
 credentials, so make the package public; and Modal needs `modal token new`. Run live, marine and wind weeks on the local
-profile ([Play a live week](#play-a-live-week) says why). In an existing agent-env install,
+or `hf_jobs` profile ([Play a live week](#play-a-live-week) says why). In an existing agent-env install,
 `agent-env plugin add ./agentenv-portsim-plugin` adds a clone of the plugin.
+
+On [Hugging Face Jobs](https://huggingface.co/docs/huggingface_hub/guides/jobs), each container of a run is a job
+billed to your Hugging Face account, and only agent-env runs on this machine. Jobs need a positive credit balance on
+the account they bill; a `cpu-basic` job costs $0.01 an hour. Put the `hf_jobs` profile from [`.agentenv/config.example.toml`](.agentenv/config.example.toml)
+in `.agentenv/config.toml` with your GHCR namespace, log in with `hf auth login` (or set `HF_TOKEN`), and push the
+amd64 images of the env, the gateway it runs behind and the gateway's Postgres store:
+
+```bash
+agent-env env gateway put --id default --platform linux/amd64   # the gateway each port's env runs behind
+agent-env env service-db put --platform linux/amd64             # its Postgres store, with pgweb and db-mcp
+agent-env portsim setup --platform linux/amd64 --agent
+```
+
+Jobs pull images without credentials, so make these packages public: `default__env_image`, `default-db__db_image`,
+`default-db__db_mcp_image`, `default-db__db_web_image`, `agentenv-portsim-env`, and the agents' `agentenv-portsim-agent`
+and `agentenv-portsim-line`. Then run as above, adding `--sandbox hf_jobs` or not as the profile already defaults to it.
+A port's env deploys as five `cpu-basic` jobs on one private network: Postgres, pgweb, db-mcp, the PortSim server and the
+gateway. That takes about 35 seconds. Each agent is one more job, and the run cancels them all as it ends.
 
 <details>
 <summary>Troubleshooting</summary>
@@ -674,9 +692,10 @@ on another week the script would stop.
 
 ### Play a live week
 
-Live weeks run on local Docker for now. On the `modal_vm` profile, the gateway loads every image as a tarball from the
-object store at each deploy, about an hour per deploy from that profile's local file store. `setup` still registers
-`portsim-live` there, but run live weeks on the local profile.
+Live weeks run on local Docker and on Hugging Face Jobs, which pull each image by name
+([Run it yourself](#run-it-yourself) sets that up). On the `modal_vm` profile, the gateway loads every image as a
+tarball from the object store at each deploy, about an hour per deploy from that profile's local file store. `setup`
+still registers `portsim-live` there, but run live weeks on the local or `hf_jobs` profile.
 
 ```bash
 agent-env portsim setup --agent                    # also registers portsim-live, on the gateway, with the same image
