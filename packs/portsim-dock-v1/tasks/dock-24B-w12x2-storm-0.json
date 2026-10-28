@@ -1,0 +1,49 @@
+[
+  {
+    "id": "deploy",
+    "type": "deploy_env",
+    "env_id": "portsim"
+  },
+  {
+    "id": "load-task",
+    "type": "apply_server_config",
+    "env_id": "portsim",
+    "directives": [
+      {
+        "service": "portsim",
+        "uri": "urn:portsim:load-task/v1",
+        "args": {
+          "task_id": "dock-24B-w12x2-storm-0"
+        }
+      }
+    ]
+  },
+  {
+    "id": "deploy-agent",
+    "type": "deploy_agent",
+    "a2a_agent_id": "portsim-llm",
+    "env_ids": [
+      "portsim"
+    ]
+  },
+  {
+    "id": "play",
+    "type": "prompt_agent",
+    "prompt_id": "dock-24B-w12x2-storm-0",
+    "system_prompt": "You are the berth planner for this quay. The published plan no longer works. Make a new berth plan for every ship in the table: when it berths, where, and how many quay cranes work it.\n\nRules (a plan that breaks any of them is infeasible):\n- A ship berths at or after its arrival hour.\n- It gets between its min and max cranes. Hours alongside = ceil(moves / (28 x cranes)); it departs when the work is done, unless that hour is inside a no-movement window for that ship, in which case it waits alongside (still occupying its sections, cranes free) until the window ends.\n- No ship may berth inside a no-movement window that applies to it.\n- It occupies `sections` consecutive sections starting at the section you give, all within 2-22.\n- No two ships may use the same section in the same hour. Ships already alongside and closed sections are off limits for the hours listed.\n  A ship that leaves at hour h frees its sections for a ship berthing at hour h.\n- In every hour, the cranes of all ships alongside (including ships already alongside) may not exceed the cranes available that hour.\n- At most 2 movements per hour: a ship berthing at hour h and a ship leaving at hour h each count as one movement in hour h.\n\nCost (lower is better):\n- Delay: for each ship, (its sections) x (hours it departs after its planned departure). Leaving early earns nothing.\n- Moves: 5 for each scheduled ship you put on a different starting section than planned. Changing the hour or the cranes costs nothing beyond delay. Unscheduled calls have no planned section.\n- Priority ships (notes column): their delay counts that many times. Emergency ships (notes column): each hour they dock after their deadline adds the stated amount.\n\nPlan format - one entry per ship, using the ids from the table:\n[{\"ship\": 0, \"berth_hour\": 36, \"section\": 22, \"cranes\": 3}, {\"ship\": 1, \"berth_hour\": 163, \"section\": 24, \"cranes\": 2}, ...]\n\nTools:\n- get_situation(): this situation again.\n- check_plan(plan): lists rule violations in your plan and its cost. You have 10 checks.\n- submit_plan(plan): your final answer. It ends the episode and is graded once: an infeasible plan scores low, a feasible one scores higher the closer its cost is to the best possible.\nSubmit before you run out of turns; an episode that ends without a submission scores 0.",
+    "prompt": "# APM Terminals Barcelona, Port of Barcelona - quay 24B, week 12 of 2024\nHour 0 is Monday 18 March 2024 00:00 UTC. Times are whole hours from then.\nThe quay is sections 2-22 (about 42 m each). A ship needs its number of consecutive sections for its hours alongside.\n\n## Notices\n- Gale warning. From hour 55 to hour 73 the wind is above 25 kn: under the port's traffic rules ships of 300 m or more may not berth or leave. From hour 61 to hour 72 it is above 30 kn: no ship may berth or leave. Cranes keep working; a ship that finishes inside a window waits alongside until the window ends.\n- Sections 7-11 are closed from hour 63 to hour 99 (fender repair).\n- Sections 14-22 are closed from hour 216 to hour 248 (dredging along the berth).\n- Ship 1 MELINA was delayed leaving Valencia: it now arrives at hour 33 (planned slot hour 29). Its planned departure stays hour 46.\n- Ship 18 CINZIA A was delayed leaving Castellon de la Plana: it now arrives at hour 326 (planned slot hour 320). Its planned departure stays hour 344.\n- Ship 12 HYUNDAI PRIDE was delayed leaving Damietta: it now arrives at hour 226 (planned slot hour 222). Its planned departure stays hour 279.\n- Ship 8 CMA CGM DALILA was delayed leaving Fos-sur-Mer: it now arrives at hour 172 (planned slot hour 168). Its planned departure stays hour 192.\n- Ships 15, 16, 17 were held up by the Red Sea diversions and now arrive together between hours 321 and 333 (each ship's arrival hour is in the table). Their planned departures stay as published.\n- 2 of the terminal's 9 quay cranes are out of service from hour 127 to hour 152 (gantry repair): 7 cranes in that window.\n- Emergency: ship 12 HYUNDAI PRIDE reports reefer power failures; its cargo is at risk unless it docks by hour 233. Each hour it docks later costs 80 on top of any delay.\n- Priority: ship 8 CMA CGM DALILA carries transshipment cargo for a connecting service; each hour it leaves after its planned departure (hour 192) costs three times the usual.\n- Priority: ship 14 ZIM IBERIA carries transshipment cargo for a connecting service; each hour it leaves after its planned departure (hour 287) costs three times the usual.\n\n## Already alongside at hour 0 (cannot move)\n- ONE MILANO: sections 14-21 until hour 36\n\n## Closed sections\n- sections 7-11, hours 63-99 (fender repair)\n- sections 14-22, hours 216-248 (dredging along the berth)\n\n## Quay cranes and movements\n- The terminal has 9 quay cranes. From hour 127 to hour 152 only 7 are available.\n- At most 2 ships may berth or leave in any one hour (pilots and tugs).\n- A crane handles 28 container moves per hour: hours alongside = ceil(moves / (28 x cranes)).\n- No berthing or leaving for ships of 300 m or more from hour 55 to hour 73 (wind above 25 kn).\n- No berthing or leaving for all ships from hour 61 to hour 72 (wind above 30 kn).\n- Each ship already alongside keeps 2 cranes until it leaves.\n\n## Ships to berth\n\n| id | ship | length m | sections | arrives (hour) | workload (moves) | cranes min-max | planned berth (hour @ section, cranes) | planned departure (hour) | notes |\n|---|---|---|---|---|---|---|---|---|---|\n| 0 | KALLIROE C | 172 | 5 | 5 | 476 | 1-3 | 5 @ 7, 1 cranes | 22 |  |\n| 1 | MELINA | 260 | 6 | 33 | 1428 | 1-5 | 29 @ 6, 3 cranes | 46 |  |\n| 2 | ONE MUNCHEN | 366 | 8 | 38 | 3920 | 2-7 | 38 @ 14, 4 cranes | 73 |  |\n| 3 | OOCL EUROPE | 323 | 7 | 48 | 1680 | 1-6 | 48 @ 5, 3 cranes | 68 |  |\n| 4 | ZIM VIRGINIA | 294 | 7 | 72 | 1260 | 1-5 | 72 @ 5, 3 cranes | 87 |  |\n| 5 | TROUPER | 134 | 4 | 127 | 308 | 1-2 | 127 @ 4, 1 cranes | 138 |  |\n| 6 | RUTH BORCHARD | 159 | 4 | 143 | 280 | 1-3 | 143 @ 4, 1 cranes | 153 |  |\n| 7 | SASKIA A | 222 | 5 | 164 | 1736 | 1-4 | 164 @ 3, 2 cranes | 195 |  |\n| 8 | CMA CGM DALILA | 334 | 7 | 172 | 2688 | 2-6 | 168 @ 9, 4 cranes | 192 | priority: lateness x3 |\n| 9 | HYUNDAI VOYAGER | 294 | 7 | 194 | 1092 | 1-5 | 194 @ 9, 3 cranes | 207 |  |\n| 10 | WILHELM | 134 | 4 | 196 | 140 | 1-2 | 196 @ 4, 1 cranes | 201 |  |\n| 11 | ZIM ASIA | 260 | 6 | 209 | 1344 | 1-5 | 209 @ 8, 3 cranes | 225 |  |\n| 12 | HYUNDAI PRIDE | 366 | 8 | 226 | 6384 | 2-7 | 222 @ 14, 4 cranes | 279 | emergency: dock by hour 233 (+80 per hour later) |\n| 13 | CARLOTA B | 141 | 4 | 251 | 924 | 1-2 | 251 @ 2, 1 cranes | 284 |  |\n| 14 | ZIM IBERIA | 261 | 6 | 272 | 1260 | 1-5 | 272 @ 8, 3 cranes | 287 | priority: lateness x3 |\n| 15 | HYUNDAI TOKYO | 304 | 7 | 327 | 924 | 1-6 | 283 @ 15, 3 cranes | 294 |  |\n| 16 | NYSTED MAERSK | 199 | 5 | 327 | 896 | 1-3 | 291 @ 5, 2 cranes | 307 |  |\n| 17 | MAERSK NORFOLK | 210 | 5 | 324 | 1176 | 1-4 | 309 @ 6, 2 cranes | 330 |  |\n| 18 | CINZIA A | 200 | 5 | 326 | 1344 | 1-4 | 320 @ 11, 2 cranes | 344 |  |\n\nMake the new berth plan. Use check_plan to test drafts, then call submit_plan with your final plan.",
+    "max_turns": 12,
+    "model_params": {
+      "max_tokens": 32000
+    },
+    "timeout_seconds": 7200
+  },
+  {
+    "id": "grade",
+    "type": "env_outcome_verifier",
+    "env_id": "portsim",
+    "file_artifact_id": "portsim-verifier",
+    "verifier_id": "portsim",
+    "score_aggregator": "weighted_average"
+  }
+]

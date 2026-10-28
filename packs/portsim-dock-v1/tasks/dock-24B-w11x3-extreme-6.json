@@ -1,0 +1,49 @@
+[
+  {
+    "id": "deploy",
+    "type": "deploy_env",
+    "env_id": "portsim"
+  },
+  {
+    "id": "load-task",
+    "type": "apply_server_config",
+    "env_id": "portsim",
+    "directives": [
+      {
+        "service": "portsim",
+        "uri": "urn:portsim:load-task/v1",
+        "args": {
+          "task_id": "dock-24B-w11x3-extreme-6"
+        }
+      }
+    ]
+  },
+  {
+    "id": "deploy-agent",
+    "type": "deploy_agent",
+    "a2a_agent_id": "portsim-llm",
+    "env_ids": [
+      "portsim"
+    ]
+  },
+  {
+    "id": "play",
+    "type": "prompt_agent",
+    "prompt_id": "dock-24B-w11x3-extreme-6",
+    "system_prompt": "You are the berth planner for this quay. The published plan no longer works. Make a new berth plan for every ship in the table: when it berths, where, and how many quay cranes work it.\n\nRules (a plan that breaks any of them is infeasible):\n- A ship berths at or after its arrival hour.\n- It gets between its min and max cranes. Hours alongside = ceil(moves / (28 x cranes)); it departs when the work is done, unless that hour is inside a no-movement window for that ship, in which case it waits alongside (still occupying its sections, cranes free) until the window ends.\n- No ship may berth inside a no-movement window that applies to it.\n- It occupies `sections` consecutive sections starting at the section you give, all within 2-22.\n- No two ships may use the same section in the same hour. Ships already alongside and closed sections are off limits for the hours listed.\n  A ship that leaves at hour h frees its sections for a ship berthing at hour h.\n- In every hour, the cranes of all ships alongside (including ships already alongside) may not exceed the cranes available that hour.\n- At most 2 movements per hour: a ship berthing at hour h and a ship leaving at hour h each count as one movement in hour h.\n\nCost (lower is better):\n- Delay: for each ship, (its sections) x (hours it departs after its planned departure). Leaving early earns nothing.\n- Moves: 5 for each scheduled ship you put on a different starting section than planned. Changing the hour or the cranes costs nothing beyond delay. Unscheduled calls have no planned section.\n- Priority ships (notes column): their delay counts that many times. Emergency ships (notes column): each hour they dock after their deadline adds the stated amount.\n\nPlan format - one entry per ship, using the ids from the table:\n[{\"ship\": 0, \"berth_hour\": 36, \"section\": 22, \"cranes\": 3}, {\"ship\": 1, \"berth_hour\": 163, \"section\": 24, \"cranes\": 2}, ...]\n\nTools:\n- get_situation(): this situation again.\n- check_plan(plan): lists rule violations in your plan and its cost. You have 10 checks.\n- submit_plan(plan): your final answer. It ends the episode and is graded once: an infeasible plan scores low, a feasible one scores higher the closer its cost is to the best possible.\nSubmit before you run out of turns; an episode that ends without a submission scores 0.",
+    "prompt": "# APM Terminals Barcelona, Port of Barcelona - quay 24B, week 11 of 2024\nHour 0 is Monday 11 March 2024 00:00 UTC. Times are whole hours from then.\nThe quay is sections 2-22 (about 42 m each). A ship needs its number of consecutive sections for its hours alongside.\n\n## Notices\n- Gale warning. From hour 104 to hour 131 the wind is above 25 kn: under the port's traffic rules ships of 300 m or more may not berth or leave. From hour 110 to hour 123 it is above 30 kn: no ship may berth or leave. Cranes keep working; a ship that finishes inside a window waits alongside until the window ends.\n- Unscheduled call: ship 30 RUTH BORCHARD (159 m, 4 sections) arrives at hour 395, has 224 moves and asks to sail by hour 409. It has no planned slot, so placing it anywhere costs no move penalty.\n- Unscheduled call: ship 31 GFS SAPPHIRE (170 m, 4 sections) arrives at hour 443, has 308 moves and asks to sail by hour 462. It has no planned slot, so placing it anywhere costs no move penalty.\n- Sections 13-21 are closed from hour 379 to hour 402 (dredging along the berth).\n- Sections 9-13 are closed from hour 326 to hour 355 (STS crane maintenance).\n- Ship 10 ONE MILANO was delayed leaving Fos-sur-Mer: it now arrives at hour 174 (planned slot hour 161). Its planned departure stays hour 204.\n- Ship 2 NAVIOS INDIGO was delayed leaving Valencia: it now arrives at hour 63 (planned slot hour 40). Its planned departure stays hour 50.\n- Ship 15 ZIM VIRGINIA was delayed leaving Genoa: it now arrives at hour 254 (planned slot hour 240). Its planned departure stays hour 255.\n- Ship 29 CINZIA A was delayed leaving Castellon de la Plana: it now arrives at hour 511 (planned slot hour 488). Its planned departure stays hour 512.\n- Ship 26 HYUNDAI TOKYO was delayed leaving Valencia: it now arrives at hour 457 (planned slot hour 451). Its planned departure stays hour 462.\n- Ships 17, 18, 19, 20 were held up by the Red Sea diversions and now arrive together between hours 373 and 385 (each ship's arrival hour is in the table). Their planned departures stay as published.\n- 3 of the terminal's 9 quay cranes are out of service from hour 442 to hour 480 (gantry repair): 6 cranes in that window.\n- Emergency: ship 28 MAERSK NORFOLK reports reefer power failures; its cargo is at risk unless it docks by hour 485. Each hour it docks later costs 50 on top of any delay.\n- Priority: ship 2 NAVIOS INDIGO carries transshipment cargo for a connecting service; each hour it leaves after its planned departure (hour 50) costs three times the usual.\n- Priority: ship 6 NJORD carries transshipment cargo for a connecting service; each hour it leaves after its planned departure (hour 119) costs three times the usual.\n\n## Closed sections\n- sections 13-21, hours 379-402 (dredging along the berth)\n- sections 9-13, hours 326-355 (STS crane maintenance)\n\n## Quay cranes and movements\n- The terminal has 9 quay cranes. From hour 442 to hour 480 only 6 are available.\n- At most 2 ships may berth or leave in any one hour (pilots and tugs).\n- A crane handles 28 container moves per hour: hours alongside = ceil(moves / (28 x cranes)).\n- No berthing or leaving for ships of 300 m or more from hour 104 to hour 131 (wind above 25 kn).\n- No berthing or leaving for all ships from hour 110 to hour 123 (wind above 30 kn).\n\n## Ships to berth\n\n| id | ship | length m | sections | arrives (hour) | workload (moves) | cranes min-max | planned berth (hour @ section, cranes) | planned departure (hour) | notes |\n|---|---|---|---|---|---|---|---|---|---|\n| 0 | HYUNDAI OAKLAND | 293 | 7 | 24 | 1260 | 1-5 | 24 @ 5, 3 cranes | 39 |  |\n| 1 | ONE FRIENDSHIP | 366 | 8 | 25 | 3584 | 2-7 | 25 @ 14, 4 cranes | 57 |  |\n| 2 | NAVIOS INDIGO | 261 | 6 | 63 | 840 | 1-5 | 40 @ 6, 3 cranes | 50 | priority: lateness x3 |\n| 3 | VIVIEN A | 210 | 5 | 52 | 1232 | 1-4 | 52 @ 6, 2 cranes | 74 |  |\n| 4 | ZIM PACIFIC | 262 | 6 | 59 | 1260 | 1-5 | 59 @ 15, 3 cranes | 74 |  |\n| 5 | CARLOTA B | 141 | 4 | 83 | 952 | 1-2 | 83 @ 8, 1 cranes | 117 |  |\n| 6 | NJORD | 142 | 4 | 106 | 364 | 1-2 | 106 @ 4, 1 cranes | 119 | priority: lateness x3 |\n| 7 | MAERSK NARMADA | 211 | 5 | 126 | 1064 | 1-4 | 126 @ 17, 2 cranes | 145 |  |\n| 8 | MAERSK JAIPUR | 222 | 5 | 127 | 840 | 1-4 | 127 @ 5, 2 cranes | 142 |  |\n| 9 | SEASPAN SAIGON | 260 | 6 | 156 | 924 | 1-5 | 156 @ 6, 3 cranes | 167 |  |\n| 10 | ONE MILANO | 366 | 8 | 174 | 4816 | 2-7 | 161 @ 14, 4 cranes | 204 |  |\n| 11 | KALLIROE C | 172 | 5 | 173 | 476 | 1-3 | 173 @ 7, 1 cranes | 190 |  |\n| 12 | MELINA | 260 | 6 | 197 | 1428 | 1-5 | 197 @ 6, 3 cranes | 214 |  |\n| 13 | ONE MUNCHEN | 366 | 8 | 206 | 3920 | 2-7 | 206 @ 14, 4 cranes | 241 |  |\n| 14 | OOCL EUROPE | 323 | 7 | 216 | 1680 | 1-6 | 216 @ 5, 3 cranes | 236 |  |\n| 15 | ZIM VIRGINIA | 294 | 7 | 254 | 1260 | 1-5 | 240 @ 5, 3 cranes | 255 |  |\n| 16 | TROUPER | 134 | 4 | 295 | 308 | 1-2 | 295 @ 4, 1 cranes | 306 |  |\n| 17 | RUTH BORCHARD | 159 | 4 | 380 | 280 | 1-3 | 311 @ 4, 1 cranes | 321 |  |\n| 18 | SASKIA A | 222 | 5 | 374 | 1736 | 1-4 | 332 @ 3, 2 cranes | 363 |  |\n| 19 | CMA CGM DALILA | 334 | 7 | 373 | 2688 | 2-6 | 336 @ 9, 4 cranes | 360 |  |\n| 20 | HYUNDAI VOYAGER | 294 | 7 | 381 | 1092 | 1-5 | 362 @ 9, 3 cranes | 375 |  |\n| 21 | WILHELM | 134 | 4 | 364 | 140 | 1-2 | 364 @ 4, 1 cranes | 369 |  |\n| 22 | ZIM ASIA | 260 | 6 | 377 | 1344 | 1-5 | 377 @ 8, 3 cranes | 393 |  |\n| 23 | HYUNDAI PRIDE | 366 | 8 | 390 | 6384 | 2-7 | 390 @ 14, 4 cranes | 447 |  |\n| 30 | RUTH BORCHARD | 159 | 4 | 395 | 224 | 1-3 | none (unscheduled) | 409 |  |\n| 24 | CARLOTA B | 141 | 4 | 419 | 924 | 1-2 | 419 @ 2, 1 cranes | 452 |  |\n| 25 | ZIM IBERIA | 261 | 6 | 440 | 1260 | 1-5 | 440 @ 8, 3 cranes | 455 |  |\n| 31 | GFS SAPPHIRE | 170 | 4 | 443 | 308 | 1-3 | none (unscheduled) | 462 |  |\n| 26 | HYUNDAI TOKYO | 304 | 7 | 457 | 924 | 1-6 | 451 @ 15, 3 cranes | 462 |  |\n| 27 | NYSTED MAERSK | 199 | 5 | 459 | 896 | 1-3 | 459 @ 5, 2 cranes | 475 |  |\n| 28 | MAERSK NORFOLK | 210 | 5 | 477 | 1176 | 1-4 | 477 @ 6, 2 cranes | 498 | emergency: dock by hour 485 (+50 per hour later) |\n| 29 | CINZIA A | 200 | 5 | 511 | 1344 | 1-4 | 488 @ 11, 2 cranes | 512 |  |\n\nMake the new berth plan. Use check_plan to test drafts, then call submit_plan with your final plan.",
+    "max_turns": 12,
+    "model_params": {
+      "max_tokens": 32000
+    },
+    "timeout_seconds": 7200
+  },
+  {
+    "id": "grade",
+    "type": "env_outcome_verifier",
+    "env_id": "portsim",
+    "file_artifact_id": "portsim-verifier",
+    "verifier_id": "portsim",
+    "score_aggregator": "weighted_average"
+  }
+]

@@ -337,6 +337,26 @@ under their own ids ([The live port](#the-live-port), [The marine port](#the-mar
 pack `dock-v1-wind`, whose 15 weeks end in their weather week, e.g. `dock-24B-w37x1-standard-0-e01`
 ([The wind port](#the-wind-port)).
 
+### The training pack
+
+`packs/portsim-dock-v1` holds every dock-v1 task, the 1,050 train and the 50 eval, with the env and its verifier, so an
+OpenEnv server serves it with no PortSim setup. `openenv import` turns it into an OpenEnv package, and
+`agent_env.openenv.build_app` serves the folder as it is.
+
+- **The env** is the image `agent-env portsim setup` builds, with the server installed from the plugin's v0.5.5 release
+  on GitHub.
+- **Each task** gives one agent upstream's prompts and limits, for a trainer to play from outside: an OpenEnv client, or
+  TRL through `agent_env.training.trl`.
+- **The splits** are `all`, `train`, `eval`, and one per train tier. `train-standard` holds the 266 tasks the training
+  runs use.
+
+```bash
+openenv import packs/portsim-dock-v1 --name portsim_dock_v1 --output-dir envs
+cd envs/portsim_dock_v1 && MAX_CONCURRENT_ENVS=16 uv run server
+```
+
+`agent-env portsim tasks training-pack` rewrites the folder.
+
 ## Play a model
 
 `portsim-llm` (`agents/portsim-llm/agent.py`) is upstream's harness loop as an A2A agent. It keeps upstream's system

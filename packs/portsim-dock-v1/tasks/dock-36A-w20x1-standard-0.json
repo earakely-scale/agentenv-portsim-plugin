@@ -1,0 +1,49 @@
+[
+  {
+    "id": "deploy",
+    "type": "deploy_env",
+    "env_id": "portsim"
+  },
+  {
+    "id": "load-task",
+    "type": "apply_server_config",
+    "env_id": "portsim",
+    "directives": [
+      {
+        "service": "portsim",
+        "uri": "urn:portsim:load-task/v1",
+        "args": {
+          "task_id": "dock-36A-w20x1-standard-0"
+        }
+      }
+    ]
+  },
+  {
+    "id": "deploy-agent",
+    "type": "deploy_agent",
+    "a2a_agent_id": "portsim-llm",
+    "env_ids": [
+      "portsim"
+    ]
+  },
+  {
+    "id": "play",
+    "type": "prompt_agent",
+    "prompt_id": "dock-36A-w20x1-standard-0",
+    "system_prompt": "You are the berth planner for this quay. The published plan no longer works. Make a new berth plan for every ship in the table: when it berths, where, and how many quay cranes work it.\n\nRules (a plan that breaks any of them is infeasible):\n- A ship berths at or after its arrival hour.\n- It gets between its min and max cranes. Hours alongside = ceil(moves / (28 x cranes)); it departs when the work is done, unless that hour is inside a no-movement window for that ship, in which case it waits alongside (still occupying its sections, cranes free) until the window ends.\n- No ship may berth inside a no-movement window that applies to it.\n- It occupies `sections` consecutive sections starting at the section you give, all within 2-30.\n- No two ships may use the same section in the same hour. Ships already alongside and closed sections are off limits for the hours listed.\n  A ship that leaves at hour h frees its sections for a ship berthing at hour h.\n- In every hour, the cranes of all ships alongside (including ships already alongside) may not exceed the cranes available that hour.\n- At most 3 movements per hour: a ship berthing at hour h and a ship leaving at hour h each count as one movement in hour h.\n\nCost (lower is better):\n- Delay: for each ship, (its sections) x (hours it departs after its planned departure). Leaving early earns nothing.\n- Moves: 5 for each scheduled ship you put on a different starting section than planned. Changing the hour or the cranes costs nothing beyond delay. Unscheduled calls have no planned section.\n- Priority ships (notes column): their delay counts that many times. Emergency ships (notes column): each hour they dock after their deadline adds the stated amount.\n\nPlan format - one entry per ship, using the ids from the table:\n[{\"ship\": 0, \"berth_hour\": 36, \"section\": 22, \"cranes\": 3}, {\"ship\": 1, \"berth_hour\": 163, \"section\": 24, \"cranes\": 2}, ...]\n\nTools:\n- get_situation(): this situation again.\n- check_plan(plan): lists rule violations in your plan and its cost. You have 10 checks.\n- submit_plan(plan): your final answer. It ends the episode and is graded once: an infeasible plan scores low, a feasible one scores higher the closer its cost is to the best possible.\nSubmit before you run out of turns; an episode that ends without a submission scores 0.",
+    "prompt": "# Terminal Catalunya (BEST), Port of Barcelona - quay 36A, week 20 of 2024\nHour 0 is Monday 13 May 2024 00:00 UTC. Times are whole hours from then.\nThe quay is sections 2-30 (about 42 m each). A ship needs its number of consecutive sections for its hours alongside.\n\n## Notices\n- Unscheduled call: ship 23 CELSIUS NICOSIA (239 m, 6 sections) arrives at hour 24, has 1344 moves and asks to sail by hour 54. It has no planned slot, so placing it anywhere costs no move penalty.\n- Sections 9-15 are closed from hour 110 to hour 128 (STS crane maintenance).\n- Ship 22 ALEXANDRA was delayed leaving Marseille: it now arrives at hour 184 (planned slot hour 160). Its planned departure stays hour 180.\n- 3 of the terminal's 13 quay cranes are out of service from hour 98 to hour 143 (gantry repair): 10 cranes in that window.\n- Priority: ship 12 MSC ANNICK carries transshipment cargo for a connecting service; each hour it leaves after its planned departure (hour 112) costs three times the usual.\n\n## Already alongside at hour 0 (cannot move)\n- MSC AMELIA: sections 2-10 until hour 46\n- CMA CGM APOLLON: sections 11-19 until hour 6\n- CMA CGM EXEMPLARITY: sections 24-30 until hour 6\n\n## Closed sections\n- sections 9-15, hours 110-128 (STS crane maintenance)\n\n## Quay cranes and movements\n- The terminal has 13 quay cranes. From hour 98 to hour 143 only 10 are available.\n- At most 3 ships may berth or leave in any one hour (pilots and tugs).\n- A crane handles 28 container moves per hour: hours alongside = ceil(moves / (28 x cranes)).\n- Each ship already alongside keeps 2 cranes until it leaves.\n\n## Ships to berth\n\n| id | ship | length m | sections | arrives (hour) | workload (moves) | cranes min-max | planned berth (hour @ section, cranes) | planned departure (hour) | notes |\n|---|---|---|---|---|---|---|---|---|---|\n| 0 | ADMIRAL GALAXY | 183 | 5 | 7 | 1176 | 1-3 | 7 @ 25, 2 cranes | 28 |  |\n| 1 | CONTSHIP JET | 160 | 4 | 8 | 980 | 1-3 | 8 @ 20, 1 cranes | 43 |  |\n| 2 | MSC DARLENE | 366 | 9 | 10 | 4368 | 2-7 | 10 @ 11, 4 cranes | 49 |  |\n| 23 | CELSIUS NICOSIA | 239 | 6 | 24 | 1344 | 1-4 | none (unscheduled) | 54 |  |\n| 3 | GSL MYNY | 277 | 7 | 29 | 2016 | 1-5 | 29 @ 24, 3 cranes | 53 |  |\n| 4 | MIMMI SCHULTE | 189 | 4 | 45 | 504 | 1-3 | 45 @ 20, 2 cranes | 54 |  |\n| 5 | MAERSK SENANG | 318 | 7 | 47 | 1092 | 1-6 | 47 @ 4, 3 cranes | 60 |  |\n| 6 | MSC MICHELA | 300 | 7 | 51 | 2688 | 1-5 | 51 @ 12, 3 cranes | 83 |  |\n| 7 | BARBARA P | 139 | 4 | 55 | 224 | 1-2 | 55 @ 20, 1 cranes | 63 |  |\n| 8 | CELSIUS NICOSIA | 239 | 6 | 56 | 1456 | 1-4 | 56 @ 25, 2 cranes | 82 |  |\n| 9 | MAERSK PUELO | 304 | 7 | 61 | 924 | 1-6 | 61 @ 4, 3 cranes | 72 |  |\n| 10 | MSC DILETTA | 400 | 9 | 75 | 14560 | 2-7 | 75 @ 2, 4 cranes | 205 |  |\n| 11 | CMA CGM MALTA | 210 | 5 | 83 | 448 | 1-4 | 83 @ 25, 2 cranes | 91 |  |\n| 12 | MSC ANNICK | 261 | 6 | 85 | 2268 | 1-5 | 85 @ 12, 3 cranes | 112 | priority: lateness x3 |\n| 13 | FAITH | 155 | 4 | 86 | 336 | 1-3 | 86 @ 20, 1 cranes | 98 |  |\n| 14 | SEASPAN FRASER | 265 | 7 | 92 | 2184 | 1-5 | 92 @ 24, 3 cranes | 118 |  |\n| 15 | KANTATA | 148 | 4 | 101 | 588 | 1-2 | 101 @ 20, 1 cranes | 122 |  |\n| 16 | CMA CGM AMERIGO VESPUCCI | 366 | 9 | 115 | 4928 | 2-7 | 115 @ 11, 4 cranes | 159 |  |\n| 17 | BARBARA P | 139 | 4 | 119 | 224 | 1-2 | 119 @ 27, 1 cranes | 127 |  |\n| 18 | WEC JAN STEEN | 134 | 3 | 120 | 364 | 1-2 | 120 @ 24, 1 cranes | 133 |  |\n| 19 | WYBELSUM | 161 | 4 | 124 | 168 | 1-3 | 124 @ 20, 1 cranes | 130 |  |\n| 20 | MSC JULIE | 300 | 7 | 134 | 924 | 1-5 | 134 @ 24, 3 cranes | 145 |  |\n| 21 | MSC PERLE | 366 | 8 | 146 | 3136 | 2-7 | 146 @ 22, 4 cranes | 174 |  |\n| 22 | ALEXANDRA | 270 | 7 | 184 | 1680 | 1-5 | 160 @ 12, 3 cranes | 180 |  |\n\nMake the new berth plan. Use check_plan to test drafts, then call submit_plan with your final plan.",
+    "max_turns": 12,
+    "model_params": {
+      "max_tokens": 32000
+    },
+    "timeout_seconds": 7200
+  },
+  {
+    "id": "grade",
+    "type": "env_outcome_verifier",
+    "env_id": "portsim",
+    "file_artifact_id": "portsim-verifier",
+    "verifier_id": "portsim",
+    "score_aggregator": "weighted_average"
+  }
+]
