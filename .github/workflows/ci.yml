@@ -67,6 +67,11 @@ jobs:
           grep -qE 'tasks/wiring-infeasible\.json v[0-9]+: scored below 1 \([^:]+: 0\.176471\)' wiring.log
           grep -qE 'tasks/wiring-nosubmit\.json v[0-9]+: scored below 1 \([^:]+: 0\)' wiring.log
       - name: The 50 eval tasks pass agent-env's checks against the registered env and agent
+        # A dry run calls no model, but agent-env refuses one for tasks whose agent would unless an endpoint and a key
+        # are set.
+        env:
+          LITELLM_BASE_URL: http://127.0.0.1:4000
+          LITELLM_API_KEY: dry-run
         run: |
           agent-env portsim tasks generate --pack dock-v1-eval
           agent-env run results/bundles/dock-v1-eval --dry-run

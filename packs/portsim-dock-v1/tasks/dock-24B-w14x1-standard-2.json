@@ -1,0 +1,49 @@
+[
+  {
+    "id": "deploy",
+    "type": "deploy_env",
+    "env_id": "portsim"
+  },
+  {
+    "id": "load-task",
+    "type": "apply_server_config",
+    "env_id": "portsim",
+    "directives": [
+      {
+        "service": "portsim",
+        "uri": "urn:portsim:load-task/v1",
+        "args": {
+          "task_id": "dock-24B-w14x1-standard-2"
+        }
+      }
+    ]
+  },
+  {
+    "id": "deploy-agent",
+    "type": "deploy_agent",
+    "a2a_agent_id": "portsim-llm",
+    "env_ids": [
+      "portsim"
+    ]
+  },
+  {
+    "id": "play",
+    "type": "prompt_agent",
+    "prompt_id": "dock-24B-w14x1-standard-2",
+    "system_prompt": "You are the berth planner for this quay. The published plan no longer works. Make a new berth plan for every ship in the table: when it berths, where, and how many quay cranes work it.\n\nRules (a plan that breaks any of them is infeasible):\n- A ship berths at or after its arrival hour.\n- It gets between its min and max cranes. Hours alongside = ceil(moves / (28 x cranes)); it departs when the work is done, unless that hour is inside a no-movement window for that ship, in which case it waits alongside (still occupying its sections, cranes free) until the window ends.\n- No ship may berth inside a no-movement window that applies to it.\n- It occupies `sections` consecutive sections starting at the section you give, all within 2-22.\n- No two ships may use the same section in the same hour. Ships already alongside and closed sections are off limits for the hours listed.\n  A ship that leaves at hour h frees its sections for a ship berthing at hour h.\n- In every hour, the cranes of all ships alongside (including ships already alongside) may not exceed the cranes available that hour.\n- At most 2 movements per hour: a ship berthing at hour h and a ship leaving at hour h each count as one movement in hour h.\n\nCost (lower is better):\n- Delay: for each ship, (its sections) x (hours it departs after its planned departure). Leaving early earns nothing.\n- Moves: 5 for each scheduled ship you put on a different starting section than planned. Changing the hour or the cranes costs nothing beyond delay. Unscheduled calls have no planned section.\n- Priority ships (notes column): their delay counts that many times. Emergency ships (notes column): each hour they dock after their deadline adds the stated amount.\n\nPlan format - one entry per ship, using the ids from the table:\n[{\"ship\": 0, \"berth_hour\": 36, \"section\": 22, \"cranes\": 3}, {\"ship\": 1, \"berth_hour\": 163, \"section\": 24, \"cranes\": 2}, ...]\n\nTools:\n- get_situation(): this situation again.\n- check_plan(plan): lists rule violations in your plan and its cost. You have 10 checks.\n- submit_plan(plan): your final answer. It ends the episode and is graded once: an infeasible plan scores low, a feasible one scores higher the closer its cost is to the best possible.\nSubmit before you run out of turns; an episode that ends without a submission scores 0.",
+    "prompt": "# APM Terminals Barcelona, Port of Barcelona - quay 24B, week 14 of 2024\nHour 0 is Monday 01 April 2024 00:00 UTC. Times are whole hours from then.\nThe quay is sections 2-22 (about 42 m each). A ship needs its number of consecutive sections for its hours alongside.\n\n## Notices\n- Unscheduled call: ship 13 MAERSK NORFOLK (210 m, 5 sections) arrives at hour 127, has 1232 moves and asks to sail by hour 160. It has no planned slot, so placing it anywhere costs no move penalty.\n- Sections 4-8 are closed from hour 148 to hour 166 (fender repair).\n- Ship 1 WILHELM was delayed leaving Algeciras: it now arrives at hour 26 (planned slot hour 13). Its planned departure stays hour 36.\n- Ship 2 NAGOYA EXPRESS was delayed leaving Fos-sur-Mer: it now arrives at hour 56 (planned slot hour 35). Its planned departure stays hour 53.\n- 2 of the terminal's 9 quay cranes are out of service from hour 33 to hour 58 (gantry repair): 7 cranes in that window.\n- Priority: ship 9 CHARLOTTE BORCHARD carries transshipment cargo for a connecting service; each hour it leaves after its planned departure (hour 143) costs three times the usual.\n\n## Already alongside at hour 0 (cannot move)\n- CINZIA A: sections 11-15 until hour 8\n\n## Closed sections\n- sections 4-8, hours 148-166 (fender repair)\n\n## Quay cranes and movements\n- The terminal has 9 quay cranes. From hour 33 to hour 58 only 7 are available.\n- At most 2 ships may berth or leave in any one hour (pilots and tugs).\n- A crane handles 28 container moves per hour: hours alongside = ceil(moves / (28 x cranes)).\n- Each ship already alongside keeps 2 cranes until it leaves.\n\n## Ships to berth\n\n| id | ship | length m | sections | arrives (hour) | workload (moves) | cranes min-max | planned berth (hour @ section, cranes) | planned departure (hour) | notes |\n|---|---|---|---|---|---|---|---|---|---|\n| 0 | NAVIOS INDIGO | 261 | 6 | 4 | 1428 | 1-5 | 4 @ 16, 3 cranes | 21 |  |\n| 1 | WILHELM | 134 | 4 | 26 | 644 | 1-2 | 13 @ 6, 1 cranes | 36 |  |\n| 2 | NAGOYA EXPRESS | 335 | 8 | 56 | 2016 | 2-6 | 35 @ 14, 4 cranes | 53 |  |\n| 3 | ZIM ATLANTIC | 262 | 7 | 49 | 1092 | 1-5 | 49 @ 7, 3 cranes | 62 |  |\n| 4 | HYUNDAI DREAM | 366 | 8 | 60 | 6272 | 2-7 | 60 @ 14, 4 cranes | 116 |  |\n| 5 | K-RIVER | 122 | 3 | 101 | 140 | 1-2 | 101 @ 4, 1 cranes | 106 |  |\n| 6 | MAERSK NUBA | 211 | 5 | 111 | 840 | 1-4 | 111 @ 9, 2 cranes | 126 |  |\n| 7 | APL PHOENIX | 328 | 7 | 121 | 1176 | 1-6 | 121 @ 14, 3 cranes | 135 |  |\n| 13 | MAERSK NORFOLK | 210 | 5 | 127 | 1232 | 1-4 | none (unscheduled) | 160 |  |\n| 8 | HYUNDAI JAKARTA | 304 | 7 | 131 | 1764 | 1-6 | 131 @ 7, 3 cranes | 152 |  |\n| 9 | CHARLOTTE BORCHARD | 159 | 4 | 138 | 140 | 1-3 | 138 @ 3, 1 cranes | 143 | priority: lateness x3 |\n| 10 | LUDWIGSHAFEN EXPRESS | 367 | 8 | 139 | 3248 | 2-7 | 139 @ 14, 4 cranes | 168 |  |\n| 11 | ARIANA A | 215 | 5 | 155 | 840 | 1-4 | 155 @ 9, 2 cranes | 170 |  |\n| 12 | CAPE CITIUS | 186 | 5 | 160 | 1064 | 1-3 | 160 @ 3, 2 cranes | 179 |  |\n\nMake the new berth plan. Use check_plan to test drafts, then call submit_plan with your final plan.",
+    "max_turns": 12,
+    "model_params": {
+      "max_tokens": 32000
+    },
+    "timeout_seconds": 7200
+  },
+  {
+    "id": "grade",
+    "type": "env_outcome_verifier",
+    "env_id": "portsim",
+    "file_artifact_id": "portsim-verifier",
+    "verifier_id": "portsim",
+    "score_aggregator": "weighted_average"
+  }
+]

@@ -6,6 +6,7 @@ Barcelona wind, with the forecast at every watch; with --lines, the qualifying l
 each ship's agent deployed as its own A2A agent the planner can message."""
 
 import json
+from importlib.metadata import version
 from importlib.resources import files
 from pathlib import Path
 
@@ -291,6 +292,53 @@ def generate(pack: str, out: Path, *, task_ids: list[str] | None = None, episode
     return [t.task_id for t in chosen]
 
 
+TRAINING_PACK = "portsim-dock-v1"
+SPLITS = {"train": "dock-v1-train", "eval": "dock-v1-eval"}
+PACK_DOCKERFILE = files("agentenv_portsim") / "training-pack.Dockerfile"
+
+
+def training_pack(out: Path, release: str) -> list[str]:
+    """Writes the self-contained dock-v1 training pack into ``out`` and returns its task ids: every train and eval
+    task as `generate` writes it, the verifier, the env built from the plugin's ``release``, and an eval per split and
+    per train tier, which an OpenEnv server of the pack serves as splits."""
+    chosen = {split: pack_tasks(pack) for split, pack in SPLITS.items()}
+    counts = {split: len(each) for split, each in chosen.items()}
+    _write(out / "README.md", f"""PortSim dock-v1 for training: the {counts["train"]} train and {counts["eval"]} \
+eval tasks of PortSimEnv's dock-v1 packs with the PortSim env and its verifier, which `openenv import` and \
+`agent_env.openenv.build_app` serve as they are, with no PortSim setup.
+
+Each task deploys the env in `envs/portsim`, loads one dock-v1 task through `urn:portsim:load-task/v1`, gives one \
+agent upstream's prompts and limits, and grades the plan it submits with `portsim-verifier`. A served task's agent is \
+played from outside, by an OpenEnv client or by TRL through `agent_env.training.trl`; `agent-env run` plays it with \
+portsim-llm, which `agent-env portsim setup --agent` registers.
+
+The splits are `all`, `train`, `eval`, and the train tasks of each tier: \
+{", ".join(f"`train-{tier}`" for tier in TIERS)}.
+
+```bash
+openenv import {TRAINING_PACK} --name portsim_dock_v1 --output-dir envs
+cd envs/portsim_dock_v1 && MAX_CONCURRENT_ENVS=16 uv run server
+```
+
+The env image installs the plugin's v{release} release from GitHub. `agent-env portsim tasks training-pack` writes \
+this folder.
+
+{LICENCE}
+""".encode())
+    _write(out / "envs/portsim/Dockerfile", PACK_DOCKERFILE.read_text().replace("{release}", release).encode())
+    _write(out / "envs/portsim/env.toml", b'environment_name = "portsim"\nenv_provider_type = "server"\n')
+    _write(out / "artifacts/portsim-verifier/verify.py", VERIFIER.read_bytes())
+    evals = chosen | {f"train-{tier}": [t for t in chosen["train"] if t.difficulty == tier] for tier in TIERS}
+    for name, each in evals.items():
+        _write(out / "evals" / f"{name}.toml",
+               ("tasks = [\n" + "".join(f'  "{t.task_id}",\n' for t in each) + "]\n").encode())
+    every = [task for each in chosen.values() for task in each]
+    for task in every:
+        _write(out / "tasks" / f"{task.task_id}.json",
+               (json.dumps(steps(task), indent=2, ensure_ascii=False) + "\n").encode())
+    return [task.task_id for task in every]
+
+
 @click.group("tasks")
 def tasks_group():
     """PortSim tasks for a model: a task pack as a bundle `agent-env run` plays."""
@@ -337,3 +385,13 @@ def generate_command(pack: str, live: bool, marine: bool, wind: bool, lines: boo
                      tiers=list(tiers) or None)
     click.echo(f"Wrote {len(names)} tasks into {out}; play one with: agent-env run {out} --task {names[0]} "
                "--model <litellm model id>")
+
+
+@tasks_group.command("training-pack")
+@click.option("--out", type=click.Path(file_okay=False, path_type=Path), default=Path("packs") / TRAINING_PACK,
+              show_default=True, help="The pack folder to write.")
+def training_pack_command(out: Path):
+    """Write the self-contained dock-v1 training pack: every train and eval task, the verifier, and the env built from
+    this plugin's release, which `openenv import` and `agent_env.openenv.build_app` serve with no PortSim setup."""
+    names = training_pack(out, version("agentenv-portsim"))
+    click.echo(f"Wrote {len(names)} tasks into {out}; serve it with: openenv import {out} --name portsim_dock_v1")
